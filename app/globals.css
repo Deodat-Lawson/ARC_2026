@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --color-arc-bg: #0a0b0d;
+  --color-arc-fg: #e8eaed;
+  --color-arc-muted: #8a8f98;
+  --color-arc-accent: #5dffb4;
+  --color-arc-danger: #ff5d6c;
+  --color-arc-warning: #ffd95d;
+  --font-display: var(--font-inter), "Inter", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-arc-bg);
+  color: var(--color-arc-fg);
+  font-family: var(--font-display);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+@keyframes arc-dust-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-160px);
+  }
+}
+
+.arc-dust-drift {
+  animation: arc-dust-drift 24s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
