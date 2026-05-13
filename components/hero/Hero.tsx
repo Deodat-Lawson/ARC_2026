@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { HeroFallback } from "./HeroFallback";
+import { HeroHUD } from "./HeroHUD";
 import { HeroOverlay } from "@/components/ui/HeroOverlay";
 
 /**
@@ -34,6 +35,7 @@ export function Hero() {
           </Suspense>
         )}
       </div>
+      {!isMobile && <HeroHUD />}
       <HeroOverlay />
     </section>
   );

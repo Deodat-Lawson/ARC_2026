@@ -2,94 +2,88 @@
 
 import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
-import { Group } from "three";
+import { Group, Vector3 } from "three";
 import { Drone } from "./Drone";
+import {
+  DRONE_WAYPOINTS,
+  applyWaypointLerp,
+  getLoopTime,
+} from "./missionTimeline";
 
 /**
- * V-formation of 4 drones. The whole group drifts slowly toward the camera
- * with a subtle vertical bob; individual drones each have their own bob phase
- * so the formation feels alive instead of locked.
+ * Three role-specific drones whose positions are driven by the mission
+ * timeline waypoints (see missionTimeline.ts):
+ *   - A-01 LEAD       — survey, low altitude, descends to scan
+ *   - A-02 PERCEPTION — converges on survivor mid-mission
+ *   - A-03 RELAY      — high overwatch, comm hub
  *
- * Coordinates are tuned for the placeholder Scene. When the baked
- * environment.glb lands, re-check that the formation reads cleanly against the
- * collapsed building silhouettes.
+ * Each drone also gets:
+ *   - smoothed velocity-aligned facing (looks where it's flying)
+ *   - phase-aware bob (subtle hover when stationary)
  */
-
-type FormationSlot = {
-  offset: [number, number, number];
-  scale: number;
-  rotorSpeed: number;
-  bobPhase: number;
-  bobAmp: number;
-};
-
-const FORMATION: FormationSlot[] = [
-  // Lead (closest to camera, biggest)
-  { offset: [0, 0, 0], scale: 1.0, rotorSpeed: 80, bobPhase: 0.0, bobAmp: 0.12 },
-  // Left wing
-  {
-    offset: [-2.2, 0.4, -2.0],
-    scale: 0.85,
-    rotorSpeed: 72,
-    bobPhase: 1.1,
-    bobAmp: 0.15,
-  },
-  // Right wing
-  {
-    offset: [2.2, 0.4, -2.0],
-    scale: 0.85,
-    rotorSpeed: 76,
-    bobPhase: 2.4,
-    bobAmp: 0.14,
-  },
-  // High background drone
-  {
-    offset: [-1.0, 2.6, -5.5],
-    scale: 0.6,
-    rotorSpeed: 90,
-    bobPhase: 0.7,
-    bobAmp: 0.2,
-  },
-];
-
 export function DroneSwarm() {
-  const group = useRef<Group>(null);
-  const slots = useRef<(Group | null)[]>([]);
+  const lead = useRef<Group>(null);
+  const perception = useRef<Group>(null);
+  const relay = useRef<Group>(null);
 
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    // Whole swarm drifts forward slowly on a 12s loop
-    if (group.current) {
-      const loop = (t % 12) / 12;
-      group.current.position.x = Math.sin(loop * Math.PI * 2) * 0.4;
-      group.current.position.z = -2 + Math.cos(loop * Math.PI * 2) * 0.6;
-    }
-    // Individual bob
-    slots.current.forEach((slot, i) => {
-      if (!slot) return;
-      const cfg = FORMATION[i];
-      slot.position.y = cfg.offset[1] + Math.sin(t * 1.4 + cfg.bobPhase) * cfg.bobAmp;
-    });
+  // Reusable scratch vectors
+  const tmpA = useRef(new Vector3());
+  const tmpB = useRef(new Vector3());
+
+  useFrame(() => {
+    const t = getLoopTime();
+
+    updateDrone(lead.current, DRONE_WAYPOINTS.lead, t, tmpA.current, tmpB.current);
+    updateDrone(
+      perception.current,
+      DRONE_WAYPOINTS.perception,
+      t,
+      tmpA.current,
+      tmpB.current,
+    );
+    updateDrone(
+      relay.current,
+      DRONE_WAYPOINTS.relay,
+      t,
+      tmpA.current,
+      tmpB.current,
+    );
   });
 
   return (
-    <group ref={group} position={[0, 5, 8]}>
-      {FORMATION.map((cfg, i) => (
-        <group
-          key={i}
-          ref={(el) => {
-            slots.current[i] = el;
-          }}
-          position={cfg.offset}
-        >
-          <Drone
-            scale={cfg.scale}
-            rotorSpeed={cfg.rotorSpeed}
-            blinkPhase={cfg.bobPhase}
-            variant={i === 0 ? "hero" : i === 3 ? "high" : "wing"}
-          />
-        </group>
-      ))}
+    <group>
+      <group ref={lead}>
+        <Drone scale={0.95} rotorSpeed={85} blinkPhase={0} variant="hero" />
+      </group>
+      <group ref={perception}>
+        <Drone scale={0.82} rotorSpeed={78} blinkPhase={1.3} variant="wing" />
+      </group>
+      <group ref={relay}>
+        <Drone scale={0.78} rotorSpeed={70} blinkPhase={2.6} variant="high" />
+      </group>
     </group>
   );
+}
+
+function updateDrone(
+  g: Group | null,
+  waypoints: [number, number, number][],
+  loopT: number,
+  current: Vector3,
+  ahead: Vector3,
+) {
+  if (!g) return;
+  applyWaypointLerp(current, waypoints, loopT);
+  // Subtle hover bob layered on top of waypoint motion
+  current.y += Math.sin(loopT * 1.6 + waypoints[0][0]) * 0.06;
+  g.position.copy(current);
+
+  // Heading: look toward where we'll be in 0.4s (velocity-aligned facing)
+  applyWaypointLerp(ahead, waypoints, (loopT + 0.4) % 12);
+  ahead.sub(current);
+  if (ahead.lengthSq() > 0.0001) {
+    // Look in the direction of travel; only yaw (Y axis), keep level pitch
+    const yaw = Math.atan2(ahead.x, ahead.z);
+    g.rotation.set(0, yaw, 0);
+  }
 }

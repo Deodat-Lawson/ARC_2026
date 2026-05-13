@@ -60,11 +60,47 @@ public/
   hero-poster.webp    # LCP image
 ```
 
+## Asset pipeline
+
+### EAM165 (108 ruin pieces — converted, live)
+
+7 of the 108 OBJ assets from `EAM165-灾难建筑车辆城市灾难废墟108件` were converted and are now live in the hero scene:
+
+| Slug | Source | Final GLB |
+|---|---|---|
+| `building-apartment` | AM165_090 | 503 KB |
+| `building-facade` | AM165_095 | 1.12 MB |
+| `building-multistory` | AM165_100 | 994 KB |
+| `building-mansion` | AM165_105 | 700 KB |
+| `vehicle-taxi` | AM165_001 | 207 KB |
+| `street-signs` | AM165_080 | 277 KB |
+| `rubble-large` | AM165_060 | 40 KB |
+
+Total: ~3.8 MB. Pipeline: OBJ → obj2gltf → gltf-transform weld → simplify (30–50% triangle reduction) → Draco compression. See [scripts/convert-assets.mjs](scripts/convert-assets.mjs).
+
+The source OBJ MTL files reference only V-Ray procedural materials (no diffuse maps), so the converted GLBs come untextured. A procedural concrete `MeshStandardMaterial` is applied per-mesh in `Scene.tsx` with a tint variation. To add more assets:
+
+1. Edit the `PICKS` array in `scripts/convert-assets.mjs`
+2. Run `node scripts/convert-assets.mjs`
+3. Add a placement to the `PLACEMENTS` array in `components/hero/Scene.tsx`
+
+### KBS105 (KitBash3D Warzone2 / Aftermath — needs Blender)
+
+The KBS105 kit is a single 663 MB monolithic FBX file. It can't be split automatically — you need Blender:
+
+1. Open `KBS105-倒塌废墟战后街道楼房建筑/FBX/FBX/Kitbash3d_Warzone2.FBX` in Blender
+2. Select individual buildings/groups in the outliner
+3. For each: `File → Export → glTF 2.0 (.glb)` with "Selected Objects" checked
+4. Drop the GLBs into `public/models/kbs105/`
+5. Add new entries to the `PLACEMENTS` array in `Scene.tsx`
+
+The KBS105 textures are PBR-ready (`KB3D_WZT_ConcreteA_basecolor.jpg`, normal, roughness, metallic — all standard maps). When exporting from Blender, embed materials and textures so they survive into the GLB. Then optionally run `gltf-transform uastc` to compress the textures.
+
 ## Swapping placeholders for real assets
 
-Two flags in two files gate the placeholder geometry:
+The hero now uses real assets. Two flags remain:
 
-- **`components/hero/Scene.tsx`** — set `USE_PLACEHOLDER = false` once `public/models/environment.glb` exists.
+- **`components/hero/Scene.tsx`** — set `USE_PRIMITIVES_FALLBACK = true` to bypass the GLBs and revert to procedural blocks (for emergency debugging).
 - **`components/hero/Drone.tsx`** — replace the primitive body with `<primitive object={useGLTF("/models/drone-hero.glb").scene} />` once cleaned drone GLBs are exported.
 
 For asset compression after Blender export:

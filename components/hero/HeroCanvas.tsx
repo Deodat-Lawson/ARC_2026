@@ -8,6 +8,8 @@ import { DroneSwarm } from "./DroneSwarm";
 import { ParticleField } from "./ParticleField";
 import { CameraRig } from "./CameraRig";
 import { DetectionHUD } from "./DetectionHUD";
+import { CommBeams } from "./CommBeams";
+import { ScanBeam } from "./ScanBeam";
 
 /**
  * The R3F surface. Lighting is intentionally three-point cinematic:
@@ -72,6 +74,8 @@ export function HeroCanvas() {
       <Suspense fallback={null}>
         <Scene />
         <DroneSwarm />
+        <CommBeams />
+        <ScanBeam />
         <ParticleField />
         <DetectionHUD />
       </Suspense>
