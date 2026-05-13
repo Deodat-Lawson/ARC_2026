@@ -74,7 +74,10 @@ const BUILDINGS: Placement[] = [
   { src: "/models/building-multistory.glb", position: [-22, 0, -36], rotation: [0, 0.3, 0], targetHeight: 17, variant: "concrete", tint: "#8a8278" },
   { src: "/models/building-mansion.glb", position: [22, 0, -38], rotation: [0, -0.4, 0], targetHeight: 15, variant: "bricks", tint: "#9c8a78" },
   { src: "/models/building-apartment.glb", position: [4, 0, -42], rotation: [0, 1.5, 0], targetHeight: 13, variant: "concrete", tint: "#8c8478" },
-  { src: "/models/building-multistory.glb", position: [-4, 0, -32], rotation: [0, -0.8, 0], targetHeight: 12, variant: "bricks", tint: "#a08a78" },
+  // Moved off the central alley axis (was at -4,-32 which blocked the deep
+  // rescue zone). Now at -16,-34 — flanks the alley from the west, leaves
+  // x∈[-2,3] clear all the way back to z=-32.
+  { src: "/models/building-multistory.glb", position: [-16, 0, -34], rotation: [0, -0.8, 0], targetHeight: 12, variant: "bricks", tint: "#a08a78" },
 
   // FAR LAYER
   { src: "/models/building-facade.glb", position: [-8, 0, -68], rotation: [0, 0.05, 0], targetHeight: 22, variant: "concrete", tint: "#706a60" },

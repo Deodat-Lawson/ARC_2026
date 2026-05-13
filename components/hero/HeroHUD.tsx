@@ -1,29 +1,40 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   COMM_COLORS,
   COMM_EVENTS,
   currentPhaseIndex,
   getMissionTime,
+  getNarration,
   LOOP_SECONDS,
   PHASES,
+  SURVIVORS,
 } from "./missionTimeline";
+import {
+  ALL_ASSETS,
+  ASSET_META,
+  AssetId,
+  setPovTarget,
+  usePovTarget,
+} from "./missionStore";
+import { HeroNarration } from "./HeroNarration";
 
 /**
- * Operator-console HUD layered between the WebGL canvas and the headline
- * marketing copy. Drives off the SAME mission timeline as the 3D scene, so
- * what you see in the HUD always matches what the drones are doing.
+ * Cinematic-mode operator HUD. Hides itself when the user is in FPV (PovHUD
+ * takes over).
  *
- * Zones:
- *   • Frame:   corner brackets, scan lines, REC indicator
- *   • TL:      radar/sweep
- *   • TR:      stack of 3 drone telemetry panels (A-01 / A-02 / A-03)
- *   • MR:      comm log (newest at top, last 5 events)
- *   • BL:      mission phase indicator + timeline scrubber
- *   • BC:      mission clock (T+ live counter)
+ * Layout:
+ *   • Frame:    corner brackets, scan lines, REC dot
+ *   • TL:       radar sweep
+ *   • TR:       stack of 5 asset panels (3 drones + 2 dogs) — each clickable
+ *               to enter FPV for that asset
+ *   • MR:       comm log
+ *   • BL:       mission phase + scrubber
+ *   • BC:       mission clock
  */
 export function HeroHUD() {
+  const povTarget = usePovTarget();
   const [t, setT] = useState(0);
 
   useEffect(() => {
@@ -36,6 +47,8 @@ export function HeroHUD() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  if (povTarget !== "cinematic") return null;
+
   const loopT = t % LOOP_SECONDS;
   const phaseIdx = currentPhaseIndex(loopT);
   const phaseName = PHASES[phaseIdx].name;
@@ -43,10 +56,11 @@ export function HeroHUD() {
   const phaseEnd =
     phaseIdx === PHASES.length - 1 ? LOOP_SECONDS : PHASES[phaseIdx + 1].t;
   const phaseProgress = (loopT - phaseStart) / (phaseEnd - phaseStart);
+  const narration = getNarration(loopT);
+  const focused = new Set(narration.focus ?? []);
 
   return (
     <div className="pointer-events-none absolute inset-0 font-mono text-[10px] uppercase tracking-[0.2em] text-arc-fg/70">
-      {/* full-screen subtle scan line */}
       <div
         aria-hidden
         className="absolute inset-0 mix-blend-overlay opacity-60"
@@ -58,7 +72,6 @@ export function HeroHUD() {
 
       <CornerBrackets />
 
-      {/* center crosshair / reticle (faint) */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-50">
         <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden>
           <circle cx="22" cy="22" r="9" stroke="#5dffb4" strokeWidth="0.8" fill="none" />
@@ -70,24 +83,30 @@ export function HeroHUD() {
         </svg>
       </div>
 
-      {/* TL: signal fan */}
       <div className="absolute left-6 top-20 md:left-10 md:top-24">
         <SignalFan />
       </div>
 
-      {/* TR: stacked drone telemetry */}
-      <div className="absolute right-6 top-20 flex flex-col gap-2 md:right-10 md:top-24">
-        <DronePanel id="A-01" role="LEAD · SURVEY" t={t} seed={0} battery={78} link="MESH 5/5" tone="ok" />
-        <DronePanel id="A-02" role="PERCEPTION" t={t} seed={1.3} battery={64} link="MESH 5/5" tone="ok" />
-        <DronePanel id="A-03" role="RELAY · ↑CMD" t={t} seed={2.6} battery={88} link="UPLINK 142kb/s" tone="ok" />
+      {/* TR: cluster roster — 3 drones + 2 dogs, each clickable for FPV */}
+      <div className="pointer-events-auto absolute right-6 top-20 flex flex-col gap-2 md:right-10 md:top-24">
+        <div className="text-arc-muted">Cluster · 5/5</div>
+        {ALL_ASSETS.map((id) => (
+          <AssetPanel key={id} id={id} t={t} active={focused.has(id)} />
+        ))}
+        <div className="mt-1 text-[9px] text-arc-muted">
+          tap any unit · enter FPV
+        </div>
       </div>
 
-      {/* MR: comm log */}
-      <div className="absolute right-6 top-[58%] md:right-10">
+      <div className="absolute right-6 top-[60%] md:right-10">
+        <TargetsPanel t={t} focused={focused} />
+      </div>
+
+      <div className="absolute right-6 bottom-44 md:right-10 md:bottom-48">
         <CommLog t={t} />
+        <CommLegend />
       </div>
 
-      {/* BL: mission phase + scrubber */}
       <div className="absolute bottom-24 left-6 md:bottom-28 md:left-10">
         <PhaseIndicator
           phaseName={phaseName}
@@ -96,17 +115,171 @@ export function HeroHUD() {
         />
       </div>
 
-      {/* BC: mission clock + REC indicator */}
-      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 md:bottom-28">
+      {/* BC: cinematic narration above the mission clock */}
+      <div className="absolute bottom-32 left-1/2 max-w-[60%] -translate-x-1/2 md:bottom-40">
+        <HeroNarration />
+      </div>
+      <div className="absolute bottom-20 left-1/2 -translate-x-1/2 md:bottom-24">
         <MissionClock t={t} />
       </div>
     </div>
   );
 }
 
+function CommLegend() {
+  const items: [string, string][] = [
+    ["telemetry", "#5dffb4"],
+    ["alert", "#ffd95d"],
+    ["dispatch", "#5d9bff"],
+    ["command", "#ff7a40"],
+  ];
+  return (
+    <div className="mt-1.5 flex items-center justify-between text-[9px] text-arc-muted">
+      {items.map(([label, color]) => (
+        <span key={label} className="flex items-center gap-1">
+          <span
+            aria-hidden
+            className="inline-block size-1 rounded-full"
+            style={{ background: color }}
+          />
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ============================================================================
-// Subcomponents
-// ============================================================================
+
+function AssetPanel({ id, t, active }: { id: AssetId; t: number; active: boolean }) {
+  const meta = ASSET_META[id];
+  const isDrone = meta.kind === "drone";
+  const seed = id.charCodeAt(0) * 0.13;
+  const alt = isDrone ? 9 + Math.sin(t * 0.4 + seed) * 1.4 : 0;
+  const vel = isDrone
+    ? 7.4 + Math.sin(t * 0.6 + seed * 1.3) * 0.6
+    : 1.6 + Math.sin(t * 0.6 + seed * 1.3) * 0.3;
+  const battery = (isDrone ? 78 : 88) + Math.sin(t * 0.08 + seed) * 0.6;
+
+  return (
+    <button
+      type="button"
+      onClick={() => setPovTarget(id)}
+      className={`group w-[210px] rounded-sm border p-2 text-left backdrop-blur-sm transition hover:border-arc-accent/60 hover:bg-arc-bg/80 ${
+        active
+          ? "border-arc-accent/80 bg-arc-bg/85 shadow-[0_0_0_1px_rgba(93,255,180,0.35),0_0_18px_-4px_rgba(93,255,180,0.45)]"
+          : "border-white/10 bg-arc-bg/65"
+      }`}
+    >
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="flex items-center gap-1.5 text-arc-fg">
+          <span
+            aria-hidden
+            className={`inline-block size-1.5 rounded-full ${isDrone ? "bg-arc-accent" : "bg-[#5d9bff]"}`}
+          />
+          {meta.label}
+        </span>
+        <span className="text-[9px] text-arc-muted">{meta.role}</span>
+      </div>
+      <div className="mt-1 grid grid-cols-3 gap-x-2 text-[10px]">
+        <span className="flex justify-between">
+          <span className="text-arc-muted">ALT</span>
+          <span className="text-arc-fg">{isDrone ? `${alt.toFixed(1)}` : "GND"}</span>
+        </span>
+        <span className="flex justify-between">
+          <span className="text-arc-muted">VEL</span>
+          <span className="text-arc-fg">{vel.toFixed(1)}</span>
+        </span>
+        <span className="flex justify-between">
+          <span className="text-arc-muted">PWR</span>
+          <span className="text-arc-accent">{battery.toFixed(0)}%</span>
+        </span>
+      </div>
+      <div className="mt-1 text-[9px] text-arc-muted opacity-0 transition group-hover:opacity-100">
+        click to enter FPV ↗
+      </div>
+    </button>
+  );
+}
+
+function TargetsPanel({ t, focused }: { t: number; focused: Set<string> }) {
+  const loopT = t % LOOP_SECONDS;
+  return (
+    <div className="w-[260px] rounded-sm border border-white/10 bg-arc-bg/70 p-2 backdrop-blur-sm">
+      <div className="mb-1.5 flex items-center justify-between text-arc-muted">
+        <span>Targets · {SURVIVORS.length}</span>
+        <span className="inline-block size-1 rounded-full bg-arc-accent" />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {SURVIVORS.map((s) => {
+          const isFocused = focused.has(s.id);
+          let status: "queued" | "scanning" | "lock" = "queued";
+          let prob = 0;
+          if (loopT >= s.identifyAtT && loopT < s.rescuedAtT) {
+            status = "scanning";
+            const ramp = Math.min(
+              1,
+              (loopT - s.identifyAtT) / (s.rescuedAtT - s.identifyAtT - 0.5),
+            );
+            prob = Math.round(ramp * s.probability);
+          } else if (loopT >= s.rescuedAtT) {
+            status = "lock";
+            prob = s.probability;
+          }
+          const tone =
+            status === "lock"
+              ? "text-arc-accent"
+              : status === "scanning"
+                ? "text-arc-warning"
+                : "text-arc-muted";
+          const dot =
+            status === "lock"
+              ? "bg-arc-accent"
+              : status === "scanning"
+                ? "bg-arc-warning animate-pulse"
+                : "bg-white/20";
+          return (
+            <div
+              key={s.id}
+              className={`flex items-center gap-2 rounded-sm px-1 py-0.5 text-[10px] transition ${
+                isFocused ? "bg-arc-accent/10" : ""
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`inline-block size-1.5 rounded-full ${dot}`}
+              />
+              <span className="w-10 text-arc-fg">{s.id}</span>
+              <div className="relative h-1 flex-1 overflow-hidden bg-white/5">
+                <div
+                  className="h-full"
+                  style={{
+                    width: `${prob}%`,
+                    background:
+                      status === "lock"
+                        ? "#5dffb4"
+                        : status === "scanning"
+                          ? "#ffd95d"
+                          : "transparent",
+                    transition: "width 200ms linear",
+                  }}
+                />
+              </div>
+              <span className={`w-16 text-right ${tone}`}>
+                {status === "queued"
+                  ? "queued"
+                  : `${status.toUpperCase()} ${prob}%`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1.5 text-[9px] text-arc-muted">
+        D-01 → T-01 · D-02 → T-02 · priority by survival prob
+      </div>
+    </div>
+  );
+}
 
 function CornerBrackets() {
   return (
@@ -135,92 +308,20 @@ function CornerBrackets() {
   );
 }
 
-function DronePanel({
-  id,
-  role,
-  t,
-  seed,
-  battery,
-  link,
-  tone,
-}: {
-  id: string;
-  role: string;
-  t: number;
-  seed: number;
-  battery: number;
-  link: string;
-  tone: "ok" | "warn";
-}) {
-  // Smooth telemetry wandering, seeded so each drone reads slightly different
-  const alt = 9 + Math.sin(t * 0.4 + seed) * 1.5;
-  const hdg = (t * 6 + seed * 60) % 360;
-  const vel = 7.4 + Math.sin(t * 0.6 + seed * 1.3) * 0.6;
-  const bat = battery + Math.sin(t * 0.08 + seed) * 0.6;
-  return (
-    <div className="min-w-[200px] rounded-sm border border-white/10 bg-arc-bg/65 p-2 backdrop-blur-sm">
-      <div className="mb-1.5 flex items-center justify-between text-arc-muted">
-        <span className="text-arc-fg">{id}</span>
-        <span className="text-[9px]">{role}</span>
-      </div>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
-        <Row label="ALT" value={`${alt.toFixed(1)}m`} />
-        <Row label="HDG" value={`${hdg.toFixed(0).padStart(3, "0")}°`} />
-        <Row label="VEL" value={`${vel.toFixed(1)}m/s`} />
-        <Row label="PWR" value={`${bat.toFixed(0)}%`} tone={bat < 35 ? "warn" : tone} />
-      </div>
-      <div className="mt-1 text-[9px] text-arc-accent">{link}</div>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: "ok" | "warn" | "neutral";
-}) {
-  const tint =
-    tone === "ok"
-      ? "text-arc-accent"
-      : tone === "warn"
-        ? "text-arc-warning"
-        : "text-arc-fg";
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-arc-muted">{label}</span>
-      <span className={tint}>{value}</span>
-    </div>
-  );
-}
-
-/**
- * Comm log — newest events at top, fade-out after a few seconds.
- * Reads directly from COMM_EVENTS and shows events whose time has just
- * passed in the current loop.
- */
 function CommLog({ t }: { t: number }) {
   const loopT = t % LOOP_SECONDS;
   const cycle = Math.floor(t / LOOP_SECONDS);
-
-  // Build a synthetic log: collect comm events whose `t` is ≤ current loopT
-  // from this cycle, plus a few from the previous cycle for context.
   const entries: { time: string; log: string; color: string; age: number }[] = [];
   for (const ev of COMM_EVENTS) {
     if (loopT >= ev.t) {
-      const elapsed = loopT - ev.t;
       entries.push({
         time: formatT(cycle * LOOP_SECONDS + ev.t),
         log: ev.log,
         color: COMM_COLORS[ev.kind],
-        age: elapsed,
+        age: loopT - ev.t,
       });
     }
   }
-  // Pull a few from previous cycle for continuity (oldest)
   if (cycle > 0) {
     for (const ev of COMM_EVENTS.slice(-3)) {
       entries.unshift({
@@ -231,10 +332,9 @@ function CommLog({ t }: { t: number }) {
       });
     }
   }
-  const visible = entries.slice(-5);
-
+  const visible = entries.slice(-6);
   return (
-    <div className="w-[280px] rounded-sm border border-white/10 bg-arc-bg/70 p-2 backdrop-blur-sm">
+    <div className="w-[300px] rounded-sm border border-white/10 bg-arc-bg/70 p-2 backdrop-blur-sm">
       <div className="mb-1.5 flex items-center justify-between text-arc-muted">
         <span>Mesh comm log</span>
         <span className="inline-block size-1 rounded-full bg-arc-accent" />
@@ -271,12 +371,11 @@ function PhaseIndicator({
   phaseProgress: number;
 }) {
   return (
-    <div className="w-[280px] rounded-sm border border-white/10 bg-arc-bg/70 p-2 backdrop-blur-sm">
+    <div className="w-[300px] rounded-sm border border-white/10 bg-arc-bg/70 p-2 backdrop-blur-sm">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-arc-muted">Mission phase</span>
         <span className="text-arc-accent">{phaseName}</span>
       </div>
-      {/* 6 segment scrubber */}
       <div className="flex gap-1">
         {PHASES.map((p, i) => {
           const active = i === phaseIdx;
@@ -316,10 +415,7 @@ function MissionClock({ t }: { t: number }) {
   return (
     <div className="flex items-center gap-4 rounded-sm border border-white/10 bg-arc-bg/70 px-4 py-1.5 backdrop-blur-sm">
       <span className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className="inline-block size-1.5 rounded-full bg-arc-danger arc-rec-pulse"
-        />
+        <span aria-hidden className="inline-block size-1.5 rounded-full bg-arc-danger arc-rec-pulse" />
         REC
       </span>
       <span className="text-arc-fg">

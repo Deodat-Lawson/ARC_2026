@@ -2,95 +2,85 @@
 
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
+import { AdditiveBlending, DoubleSide, Mesh, Vector3 } from "three";
 import {
-  AdditiveBlending,
-  DoubleSide,
-  Mesh,
-  Vector3,
-} from "three";
-import {
+  ASSET_WAYPOINTS,
   applyWaypointLerp,
   currentPhaseIndex,
-  DRONE_WAYPOINTS,
   getLoopTime,
-  SURVIVOR_POS,
+  SURVIVORS,
 } from "./missionTimeline";
 
 /**
- * Lead drone's ground scan effect.
+ * Lead drone's ground scan effect. Active during IDENTIFY phase, brightens
+ * as targets are detected, fades by DETERMINE.
  *
- *   • Cone of emissive light from the lead drone toward the ground
- *   • Ring on the ground showing scan radius — pulses outward during SCAN
- *   • Both fade in during SCAN, brighten during DETECT (when the beam
- *     'finds' the survivor), then fade out by CONFIRM
+ * Components:
+ *   • Vertical cone from the lead drone toward the ground
+ *   • Ground pulse ring — locks onto whichever survivor is currently being
+ *     identified (cycles between T-01 and T-02)
  */
 export function ScanBeam() {
   const cone = useRef<Mesh>(null);
-  const coneMatRef = useRef<{ opacity?: number }>({});
   const ring = useRef<Mesh>(null);
-  const ringMatRef = useRef<{ opacity?: number }>({});
+  const leadPos = useMemo(() => new Vector3(), []);
 
-  const lead = useMemo(() => new Vector3(), []);
-
-  useFrame((state) => {
+  useFrame(() => {
     const t = getLoopTime();
     const phase = currentPhaseIndex(t);
 
-    // Visibility envelope across phases:
-    //   SCAN (2): fade in to 0.6
-    //   DETECT (3): peak to 1.0
-    //   CONFIRM (4): hold 0.8
-    //   else: 0
+    // Visibility envelope tied to the 22s loop:
+    //   IDENTIFY (phase 1, t=3..7): build up to full intensity
+    //   DETERMINE (phase 2, t=7..10): fade out over first second
     let envelope = 0;
-    if (phase === 2) {
-      // 0 → 0.6 over the 2s scan window
-      const segT = (t - 4) / 2;
-      envelope = Math.min(1, segT) * 0.6;
-    } else if (phase === 3) {
-      envelope = 0.6 + ((t - 6) / 2) * 0.4;
-    } else if (phase === 4) {
-      envelope = 1.0 - ((t - 8) / 2) * 0.2;
-    } else if (phase === 5) {
-      envelope = Math.max(0, 0.8 - ((t - 10) / 1) * 0.8);
+    if (phase === 1) {
+      const segT = (t - 3) / 4.0; // 0 → 1 across IDENTIFY (4s)
+      envelope = Math.min(1, segT);
+    } else if (phase === 2) {
+      const segT = (t - 7) / 1.0; // fade out in first second of DETERMINE
+      envelope = Math.max(0, 1 - segT);
     }
 
-    applyWaypointLerp(lead, DRONE_WAYPOINTS.lead, t);
+    applyWaypointLerp(leadPos, ASSET_WAYPOINTS.lead, t);
 
-    // Position cone at the lead drone, pointing down (negative Y).
+    // Find which survivor we're currently focused on — whichever was most
+    // recently identified
+    const focusSurvivor = (() => {
+      const recent = SURVIVORS.filter((s) => t >= s.identifyAtT);
+      if (recent.length === 0) return SURVIVORS[0];
+      return recent[recent.length - 1];
+    })();
+
     if (cone.current) {
-      cone.current.position.set(lead.x, lead.y * 0.5 + SURVIVOR_POS[1] * 0.5, lead.z);
-      cone.current.scale.set(1, lead.y, 1);
-      // Cone is created pointing along +Y; rotate so it points down toward ground
-      cone.current.rotation.set(Math.PI, 0, 0);
-      // Pulse the cone with a fast modulation during active scan
+      // Cone default orientation: tip at +Y, base at -Y. We want tip AT the
+      // drone (top) and base on the ground — that's exactly the default, no
+      // rotation needed. Earlier code flipped this with Math.PI which made it
+      // a "reverse cone" (base at drone, tip on ground).
+      cone.current.position.set(
+        leadPos.x,
+        leadPos.y * 0.5 + focusSurvivor.position[1] * 0.5,
+        leadPos.z,
+      );
+      cone.current.scale.set(1, leadPos.y, 1);
+      cone.current.rotation.set(0, 0, 0);
       const pulse = 0.85 + Math.sin(t * 8) * 0.15;
       const m = cone.current.material as { opacity?: number };
-      m.opacity = envelope * 0.35 * pulse;
-      coneMatRef.current = m;
+      m.opacity = envelope * 0.32 * pulse;
     }
 
     if (ring.current) {
-      // Ring sits on the ground under the lead drone (or on the survivor
-      // during detect/confirm so the camera sees the lock)
-      const targetX = phase >= 3 ? SURVIVOR_POS[0] : lead.x;
-      const targetZ = phase >= 3 ? SURVIVOR_POS[2] : lead.z;
-      ring.current.position.set(targetX, 0.05, targetZ);
-
-      // Pulsing radius
+      ring.current.position.set(focusSurvivor.position[0], 0.04, focusSurvivor.position[2]);
       const radiusPulse = 1 + ((t * 1.4) % 1);
       ring.current.scale.set(radiusPulse, radiusPulse, radiusPulse);
-
       const m = ring.current.material as { opacity?: number };
       const fade = 1 - ((t * 1.4) % 1);
       m.opacity = envelope * fade * 0.9;
-      ringMatRef.current = m;
     }
   });
 
   return (
     <group>
-      {/* Vertical scan cone */}
-      <mesh ref={cone} visible>
+      <mesh ref={cone}>
         <coneGeometry args={[2.6, 1, 24, 1, true]} />
         <meshBasicMaterial
           color="#5dffb4"
@@ -101,8 +91,6 @@ export function ScanBeam() {
           blending={AdditiveBlending}
         />
       </mesh>
-
-      {/* Ground scan ring */}
       <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[1.6, 1.9, 48]} />
         <meshBasicMaterial

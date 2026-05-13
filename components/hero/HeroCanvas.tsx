@@ -5,11 +5,15 @@ import { PerformanceMonitor, Preload } from "@react-three/drei";
 import { Suspense, useState } from "react";
 import { Scene } from "./Scene";
 import { DroneSwarm } from "./DroneSwarm";
+import { DogTeam } from "./DogTeam";
 import { ParticleField } from "./ParticleField";
 import { CameraRig } from "./CameraRig";
 import { DetectionHUD } from "./DetectionHUD";
 import { CommBeams } from "./CommBeams";
 import { ScanBeam } from "./ScanBeam";
+import { AssetPicker } from "./AssetPicker";
+import { Survivors } from "./Survivors";
+import { Sky } from "./Sky";
 
 /**
  * The R3F surface. Lighting is intentionally three-point cinematic:
@@ -39,7 +43,7 @@ export function HeroCanvas() {
         powerPreference: "high-performance",
         alpha: false,
       }}
-      camera={{ fov: 38, near: 0.1, far: 500, position: [0, 4, 22] }}
+      camera={{ fov: 38, near: 0.3, far: 500, position: [0, 4, 22] }}
     >
       <PerformanceMonitor
         onDecline={() => setDprMax(1)}
@@ -47,8 +51,8 @@ export function HeroCanvas() {
         flipflops={2}
       />
 
-      <color attach="background" args={["#0a0c10"]} />
-      <fog attach="fog" args={["#2a1d12", 18, 140]} />
+      {/* Sky sphere supplies the background — no flat color attach */}
+      <fog attach="fog" args={["#3a2a1c", 22, 160]} />
 
       {/* KEY — warm, camera-right, high */}
       <directionalLight
@@ -71,16 +75,24 @@ export function HeroCanvas() {
       {/* Sky/bounce */}
       <hemisphereLight args={["#5a6a78", "#1a1410", 0.35]} />
 
+      <Sky />
+
       <Suspense fallback={null}>
         <Scene />
+        <Survivors />
         <DroneSwarm />
+        <DogTeam />
         <CommBeams />
         <ScanBeam />
         <ParticleField />
         <DetectionHUD />
+        <AssetPicker />
+        {/* CameraRig MUST be the last useFrame in the queue so it reads the
+            ASSET_POSITIONS that DroneSwarm/DogTeam just wrote this frame.
+            Previously it was outside Suspense → registered first → one-frame
+            stale reads → camera lag in FPV. */}
+        <CameraRig />
       </Suspense>
-
-      <CameraRig />
 
       {ENABLE_POSTFX && <PostFX />}
 

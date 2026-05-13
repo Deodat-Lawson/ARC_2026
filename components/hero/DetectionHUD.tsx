@@ -4,23 +4,30 @@ import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useRef, useState } from "react";
 import { Group } from "three";
-import { getLoopTime, SURVIVOR_POS } from "./missionTimeline";
+import { getLoopTime, LOOP_SECONDS, SURVIVORS, Survivor } from "./missionTimeline";
 
 /**
- * 3D-anchored detection bracket that locks onto the survivor position during
- * the DETECT / CONFIRM mission phases.
+ * World-anchored detection brackets — one per survivor.
  *
- * Timing within the 12s mission loop:
- *   t<6     hidden
- *   t=6.0   bracket appears
- *   t=6→8   probability ramps 0 → 87 (DETECT phase)
- *   t=8→10  bracket holds, "lock confirmed" subtitle (CONFIRM)
- *   t=10→11 fades out
- *   t>11    hidden
+ * Each survivor's bracket goes through three visual states:
+ *
+ *   1. before identifyAtT       — hidden
+ *   2. identifyAtT → rescuedAtT — yellow "Scanning · N%" with prob ramping up
+ *   3. rescuedAtT → loop end    — green "LOCK · N%" (ground-confirmed)
+ *
+ * Two brackets co-exist because the mission rescues two people.
  */
-const TARGET_PROBABILITY = 87;
-
 export function DetectionHUD() {
+  return (
+    <group>
+      {SURVIVORS.map((s) => (
+        <SurvivorBracket key={s.id} data={s} />
+      ))}
+    </group>
+  );
+}
+
+function SurvivorBracket({ data }: { data: Survivor }) {
   const anchor = useRef<Group>(null);
   const [state, setState] = useState({
     visible: false,
@@ -36,19 +43,23 @@ export function DetectionHUD() {
     let probability = 0;
     let locked = false;
 
-    if (t >= 6 && t < 8) {
-      // DETECT — fade in + probability ramps
-      opacity = Math.min(1, (t - 6) / 0.5);
-      probability = Math.round(Math.min(1, (t - 6) / 1.8) * TARGET_PROBABILITY);
-    } else if (t >= 8 && t < 10) {
-      // CONFIRM — full opacity, full probability, locked
+    if (t >= data.identifyAtT && t < data.rescuedAtT) {
+      // SCANNING — fade in + probability ramps
+      opacity = Math.min(1, (t - data.identifyAtT) / 0.5);
+      const ramp = Math.min(
+        1,
+        (t - data.identifyAtT) / (data.rescuedAtT - data.identifyAtT - 0.5),
+      );
+      probability = Math.round(ramp * data.probability);
+    } else if (t >= data.rescuedAtT && t < LOOP_SECONDS - 1.5) {
+      // LOCKED — held green during RESCUE and REPORT
       opacity = 1;
-      probability = TARGET_PROBABILITY;
+      probability = data.probability;
       locked = true;
-    } else if (t >= 10 && t < 11) {
-      // Beginning of RELAY — fade out
-      opacity = 1 - (t - 10);
-      probability = TARGET_PROBABILITY;
+    } else if (t >= LOOP_SECONDS - 1.5 && t < LOOP_SECONDS - 0.5) {
+      // Fade out at end of loop
+      opacity = (LOOP_SECONDS - 0.5 - t) / 1.0;
+      probability = data.probability;
       locked = true;
     }
 
@@ -66,7 +77,7 @@ export function DetectionHUD() {
   return (
     <group
       ref={anchor}
-      position={[SURVIVOR_POS[0], SURVIVOR_POS[1], SURVIVOR_POS[2]]}
+      position={[data.position[0], data.position[1] + 0.6, data.position[2]]}
     >
       {state.visible && (
         <Html
@@ -79,17 +90,23 @@ export function DetectionHUD() {
             transition: "opacity 80ms linear",
           }}
         >
-          <DetectionMarker probability={state.probability} locked={state.locked} />
+          <Marker
+            id={data.id}
+            probability={state.probability}
+            locked={state.locked}
+          />
         </Html>
       )}
     </group>
   );
 }
 
-function DetectionMarker({
+function Marker({
+  id,
   probability,
   locked,
 }: {
+  id: string;
   probability: number;
   locked: boolean;
 }) {
@@ -97,12 +114,10 @@ function DetectionMarker({
   return (
     <div className="relative flex flex-col items-center gap-1 font-mono">
       <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden>
-        {/* Targeting brackets */}
         <path d="M8 26 V8 H26" stroke={color} strokeWidth="2" fill="none" strokeLinecap="square" />
         <path d="M88 26 V8 H70" stroke={color} strokeWidth="2" fill="none" strokeLinecap="square" />
         <path d="M8 70 V88 H26" stroke={color} strokeWidth="2" fill="none" strokeLinecap="square" />
         <path d="M88 70 V88 H70" stroke={color} strokeWidth="2" fill="none" strokeLinecap="square" />
-        {/* Center pulse ring */}
         <circle
           cx="48"
           cy="48"
@@ -112,15 +127,18 @@ function DetectionMarker({
           strokeWidth="1"
           opacity={locked ? 1 : 0.7}
         />
-        {/* Crosshair */}
         <line x1="48" y1="40" x2="48" y2="56" stroke={color} strokeWidth="1" />
         <line x1="40" y1="48" x2="56" y2="48" stroke={color} strokeWidth="1" />
       </svg>
       <div
-        className="rounded-sm bg-arc-bg/85 px-2 py-0.5 text-[11px] uppercase tracking-[0.18em]"
+        className="flex items-center gap-1.5 rounded-sm bg-arc-bg/85 px-2 py-0.5 text-[11px] uppercase tracking-[0.18em]"
         style={{ color }}
       >
-        {locked ? `LOCK · ${probability}%` : `Scanning · ${probability}%`}
+        <span>{id}</span>
+        <span className="text-arc-muted">·</span>
+        <span>
+          {locked ? "LOCK" : "SCAN"} {probability}%
+        </span>
       </div>
     </div>
   );

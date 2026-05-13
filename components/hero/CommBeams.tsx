@@ -7,40 +7,45 @@ import {
   BufferGeometry,
   LineBasicMaterial,
   Mesh,
-  Vector3,
 } from "three";
 import {
-  applyWaypointLerp,
   COMM_COLORS,
   COMM_EVENTS,
   commLinkEndpoints,
-  DRONE_WAYPOINTS,
   getLoopTime,
   LOOP_SECONDS,
+  CommLink,
 } from "./missionTimeline";
+import { ASSET_POSITIONS } from "./missionStore";
 
 /**
- * Inter-drone mesh visualization.
+ * Inter-asset mesh visualization (drones + dogs). Reads asset positions
+ * from the shared store (written by DroneSwarm / DogTeam).
  *
- *   • 3 persistent thin lines between the 3 drones (idle mesh topology)
- *     — opacity floor at ~0.12, surges to ~0.9 when a comm event runs
- *     along that link
- *   • Per-event packet sphere that travels from sender to receiver during
- *     the event window, colored by message kind
+ * Three layers:
+ *   1. Persistent faint mesh lines between all peer pairs that participate
+ *      in the mesh (drone↔drone, dog↔dog, dog↔drone)
+ *   2. Per-event packet sphere that travels from sender to receiver
+ *   3. Vertical "uplink" beam from relay to command (off-screen up)
  *
- * Geometry is rebuilt each frame via direct BufferGeometry mutation
- * (bypassing drei Line's prop-based re-build).
+ * Mutates BufferGeometry attributes directly per frame.
  */
-export function CommBeams() {
-  // Position scratch
-  const lead = useRef(new Vector3());
-  const perception = useRef(new Vector3());
-  const relay = useRef(new Vector3());
 
-  // 3 idle lines (line-pair: each is two endpoints in a Float32Array(6))
-  const lpLine = useLink();
-  const lrLine = useLink();
-  const prLine = useLink();
+// The set of peer links to render as always-on faint mesh edges
+const PEER_LINKS: CommLink[] = [
+  "lead-perception",
+  "lead-relay",
+  "perception-relay",
+  "lead-dog1",
+  "perception-dog2",
+  "dog1-dog2",
+  "dog1-relay",
+  "dog2-relay",
+];
+
+export function CommBeams() {
+  // Persistent mesh line for each peer pair
+  const linkRefs = useRef(PEER_LINKS.map(() => makeLine("#5dffb4")));
 
   // Packet refs — one mesh per COMM_EVENT
   const packetRefs = useRef(
@@ -49,31 +54,36 @@ export function CommBeams() {
 
   useFrame(() => {
     const t = getLoopTime();
-    applyWaypointLerp(lead.current, DRONE_WAYPOINTS.lead, t);
-    applyWaypointLerp(perception.current, DRONE_WAYPOINTS.perception, t);
-    applyWaypointLerp(relay.current, DRONE_WAYPOINTS.relay, t);
 
-    // Compute per-link activity: 1 if a comm event is running along it
-    let actLP = 0;
-    let actLR = 0;
-    let actPR = 0;
+    // Per-link activity (max of overlapping events on that link)
+    const activity: Record<CommLink, number> = {
+      "lead-perception": 0,
+      "lead-relay": 0,
+      "perception-relay": 0,
+      "relay-command": 0,
+      "lead-dog1": 0,
+      "perception-dog2": 0,
+      "dog1-dog2": 0,
+      "dog1-relay": 0,
+      "dog2-relay": 0,
+    };
     COMM_EVENTS.forEach((ev) => {
       let e = t - ev.t;
       if (e < 0) e += LOOP_SECONDS;
       if (e >= 0 && e < ev.duration) {
-        const intensity = Math.sin((e / ev.duration) * Math.PI); // 0→1→0 over event
-        if (ev.link === "lead-perception") actLP = Math.max(actLP, intensity);
-        else if (ev.link === "lead-relay") actLR = Math.max(actLR, intensity);
-        else if (ev.link === "perception-relay") actPR = Math.max(actPR, intensity);
-        // relay-command isn't a peer link; we render it as a vertical beam below
+        const intensity = Math.sin((e / ev.duration) * Math.PI);
+        activity[ev.link] = Math.max(activity[ev.link], intensity);
       }
     });
 
-    updateLink(lpLine, lead.current, perception.current, actLP);
-    updateLink(lrLine, lead.current, relay.current, actLR);
-    updateLink(prLine, perception.current, relay.current, actPR);
+    // Update each persistent peer link
+    PEER_LINKS.forEach((link, i) => {
+      const lineState = linkRefs.current[i];
+      const [a, b] = endpointsFor(link);
+      updateLine(lineState, a, b, activity[link]);
+    });
 
-    // Update each packet
+    // Update each comm event packet
     COMM_EVENTS.forEach((ev, i) => {
       const mesh = packetRefs.current[i].current;
       if (!mesh) return;
@@ -84,12 +94,7 @@ export function CommBeams() {
         mesh.visible = false;
         return;
       }
-      const [aArr, bArr] = commLinkEndpoints(
-        ev.link,
-        [lead.current.x, lead.current.y, lead.current.z],
-        [perception.current.x, perception.current.y, perception.current.z],
-        [relay.current.x, relay.current.y, relay.current.z],
-      );
+      const [aArr, bArr] = endpointsFor(ev.link);
       const progress = e / ev.duration;
       mesh.position.set(
         aArr[0] + (bArr[0] - aArr[0]) * progress,
@@ -102,18 +107,12 @@ export function CommBeams() {
 
   return (
     <group>
-      <line>
-        <primitive object={lpLine.geometry} attach="geometry" />
-        <primitive object={lpLine.material} attach="material" />
-      </line>
-      <line>
-        <primitive object={lrLine.geometry} attach="geometry" />
-        <primitive object={lrLine.material} attach="material" />
-      </line>
-      <line>
-        <primitive object={prLine.geometry} attach="geometry" />
-        <primitive object={prLine.material} attach="material" />
-      </line>
+      {PEER_LINKS.map((link, i) => (
+        <line key={link}>
+          <primitive object={linkRefs.current[i].geometry} attach="geometry" />
+          <primitive object={linkRefs.current[i].material} attach="material" />
+        </line>
+      ))}
 
       {COMM_EVENTS.map((ev, i) => (
         <mesh
@@ -133,57 +132,66 @@ export function CommBeams() {
         </mesh>
       ))}
 
-      {/* Relay → Command vertical beam (rendered as a vertical line beyond the
-          relay drone, shooting up off-screen during the relay-command event) */}
-      <RelayToCommandBeam relay={relay} />
+      {/* Vertical uplink to command */}
+      <RelayToCommandBeam />
     </group>
   );
 }
 
-// ---- Helpers ----
+// ---- helpers ----
 
-function useLink() {
-  return useMemo(() => {
-    const positions = new Float32Array(6);
-    const geometry = new BufferGeometry();
-    geometry.setAttribute("position", new BufferAttribute(positions, 3));
-    const material = new LineBasicMaterial({
-      color: 0x5dffb4,
-      transparent: true,
-      opacity: 0.12,
-      depthWrite: false,
-    });
-    return { geometry, material, positions };
-  }, []);
+function endpointsFor(link: CommLink): [[number, number, number], [number, number, number]] {
+  const lp = ASSET_POSITIONS.lead;
+  const pp = ASSET_POSITIONS.perception;
+  const rp = ASSET_POSITIONS.relay;
+  const d1 = ASSET_POSITIONS.dog1;
+  const d2 = ASSET_POSITIONS.dog2;
+  return commLinkEndpoints(
+    link,
+    [lp.x, lp.y, lp.z],
+    [pp.x, pp.y, pp.z],
+    [rp.x, rp.y, rp.z],
+    [d1.x, d1.y, d1.z],
+    [d2.x, d2.y, d2.z],
+  );
 }
 
-function updateLink(
+function makeLine(color: string) {
+  const positions = new Float32Array(6);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new BufferAttribute(positions, 3));
+  const material = new LineBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.12,
+    depthWrite: false,
+  });
+  return { geometry, material, positions };
+}
+
+function updateLine(
   link: { geometry: BufferGeometry; material: LineBasicMaterial; positions: Float32Array },
-  a: Vector3,
-  b: Vector3,
+  a: [number, number, number],
+  b: [number, number, number],
   activity: number,
 ) {
   const p = link.positions;
-  p[0] = a.x;
-  p[1] = a.y;
-  p[2] = a.z;
-  p[3] = b.x;
-  p[4] = b.y;
-  p[5] = b.z;
+  p[0] = a[0];
+  p[1] = a[1];
+  p[2] = a[2];
+  p[3] = b[0];
+  p[4] = b[1];
+  p[5] = b[2];
   (link.geometry.attributes.position as BufferAttribute).needsUpdate = true;
   link.material.opacity = 0.12 + activity * 0.78;
+  link.geometry.boundingSphere = null;
+  link.geometry.boundingBox = null;
 }
 
 // ---- Relay → Command vertical beam ----
 
-function RelayToCommandBeam({ relay }: { relay: React.MutableRefObject<Vector3> }) {
-  const link = useLink();
-
-  // Override the idle color to a slightly different command tone (orange)
-  useMemo(() => {
-    link.material.color.set("#ff7a40");
-  }, [link]);
-
+function RelayToCommandBeam() {
+  const link = useMemo(() => makeLine("#ff7a40"), []);
   const packetRef = useRef<Mesh>(null);
 
   useFrame(() => {
@@ -202,9 +210,9 @@ function RelayToCommandBeam({ relay }: { relay: React.MutableRefObject<Vector3> 
       }
     });
 
-    const r = relay.current;
-    const top = new Vector3(r.x, r.y + 26, r.z);
-    updateLink(link, r, top, activity);
+    const r = ASSET_POSITIONS.relay;
+    const topY = r.y + 26;
+    updateLine(link, [r.x, r.y, r.z], [r.x, topY, r.z], activity);
 
     if (packetRef.current) {
       if (!active) {
@@ -213,7 +221,7 @@ function RelayToCommandBeam({ relay }: { relay: React.MutableRefObject<Vector3> 
         packetRef.current.visible = true;
         packetRef.current.position.set(
           r.x,
-          r.y + (top.y - r.y) * progress,
+          r.y + (topY - r.y) * progress,
           r.z,
         );
       }

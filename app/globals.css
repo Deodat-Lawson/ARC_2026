@@ -66,6 +66,23 @@ body {
   animation: arc-rec-pulse 1.4s ease-in-out infinite;
 }
 
+@keyframes arc-narration-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(1px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.arc-narration-rise {
+  animation: arc-narration-rise 320ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
