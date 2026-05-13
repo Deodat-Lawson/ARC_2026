@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>A.R.C. Lite 2D Simulation</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>A.R.C. Lite</h1>
+          <p>Gemma-powered Rescue Triage and Mission Planning Simulator</p>
+        </div>
+        <div class="controls" aria-label="simulation controls">
+          <button id="stepBtn" type="button" title="Advance one timestep">Step</button>
+          <button id="autoBtn" type="button" title="Run or pause simulation">Run</button>
+          <button id="resetBtn" type="button" title="Reset scenario">Reset</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <div class="map-panel">
+          <div class="panel-head">
+            <div>
+              <h2>2D Disaster Map</h2>
+              <p id="tickLabel">Timestep 0</p>
+            </div>
+            <div class="score">
+              <span id="rescuedCount">0</span>
+              <small>rescued</small>
+            </div>
+          </div>
+          <canvas id="simCanvas" width="720" height="720" aria-label="2D rescue simulation map"></canvas>
+          <div class="legend" aria-label="map legend">
+            <span><i class="road"></i>road</span>
+            <span><i class="blockade"></i>blockade</span>
+            <span><i class="fire"></i>fire</span>
+            <span><i class="collapse"></i>collapse</span>
+            <span><i class="victim"></i>victim</span>
+            <span><i class="drone"></i>drone</span>
+            <span><i class="ugv"></i>UGV</span>
+          </div>
+        </div>
+
+        <aside class="side-panel">
+          <section>
+            <h2>Victim Priority</h2>
+            <div id="priorityList" class="priority-list"></div>
+          </section>
+          <section>
+            <h2>Agent Status</h2>
+            <div id="agentList" class="agent-list"></div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="briefing-grid">
+        <article class="briefing">
+          <h2>Gemma Commander Brief</h2>
+          <p id="briefText"></p>
+        </article>
+        <article class="briefing">
+          <h2>Mission Plan JSON</h2>
+          <pre id="missionJson"></pre>
+        </article>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,272 @@
+{
+  "scenario_id": "wildfire_001",
+  "description": "山火蔓延，林区人员被困，能见度低，通信受干扰",
+  "map": {
+    "size": [
+      30,
+      30
+    ],
+    "cell_size_m": 10,
+    "base": [
+      2,
+      2
+    ],
+    "refuges": [
+      {
+        "id": "R0",
+        "location": [
+          2,
+          2
+        ]
+      }
+    ],
+    "blocked_cells": [
+      {
+        "id": "K1",
+        "location": [
+          23,
+          9
+        ],
+        "repair_cost": 99,
+        "clear_progress": 0,
+        "status": "blocked"
+      }
+    ],
+    "risk_zones": [
+      {
+        "id": "Z1",
+        "center": [
+          17,
+          7
+        ],
+        "radius": 4,
+        "type": "fire",
+        "risk": 0.52
+      },
+      {
+        "id": "Z2",
+        "center": [
+          22,
+          14
+        ],
+        "radius": 4,
+        "type": "fire",
+        "risk": 0.58
+      },
+      {
+        "id": "Z3",
+        "center": [
+          24,
+          16
+        ],
+        "radius": 3,
+        "type": "fire",
+        "risk": 0.84
+      },
+      {
+        "id": "Z4",
+        "center": [
+          23,
+          11
+        ],
+        "radius": 2,
+        "type": "collapse",
+        "risk": 0.8
+      }
+    ],
+    "communication_dead_zones": [
+      {
+        "id": "C1",
+        "center": [
+          17,
+          13
+        ],
+        "radius": 3,
+        "dropout_addition": 0.29
+      },
+      {
+        "id": "C2",
+        "center": [
+          19,
+          16
+        ],
+        "radius": 3,
+        "dropout_addition": 0.37
+      }
+    ]
+  },
+  "victims": [
+    {
+      "id": "V1",
+      "location": [
+        24,
+        7
+      ],
+      "hp": 7467,
+      "damage_per_step": 61,
+      "buriedness": 64,
+      "thermal_signal": 0.22,
+      "audio_signal": 0.17,
+      "vibration_signal": 0.29,
+      "status": "trapped"
+    },
+    {
+      "id": "V2",
+      "location": [
+        4,
+        12
+      ],
+      "hp": 7597,
+      "damage_per_step": 75,
+      "buriedness": 79,
+      "thermal_signal": 0.51,
+      "audio_signal": 0.46,
+      "vibration_signal": 0.33,
+      "status": "trapped"
+    },
+    {
+      "id": "V3",
+      "location": [
+        11,
+        11
+      ],
+      "hp": 4307,
+      "damage_per_step": 104,
+      "buriedness": 53,
+      "thermal_signal": 0.41,
+      "audio_signal": 0.27,
+      "vibration_signal": 0.73,
+      "status": "unknown"
+    },
+    {
+      "id": "V4",
+      "location": [
+        8,
+        7
+      ],
+      "hp": 6112,
+      "damage_per_step": 62,
+      "buriedness": 55,
+      "thermal_signal": 0.84,
+      "audio_signal": 0.58,
+      "vibration_signal": 0.76,
+      "status": "trapped"
+    }
+  ],
+  "agents": [
+    {
+      "id": "Drone-1",
+      "type": "drone",
+      "role": "scout",
+      "location": [
+        2,
+        2
+      ],
+      "battery": 85,
+      "speed": 3,
+      "perception_range": 6,
+      "sensors": [
+        "thermal",
+        "camera",
+        "audio"
+      ],
+      "payload": "medical_beacon"
+    },
+    {
+      "id": "Drone-2",
+      "type": "drone",
+      "role": "relay",
+      "location": [
+        3,
+        2
+      ],
+      "battery": 80,
+      "speed": 3,
+      "perception_range": 6,
+      "sensors": [
+        "thermal",
+        "camera",
+        "audio"
+      ],
+      "payload": "radio_relay"
+    },
+    {
+      "id": "Drone-3",
+      "type": "drone",
+      "role": "scout",
+      "location": [
+        4,
+        2
+      ],
+      "battery": 60,
+      "speed": 3,
+      "perception_range": 6,
+      "sensors": [
+        "thermal",
+        "camera",
+        "audio"
+      ],
+      "payload": "radio_relay"
+    },
+    {
+      "id": "Drone-4",
+      "type": "drone",
+      "role": "scout",
+      "location": [
+        5,
+        2
+      ],
+      "battery": 45,
+      "speed": 3,
+      "perception_range": 6,
+      "sensors": [
+        "thermal",
+        "camera",
+        "audio"
+      ],
+      "payload": "radio_relay"
+    },
+    {
+      "id": "UGV-1",
+      "type": "ground_rescue",
+      "role": "rescue",
+      "location": [
+        2,
+        3
+      ],
+      "battery": 70,
+      "speed": 1,
+      "perception_range": 3,
+      "clear_rate": 20,
+      "sensors": [
+        "audio",
+        "vibration"
+      ],
+      "payload": "first_aid_pack"
+    },
+    {
+      "id": "Balloon-1",
+      "type": "balloon",
+      "role": "relay",
+      "location": [
+        2,
+        4
+      ],
+      "battery": 90,
+      "speed": 0.5,
+      "perception_range": 12,
+      "sensors": [
+        "thermal",
+        "camera"
+      ],
+      "payload": "comm_relay"
+    }
+  ],
+  "communication": {
+    "base_range": 8,
+    "relay_range": 8,
+    "direct_comm_range": 4,
+    "bandwidth_limit": 3,
+    "base_dropout_probability": 0.3
+  }
+}

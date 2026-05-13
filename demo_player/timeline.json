@@ -1,0 +1,8401 @@
+{
+  "scenario_id": "urban_quake_001",
+  "total_steps": 38,
+  "frames": [
+    {
+      "step": 0,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.82,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 49.486165608029665,
+            "y": 25.52865605150556,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.95,
+            2.55
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.46,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 41.21320343559642,
+            "y": 51.21320343559642,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.12,
+            5.12
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 39.8058067569092,
+            "y": 21.96116135138184,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            3.98,
+            2.2
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 36.13940613514921,
+            "y": 37.893522173763266,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            3.61,
+            3.79
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 23.816931426845574,
+            "y": 43.229711207330865,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            2.38,
+            4.32
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8960,
+          "hp_max": 9000,
+          "survival_pct": 99.6,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 7340,
+          "hp_max": 7400,
+          "survival_pct": 99.2,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 6120,
+          "hp_max": 6200,
+          "survival_pct": 98.7,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9775,
+          "hp_max": 9800,
+          "survival_pct": 99.7,
+          "status": "unknown",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7945,
+          "hp_max": 8000,
+          "survival_pct": 99.3,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.68,
+          "center_position": {
+            "x": 43.50172526684509,
+            "y": 32.901006946161274,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_5_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 4
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [
+        {
+          "type": "hub_formed",
+          "description": "🔗 Hub Formed: 3 agents elected UGV-1 as Leader",
+          "agents_involved": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ]
+        }
+      ],
+      "briefing": "[Step 0] 活跃无人器 5 台，待救幸存者 5 人，已救援 0 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 0,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 1,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.819,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 78.97233121605933,
+            "y": 31.05731210301112,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            7.9,
+            3.11
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.459,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 62.42640687119284,
+            "y": 72.42640687119284,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            6.24,
+            7.24
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 49.6116135138184,
+            "y": 23.922322702763683,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            4.96,
+            2.39
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 42.27881227029841,
+            "y": 45.78704434752653,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            4.23,
+            4.58
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 27.63386285369115,
+            "y": 46.45942241466173,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            2.76,
+            4.65
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8920,
+          "hp_max": 9000,
+          "survival_pct": 99.1,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 7280,
+          "hp_max": 7400,
+          "survival_pct": 98.4,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 6040,
+          "hp_max": 6200,
+          "survival_pct": 97.4,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9750,
+          "hp_max": 9800,
+          "survival_pct": 99.5,
+          "status": "unknown",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7890,
+          "hp_max": 8000,
+          "survival_pct": 98.6,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.68,
+          "center_position": {
+            "x": 63.670117200356856,
+            "y": 42.46868055898921,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_5_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 7
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 1] 活跃无人器 5 台，待救幸存者 5 人，已救援 0 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 0,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 2,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.819,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 108.45849682408898,
+            "y": 36.58596815451668,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            10.85,
+            3.66
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.459,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 83.63961030678925,
+            "y": 93.63961030678925,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            8.36,
+            9.36
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 59.4174202707276,
+            "y": 25.883484054145526,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            5.94,
+            2.59
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 48.41821840544761,
+            "y": 53.68056652128979,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            4.84,
+            5.37
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 31.45079428053672,
+            "y": 49.689133621992596,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            3.15,
+            4.97
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8880,
+          "hp_max": 9000,
+          "survival_pct": 98.7,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 7220,
+          "hp_max": 7400,
+          "survival_pct": 97.6,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5960,
+          "hp_max": 6200,
+          "survival_pct": 96.1,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9725,
+          "hp_max": 9800,
+          "survival_pct": 99.2,
+          "status": "unknown",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7835,
+          "hp_max": 8000,
+          "survival_pct": 97.9,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.679,
+          "center_position": {
+            "x": 83.83850913386861,
+            "y": 52.03635417181715,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_5_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 10
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 2] 活跃无人器 5 台，待救幸存者 5 人，已救援 0 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 0,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 3,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.819,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 137.94466243211866,
+            "y": 42.11462420602224,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            13.79,
+            4.21
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.459,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 104.85281374238568,
+            "y": 114.85281374238568,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            10.49,
+            11.49
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 69.2232270276368,
+            "y": 27.844645405527366,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            6.92,
+            2.78
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 54.55762454059681,
+            "y": 61.57408869505305,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            5.46,
+            6.16
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 35.2677257073823,
+            "y": 52.91884482932346,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            3.53,
+            5.29
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8840,
+          "hp_max": 9000,
+          "survival_pct": 98.2,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 7160,
+          "hp_max": 7400,
+          "survival_pct": 96.8,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5880,
+          "hp_max": 6200,
+          "survival_pct": 94.8,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9700,
+          "hp_max": 9800,
+          "survival_pct": 99.0,
+          "status": "unknown",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7780,
+          "hp_max": 8000,
+          "survival_pct": 97.2,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.679,
+          "center_position": {
+            "x": 104.00690106738038,
+            "y": 61.6040277846451,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_5_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 13
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 3] 活跃无人器 5 台，待救幸存者 5 人，已救援 0 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 0,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 4,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.818,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 167.43082804014833,
+            "y": 47.64328025752781,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            16.74,
+            4.76
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.458,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 79.02903378454599,
+            "y": 29.805806756909206,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            7.9,
+            2.98
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 60.69703067574602,
+            "y": 69.46761086881631,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            6.07,
+            6.95
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 39.08465713422787,
+            "y": 56.14855603665433,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            3.91,
+            5.61
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8800,
+          "hp_max": 9000,
+          "survival_pct": 97.8,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 7100,
+          "hp_max": 7400,
+          "survival_pct": 95.9,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5800,
+          "hp_max": 6200,
+          "survival_pct": 93.5,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7725,
+          "hp_max": 8000,
+          "survival_pct": 96.6,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.679,
+          "center_position": {
+            "x": 122.1532872748981,
+            "y": 69.14969567147901,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_5_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 16
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [
+        {
+          "type": "rescued",
+          "description": "✅ V4 RESCUED by UGV-2!",
+          "agents_involved": [
+            "UGV-2"
+          ]
+        }
+      ],
+      "briefing": "[Step 4] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 5,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.818,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.458,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 88.8348405414552,
+            "y": 31.76696810829105,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            8.88,
+            3.18
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 66.83643681089522,
+            "y": 77.36113304257957,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            6.68,
+            7.74
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 42.90158856107344,
+            "y": 59.37826724398519,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            4.29,
+            5.94
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8760,
+          "hp_max": 9000,
+          "survival_pct": 97.3,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 7040,
+          "hp_max": 7400,
+          "survival_pct": 95.1,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5720,
+          "hp_max": 6200,
+          "survival_pct": 92.3,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7670,
+          "hp_max": 8000,
+          "survival_pct": 95.9,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.679,
+          "center_position": {
+            "x": 129.6116135138184,
+            "y": 70.58898936943035,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 19
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 5] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 6,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.818,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.458,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 98.6406472983644,
+            "y": 33.728129459672886,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            9.86,
+            3.37
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 72.97584294604442,
+            "y": 85.25465521634283,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            7.3,
+            8.53
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 46.71851998791901,
+            "y": 62.60797845131606,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            4.67,
+            6.26
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8720,
+          "hp_max": 9000,
+          "survival_pct": 96.9,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6980,
+          "hp_max": 7400,
+          "survival_pct": 94.3,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5640,
+          "hp_max": 6200,
+          "survival_pct": 91.0,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7615,
+          "hp_max": 8000,
+          "survival_pct": 95.2,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.678,
+          "center_position": {
+            "x": 132.88021576612147,
+            "y": 71.24270981989096,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 22
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 6] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 7,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.817,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.457,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 108.44645405527359,
+            "y": 35.689290811054725,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            10.84,
+            3.57
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 79.11524908119362,
+            "y": 93.14817739010608,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            7.91,
+            9.31
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 50.53545141476458,
+            "y": 65.83768965864692,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            5.05,
+            6.58
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8680,
+          "hp_max": 9000,
+          "survival_pct": 96.4,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6920,
+          "hp_max": 7400,
+          "survival_pct": 93.5,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5560,
+          "hp_max": 6200,
+          "survival_pct": 89.7,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7560,
+          "hp_max": 8000,
+          "survival_pct": 94.5,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.678,
+          "center_position": {
+            "x": 136.14881801842452,
+            "y": 71.89643027035157,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 25
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 7] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 8,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.817,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.457,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 118.25226081218278,
+            "y": 37.650452162436565,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            11.83,
+            3.77
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 85.25465521634283,
+            "y": 101.04169956386934,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            8.53,
+            10.1
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 54.35238284161015,
+            "y": 69.06740086597779,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            5.44,
+            6.91
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8640,
+          "hp_max": 9000,
+          "survival_pct": 96.0,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6860,
+          "hp_max": 7400,
+          "survival_pct": 92.7,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5480,
+          "hp_max": 6200,
+          "survival_pct": 88.4,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7505,
+          "hp_max": 8000,
+          "survival_pct": 93.8,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.678,
+          "center_position": {
+            "x": 139.4174202707276,
+            "y": 72.5501507208122,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 28
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 8] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 9,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.817,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.457,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 128.05806756909197,
+            "y": 39.611613513818405,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            12.81,
+            3.96
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 91.39406135149203,
+            "y": 108.9352217376326,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            9.14,
+            10.89
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 58.169314268455715,
+            "y": 72.29711207330867,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            5.82,
+            7.23
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8600,
+          "hp_max": 9000,
+          "survival_pct": 95.6,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6800,
+          "hp_max": 7400,
+          "survival_pct": 91.9,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5400,
+          "hp_max": 6200,
+          "survival_pct": 87.1,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7450,
+          "hp_max": 8000,
+          "survival_pct": 93.1,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.678,
+          "center_position": {
+            "x": 142.68602252303066,
+            "y": 73.20387117127281,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 31
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 20,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 0,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 9] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 10,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.816,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.456,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 137.86387432600117,
+            "y": 41.572774865200245,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            13.79,
+            4.16
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 97.53346748664123,
+            "y": 116.82874391139586,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            9.75,
+            11.68
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 61.986245695301285,
+            "y": 75.52682328063953,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            6.2,
+            7.55
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8560,
+          "hp_max": 9000,
+          "survival_pct": 95.1,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6740,
+          "hp_max": 7400,
+          "survival_pct": 91.1,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5320,
+          "hp_max": 6200,
+          "survival_pct": 85.8,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7395,
+          "hp_max": 8000,
+          "survival_pct": 92.4,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.677,
+          "center_position": {
+            "x": 145.9546247753337,
+            "y": 73.85759162173342,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 34
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 40,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 20,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 10] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 11,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.816,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.456,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 147.66968108291036,
+            "y": 43.53393621658208,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            14.77,
+            4.35
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 65.80317712214685,
+            "y": 78.7565344879704,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            6.58,
+            7.88
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8520,
+          "hp_max": 9000,
+          "survival_pct": 94.7,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6680,
+          "hp_max": 7400,
+          "survival_pct": 90.3,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5240,
+          "hp_max": 6200,
+          "survival_pct": 84.5,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7340,
+          "hp_max": 8000,
+          "survival_pct": 91.8,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.677,
+          "center_position": {
+            "x": 149.2232270276368,
+            "y": 74.51131207219403,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 37
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 60,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 40,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 11] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 12,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.816,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.456,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 157.47548783981955,
+            "y": 45.495097567963924,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            15.75,
+            4.55
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 69.62010854899242,
+            "y": 81.98624569530126,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            6.96,
+            8.2
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8480,
+          "hp_max": 9000,
+          "survival_pct": 94.2,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6620,
+          "hp_max": 7400,
+          "survival_pct": 89.5,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5160,
+          "hp_max": 6200,
+          "survival_pct": 83.2,
+          "status": "trapped",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7285,
+          "hp_max": 8000,
+          "survival_pct": 91.1,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.677,
+          "center_position": {
+            "x": 152.49182927993985,
+            "y": 75.16503252265464,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 40
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 80,
+          "status": "blocked"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 60,
+          "status": "blocked"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 12] 活跃无人器 5 台，待救幸存者 4 人，已救援 1 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 1,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 13,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.815,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 180.0,
+            "y": 50.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            18.0,
+            5.0
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.455,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 167.28129459672874,
+            "y": 47.45625891934576,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            16.73,
+            4.75
+          ],
+          "target": "V3",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 73.43703997583799,
+            "y": 85.21595690263213,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            7.34,
+            8.52
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8440,
+          "hp_max": 9000,
+          "survival_pct": 93.8,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6560,
+          "hp_max": 7400,
+          "survival_pct": 88.6,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7230,
+          "hp_max": 8000,
+          "survival_pct": 90.4,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.677,
+          "center_position": {
+            "x": 155.7604315322429,
+            "y": 75.81875297311525,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_4_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 43
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 80,
+          "status": "blocked"
+        }
+      ],
+      "events": [
+        {
+          "type": "blockade_cleared",
+          "description": "🚧 障碍 K1 已清除，地面通道开放",
+          "agents_involved": [
+            "UGV-2"
+          ]
+        },
+        {
+          "type": "rescued",
+          "description": "✅ V3 RESCUED by UGV-1!",
+          "agents_involved": [
+            "UGV-1"
+          ]
+        }
+      ],
+      "briefing": "[Step 13] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 14,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.815,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 162.0,
+            "y": 74.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            16.2,
+            7.4
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.455,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 135.4348726628258,
+            "y": 155.72478777137633,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            13.54,
+            15.57
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 162.3109178942401,
+            "y": 56.13354855582546,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            16.23,
+            5.61
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 77.25397140268356,
+            "y": 88.445668109963,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            7.73,
+            8.84
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8400,
+          "hp_max": 9000,
+          "survival_pct": 93.3,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6500,
+          "hp_max": 7400,
+          "survival_pct": 87.8,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7175,
+          "hp_max": 8000,
+          "survival_pct": 89.7,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.677,
+          "center_position": {
+            "x": 153.2485968523553,
+            "y": 95.28611210906728,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 46
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [
+        {
+          "type": "blockade_cleared",
+          "description": "🚧 障碍 K2 已清除，地面通道开放",
+          "agents_involved": [
+            "UGV-2"
+          ]
+        }
+      ],
+      "briefing": "[Step 14] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 15,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.815,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 144.0,
+            "y": 98.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            14.4,
+            9.8
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.455,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 157.34054119175147,
+            "y": 64.81083819230517,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            15.73,
+            6.48
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 81.07090282952913,
+            "y": 91.67537931729386,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            8.11,
+            9.17
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8360,
+          "hp_max": 9000,
+          "survival_pct": 92.9,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6440,
+          "hp_max": 7400,
+          "survival_pct": 87.0,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7120,
+          "hp_max": 8000,
+          "survival_pct": 89.0,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.676,
+          "center_position": {
+            "x": 150.44684706391715,
+            "y": 114.27027939743505,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 49
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [
+        {
+          "type": "balloon_deployed",
+          "description": "🎈 Balloon-1 deployed — comm coverage +40%",
+          "agents_involved": [
+            "Balloon-1"
+          ]
+        }
+      ],
+      "briefing": "[Step 15] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 16,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.814,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 126.0,
+            "y": 122.00000000000001,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.6,
+            12.2
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.454,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 152.37016448926283,
+            "y": 73.48812782878488,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            15.24,
+            7.35
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 84.88783425637472,
+            "y": 94.90509052462473,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            8.49,
+            9.49
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8320,
+          "hp_max": 9000,
+          "survival_pct": 92.4,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6380,
+          "hp_max": 7400,
+          "survival_pct": 86.2,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7065,
+          "hp_max": 8000,
+          "survival_pct": 88.3,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.676,
+          "center_position": {
+            "x": 142.79005482975427,
+            "y": 125.16270927626164,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 52
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 16] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 17,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.814,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.454,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 147.3997877867742,
+            "y": 82.16541746526458,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            14.74,
+            8.22
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 88.7047656832203,
+            "y": 98.13480173195559,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            8.87,
+            9.81
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8280,
+          "hp_max": 9000,
+          "survival_pct": 92.0,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6320,
+          "hp_max": 7400,
+          "survival_pct": 85.4,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 7010,
+          "hp_max": 8000,
+          "survival_pct": 87.6,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.676,
+          "center_position": {
+            "x": 139.1332625955914,
+            "y": 130.72180582175486,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 55
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 17] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 18,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.814,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.454,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 142.42941108428556,
+            "y": 90.8427071017443,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            14.24,
+            9.08
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 92.52169711006587,
+            "y": 101.36451293928646,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            9.25,
+            10.14
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8240,
+          "hp_max": 9000,
+          "survival_pct": 91.6,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6260,
+          "hp_max": 7400,
+          "survival_pct": 84.6,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6955,
+          "hp_max": 8000,
+          "survival_pct": 86.9,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.676,
+          "center_position": {
+            "x": 137.4764703614285,
+            "y": 133.61423570058142,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 58
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 18] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 19,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.813,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.453,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 137.45903438179693,
+            "y": 99.519996738224,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            13.75,
+            9.95
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.95,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 96.33862853691144,
+            "y": 104.59422414661732,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            9.63,
+            10.46
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8200,
+          "hp_max": 9000,
+          "survival_pct": 91.1,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6200,
+          "hp_max": 7400,
+          "survival_pct": 83.8,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6900,
+          "hp_max": 8000,
+          "survival_pct": 86.2,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.675,
+          "center_position": {
+            "x": 135.81967812726563,
+            "y": 136.506665579408,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 61
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 19] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 20,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.813,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.453,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 132.48865767930826,
+            "y": 108.1972863747037,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            13.25,
+            10.82
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 100.15555996375703,
+            "y": 107.82393535394819,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            10.02,
+            10.78
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8160,
+          "hp_max": 9000,
+          "survival_pct": 90.7,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6140,
+          "hp_max": 7400,
+          "survival_pct": 83.0,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6845,
+          "hp_max": 8000,
+          "survival_pct": 85.6,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.675,
+          "center_position": {
+            "x": 134.16288589310275,
+            "y": 139.39909545823457,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 64
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 20] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 21,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.813,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.453,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 127.51828097681964,
+            "y": 116.87457601118341,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            12.75,
+            11.69
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 103.97249139060261,
+            "y": 111.05364656127905,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            10.4,
+            11.11
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8120,
+          "hp_max": 9000,
+          "survival_pct": 90.2,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6080,
+          "hp_max": 7400,
+          "survival_pct": 82.2,
+          "status": "trapped",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6790,
+          "hp_max": 8000,
+          "survival_pct": 84.9,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.675,
+          "center_position": {
+            "x": 132.50609365893988,
+            "y": 142.29152533706113,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 67
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 21] 活跃无人器 5 台，待救幸存者 3 人，已救援 2 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 2,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 22,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.812,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.0,
+            "y": 130.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.0,
+            13.0
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.452,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 122.54790427433099,
+            "y": 125.5518656476631,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            12.25,
+            12.56
+          ],
+          "target": "V2",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 107.78942281744818,
+            "y": 114.28335776860992,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            10.78,
+            11.43
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8080,
+          "hp_max": 9000,
+          "survival_pct": 89.8,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6735,
+          "hp_max": 8000,
+          "survival_pct": 84.2,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.675,
+          "center_position": {
+            "x": 130.849301424777,
+            "y": 145.18395521588772,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_3_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 70
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [
+        {
+          "type": "rescued",
+          "description": "✅ V2 RESCUED by UGV-1!",
+          "agents_involved": [
+            "UGV-1"
+          ]
+        }
+      ],
+      "briefing": "[Step 22] 活跃无人器 5 台，待救幸存者 2 人，已救援 3 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V2，伤势26%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 3,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 23,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.812,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 135.4348726628258,
+            "y": 155.72478777137633,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            13.54,
+            15.57
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.452,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.48390269700278,
+            "y": 174.6334368540005,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.05,
+            17.46
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 127.04993178683122,
+            "y": 134.48112923861456,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            12.7,
+            13.45
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 111.60635424429375,
+            "y": 117.51306897594078,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            11.16,
+            11.75
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8040,
+          "hp_max": 9000,
+          "survival_pct": 89.3,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6680,
+          "hp_max": 8000,
+          "survival_pct": 83.5,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.675,
+          "center_position": {
+            "x": 127.65623571555325,
+            "y": 154.94645128799712,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_2_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 73
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 23] 活跃无人器 5 台，待救幸存者 2 人，已救援 3 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V5，伤势19%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 3,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 24,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.812,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.452,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 90.96780539400555,
+            "y": 169.26687370800101,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            9.1,
+            16.93
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 131.55195929933146,
+            "y": 143.41039282956598,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            13.16,
+            14.34
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 115.42328567113933,
+            "y": 120.74278018327166,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            11.54,
+            12.07
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 8000,
+          "hp_max": 9000,
+          "survival_pct": 88.9,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6625,
+          "hp_max": 8000,
+          "survival_pct": 82.8,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.674,
+          "center_position": {
+            "x": 124.17325489777902,
+            "y": 164.22575551252234,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_2_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 76
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 24] 活跃无人器 5 台，待救幸存者 2 人，已救援 3 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V5，伤势19%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 3,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 25,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.811,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.451,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 61.45170809100833,
+            "y": 163.9003105620015,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            6.15,
+            16.39
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 136.0539868118317,
+            "y": 152.3396564205174,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            13.61,
+            15.23
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 119.2402170979849,
+            "y": 123.97249139060253,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            11.92,
+            12.4
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7960,
+          "hp_max": 9000,
+          "survival_pct": 88.4,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6570,
+          "hp_max": 8000,
+          "survival_pct": 82.1,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.674,
+          "center_position": {
+            "x": 115.83523163427999,
+            "y": 165.4133223275063,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_2_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 79
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 25] 活跃无人器 5 台，待救幸存者 2 人，已救援 3 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V5，伤势19%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 3,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 26,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.811,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.451,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 140.55601432433193,
+            "y": 161.26892001146882,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            14.06,
+            16.13
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 123.05714852483047,
+            "y": 127.2022025979334,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            12.31,
+            12.72
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7920,
+          "hp_max": 9000,
+          "survival_pct": 88.0,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6515,
+          "hp_max": 8000,
+          "survival_pct": 81.4,
+          "status": "trapped",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.674,
+          "center_position": {
+            "x": 110.18533810811066,
+            "y": 167.08964000382295,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_2_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 82
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 26] 活跃无人器 5 台，待救幸存者 2 人，已救援 3 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V5，伤势19%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 3,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 27,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.811,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 150.0,
+            "y": 180.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            15.0,
+            18.0
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.451,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 145.05804183683216,
+            "y": 170.19818360242027,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            14.51,
+            17.02
+          ],
+          "target": "V5",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 126.87407995167602,
+            "y": 130.4319138052643,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            12.69,
+            13.04
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7880,
+          "hp_max": 9000,
+          "survival_pct": 87.6,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.674,
+          "center_position": {
+            "x": 111.68601394561072,
+            "y": 170.06606120080676,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_2_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 85
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [
+        {
+          "type": "rescued",
+          "description": "✅ V5 RESCUED by UGV-1!",
+          "agents_involved": [
+            "UGV-1"
+          ]
+        }
+      ],
+      "briefing": "[Step 27] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。 检测到V5，伤势19%，指派Drone-2(UAV)执行空中侦察确认。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 28,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.81,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 120.48390269700278,
+            "y": 174.6334368540005,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            12.05,
+            17.46
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.45,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 135.1048262275479,
+            "y": 169.23200606433514,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            13.51,
+            16.92
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 130.6910113785216,
+            "y": 133.66162501259515,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            13.07,
+            13.37
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7840,
+          "hp_max": 9000,
+          "survival_pct": 87.1,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.673,
+          "center_position": {
+            "x": 98.52957630818355,
+            "y": 167.95514763944522,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 87
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 28] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 29,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.81,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 90.96780539400555,
+            "y": 169.26687370800101,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            9.1,
+            16.93
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.45,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.76,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 125.15161061826363,
+            "y": 168.26582852625,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            12.52,
+            16.83
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.69,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": "__block_K1",
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 134.50794280536718,
+            "y": 136.89133621992602,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            13.45,
+            13.69
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7800,
+          "hp_max": 9000,
+          "survival_pct": 86.7,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.673,
+          "center_position": {
+            "x": 85.3731386707564,
+            "y": 165.84423407808367,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 89
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 29] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 30,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.81,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 61.45170809100833,
+            "y": 163.9003105620015,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            6.15,
+            16.39
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.45,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.759,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 115.19839500897938,
+            "y": 167.2996509881649,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            11.52,
+            16.73
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.689,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 138.32487423221272,
+            "y": 140.12104742725688,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            13.83,
+            14.01
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7760,
+          "hp_max": 9000,
+          "survival_pct": 86.2,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.673,
+          "center_position": {
+            "x": 72.21670103332923,
+            "y": 163.73332051672213,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 91
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 30] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 31,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.809,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.449,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.759,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 105.24517939969512,
+            "y": 166.33347345007974,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            10.52,
+            16.63
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.689,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 142.14180565905826,
+            "y": 143.35075863458775,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            14.21,
+            14.34
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7720,
+          "hp_max": 9000,
+          "survival_pct": 85.8,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.673,
+          "center_position": {
+            "x": 61.74839313323171,
+            "y": 162.11115781669324,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 93
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 31] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 32,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.809,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.449,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.759,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 95.29196379041085,
+            "y": 165.3672959119946,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            9.53,
+            16.54
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.689,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 145.9587370859038,
+            "y": 146.5804698419186,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            14.6,
+            14.66
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7680,
+          "hp_max": 9000,
+          "survival_pct": 85.3,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.672,
+          "center_position": {
+            "x": 58.43065459680361,
+            "y": 161.78909863733153,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 95
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 32] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 33,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.809,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.449,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.759,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 85.33874818112659,
+            "y": 164.40111837390944,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            8.53,
+            16.44
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.689,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 149.77566851274938,
+            "y": 149.81018104924948,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            14.98,
+            14.98
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7640,
+          "hp_max": 9000,
+          "survival_pct": 84.9,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.672,
+          "center_position": {
+            "x": 55.11291606037553,
+            "y": 161.4670394579698,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 97
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 33] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 34,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.808,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.448,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.759,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 75.38553257184235,
+            "y": 163.4349408358243,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            7.54,
+            16.34
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.689,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 149.8480906340991,
+            "y": 149.69508572354653,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            14.98,
+            14.97
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7600,
+          "hp_max": 9000,
+          "survival_pct": 84.4,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.672,
+          "center_position": {
+            "x": 51.79517752394745,
+            "y": 161.1449802786081,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 99
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 34] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 35,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.808,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.448,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.759,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 65.4323169625581,
+            "y": 162.46876329773914,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            6.54,
+            16.25
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.689,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 149.3583325388086,
+            "y": 149.64906909291776,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            14.94,
+            14.96
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7560,
+          "hp_max": 9000,
+          "survival_pct": 84.0,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.672,
+          "center_position": {
+            "x": 48.47743898751937,
+            "y": 160.82292109924637,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 101
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 35] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 36,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.808,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.448,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.759,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 55.479101353273855,
+            "y": 161.50258575965404,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            5.55,
+            16.15
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.689,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 149.15842925360124,
+            "y": 149.64101335684418,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            14.92,
+            14.96
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7520,
+          "hp_max": 9000,
+          "survival_pct": 83.6,
+          "status": "trapped",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.672,
+          "center_position": {
+            "x": 45.15970045109128,
+            "y": 160.50086191988467,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 103
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [],
+      "briefing": "[Step 36] 活跃无人器 5 台，待救幸存者 1 人，已救援 4 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 4,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    },
+    {
+      "step": 37,
+      "agents": [
+        {
+          "id": "Drone-1",
+          "type": "uav",
+          "battery": 0.807,
+          "health": "nominal",
+          "task": "search",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "Drone-2",
+          "type": "uav",
+          "battery": 0.447,
+          "health": "nominal",
+          "task": "recon",
+          "position": {
+            "x": 40.0,
+            "y": 160.0,
+            "z": 50.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E2B",
+          "location": [
+            4.0,
+            16.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "UGV-1",
+          "type": "ugv",
+          "battery": 0.759,
+          "health": "nominal",
+          "task": "rescue",
+          "position": {
+            "x": 45.525885743989605,
+            "y": 160.53640822156888,
+            "z": 0.0
+          },
+          "in_hub": "hub-03f6b3",
+          "gemma_model": "E4B",
+          "location": [
+            4.55,
+            16.05
+          ],
+          "target": "V1",
+          "thinking": ""
+        },
+        {
+          "id": "UGV-2",
+          "type": "ugv",
+          "battery": 0.689,
+          "health": "nominal",
+          "task": "transport",
+          "position": {
+            "x": 100.0,
+            "y": 120.0,
+            "z": 0.0
+          },
+          "in_hub": null,
+          "gemma_model": "E4B",
+          "location": [
+            10.0,
+            12.0
+          ],
+          "target": null,
+          "thinking": ""
+        },
+        {
+          "id": "Balloon-1",
+          "type": "balloon",
+          "battery": 0.951,
+          "health": "nominal",
+          "task": "relay",
+          "position": {
+            "x": 148.75958822834158,
+            "y": 150.05424934564013,
+            "z": 200.0
+          },
+          "in_hub": null,
+          "gemma_model": "E2B",
+          "location": [
+            14.88,
+            15.01
+          ],
+          "target": null,
+          "thinking": ""
+        }
+      ],
+      "victims": [
+        {
+          "id": "V1",
+          "location": [
+            4,
+            16
+          ],
+          "hp": 7480,
+          "hp_max": 9000,
+          "survival_pct": 83.1,
+          "status": "rescued",
+          "thermal_signal": 0.82
+        },
+        {
+          "id": "V2",
+          "location": [
+            12,
+            13
+          ],
+          "hp": 6020,
+          "hp_max": 7400,
+          "survival_pct": 81.4,
+          "status": "rescued",
+          "thermal_signal": 0.4
+        },
+        {
+          "id": "V3",
+          "location": [
+            18,
+            5
+          ],
+          "hp": 5080,
+          "hp_max": 6200,
+          "survival_pct": 81.9,
+          "status": "rescued",
+          "thermal_signal": 0.6
+        },
+        {
+          "id": "V4",
+          "location": [
+            7,
+            6
+          ],
+          "hp": 9675,
+          "hp_max": 9800,
+          "survival_pct": 98.7,
+          "status": "rescued",
+          "thermal_signal": 0.3
+        },
+        {
+          "id": "V5",
+          "location": [
+            15,
+            18
+          ],
+          "hp": 6460,
+          "hp_max": 8000,
+          "survival_pct": 80.8,
+          "status": "rescued",
+          "thermal_signal": 0.75
+        }
+      ],
+      "hubs": [
+        {
+          "hub_id": "hub-03f6b3",
+          "leader": "UGV-1",
+          "members": [
+            "Drone-1",
+            "Drone-2",
+            "UGV-1"
+          ],
+          "member_count": 3,
+          "avg_battery": 0.671,
+          "center_position": {
+            "x": 41.8419619146632,
+            "y": 160.17880274052297,
+            "z": 33.333333333333336
+          },
+          "active_plan": "rescue_1_survivors",
+          "peer_hubs": [],
+          "rescue_log_count": 105
+        }
+      ],
+      "blocked_cells": [
+        {
+          "id": "K1",
+          "location": [
+            10,
+            12
+          ],
+          "repair_cost": 80,
+          "clear_progress": 100,
+          "status": "cleared"
+        },
+        {
+          "id": "K2",
+          "location": [
+            11,
+            12
+          ],
+          "repair_cost": 60,
+          "clear_progress": 100,
+          "status": "cleared"
+        }
+      ],
+      "events": [
+        {
+          "type": "rescued",
+          "description": "✅ V1 RESCUED by UGV-1!",
+          "agents_involved": [
+            "UGV-1"
+          ]
+        }
+      ],
+      "briefing": "[Step 37] 活跃无人器 5 台，待救幸存者 0 人，已救援 5 人，已牺牲 0 台无人器。",
+      "thinking_log": "检测到V1，伤势9%，指派Drone-1(UAV)执行空中侦察确认。 指派UGV-1(UGV)地面推进救援V1。",
+      "stats": {
+        "rescued": 5,
+        "sacrificed": 0,
+        "active_agents": 5,
+        "comm_coverage_pct": 100.0
+      }
+    }
+  ]
+}
