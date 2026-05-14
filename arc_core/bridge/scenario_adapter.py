@@ -101,11 +101,11 @@ class ScenarioAdapter:
     def json_to_agents(self, data: dict) -> List[EdgeAgent]:
         """Convert Yihang's agent list to EdgeAgent instances."""
         agents = []
+        comm = data.get("communication", {})
         for a in data.get("agents", []):
             # Map agent type string to arc_core AgentType
-            # Supports both new canonical format ("ugv","uav","balloon")
-            # and legacy Yihang format ("drone","ground_rescue","ground_clear")
-            raw_type = a.get("type", "").lower()
+            # Supports canonical ("ugv","uav","balloon") and legacy ("drone", "ground_*")
+            raw_type = str(a.get("type", "")).lower()
             if raw_type == "balloon":
                 agent_type = AgentType.BALLOON
             elif raw_type == "ugv" or "ground" in raw_type:
@@ -133,6 +133,15 @@ class ScenarioAdapter:
             )
             agent.battery_level = a.get("battery", 100) / 100.0
             agent.max_speed_mps = a.get("speed", 1) * self.cell_size_m
+            default_comm_cells = {
+                AgentType.BALLOON: max(
+                    a.get("perception_range", 12),
+                    comm.get("relay_range", 8),
+                ),
+                AgentType.UAV: comm.get("direct_comm_range", 4),
+                AgentType.UGV: comm.get("base_range", 12),
+            }[agent_type]
+            agent.comm_range_m = a.get("comm_range", default_comm_cells) * self.cell_size_m
 
             # Map role to task
             role = a.get("role", "")

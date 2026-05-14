@@ -3,7 +3,7 @@ node_modules/
 .pnp
 .pnp.*
 
-# Next.js
+# Next.js / JS build
 .next/
 out/
 build/
@@ -12,6 +12,8 @@ dist/
 # Production / environments
 *.local
 .env*.local
+
+# Python environments
 venv/
 .venv/
 env/
@@ -36,7 +38,7 @@ wheels/
 .installed.cfg
 *.egg
 
-# Debug logs
+# Debug logs (package managers + Python)
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
@@ -45,7 +47,7 @@ yarn-error.log*
 pip-log.txt
 pip-delete-this-directory.txt
 
-# TypeScript
+# TypeScript / Next toolchain
 *.tsbuildinfo
 next-env.d.ts
 
@@ -91,5 +93,4 @@ public/hdri/_raw/
 *.zip
 *.tar.gz
 .agent/
-*.md
-*.txt
+.claude/settings.local.json

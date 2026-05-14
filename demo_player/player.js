@@ -8,10 +8,18 @@
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const CELL     = 20;          // pixels per grid cell
-const MAP_COLS = 30;
-const MAP_ROWS = 30;
+let CELL     = 20;          // pixels per grid cell, recalculated from viewport
+let MAP_COLS = 30;
+let MAP_ROWS = 30;
 const MS_PER_STEP_BASE = 800; // at 1× speed
+const PMTILES_URL = 'https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles';
+const GEO_BOUNDS_300M = {
+  label: 'Firenze Centro 300m x 300m',
+  // [south, west], [north, east]. Center: 43.7696, 11.2558.
+  // Approx 300m square at this latitude: 0.00269 deg lat x 0.00373 deg lon.
+  southWest: [43.76825, 11.25393],
+  northEast: [43.77095, 11.25767],
+};
 
 const COLORS = {
   uav:     '#00bfff',
@@ -32,12 +40,44 @@ const TOAST_CFG = {
   sacrifice:        { icon: '💀', color: '#ff8c00', bg: 'rgba(80,30,0,0.9)' },
   energy_transfer:  { icon: '⚡', color: '#ffe44d', bg: 'rgba(60,55,0,0.9)' },
   blockade_cleared: { icon: '🚧', color: '#ffe44d', bg: 'rgba(60,50,0,0.9)' },
+  dynamic_obstacle: { icon: '⚠️', color: '#ff8c00', bg: 'rgba(85,35,0,0.92)' },
   balloon_deployed: { icon: '🎈', color: '#c8b4ff', bg: 'rgba(40,20,80,0.9)' },
   comm_restored:    { icon: '📡', color: '#c8b4ff', bg: 'rgba(20,10,60,0.9)' },
   alert:            { icon: '🚨', color: '#ff4444', bg: 'rgba(80,0,0,0.9)' },
   victim_dead:      { icon: '💔', color: '#ff4444', bg: 'rgba(60,0,0,0.9)' },
   default:          { icon: 'ℹ️',  color: '#c0d8f0', bg: 'rgba(10,20,40,0.9)' },
 };
+
+let baseMap = null;
+let baseMapReady = false;
+let pmtilesProtocolInstalled = false;
+let roadSegments = [];
+let roadNetworkReady = false;
+let roadCapturePosted = false;
+
+function gridToLngLat(col, row) {
+  const west = GEO_BOUNDS_300M.southWest[1];
+  const south = GEO_BOUNDS_300M.southWest[0];
+  const east = GEO_BOUNDS_300M.northEast[1];
+  const north = GEO_BOUNDS_300M.northEast[0];
+  const x = Math.min(1, Math.max(0, col / Math.max(1, MAP_COLS)));
+  const y = Math.min(1, Math.max(0, row / Math.max(1, MAP_ROWS)));
+  return [
+    west + x * (east - west),
+    north - y * (north - south),
+  ];
+}
+
+function lngLatToGrid(lng, lat) {
+  const west = GEO_BOUNDS_300M.southWest[1];
+  const south = GEO_BOUNDS_300M.southWest[0];
+  const east = GEO_BOUNDS_300M.northEast[1];
+  const north = GEO_BOUNDS_300M.northEast[0];
+  return {
+    x: ((lng - west) / (east - west)) * MAP_COLS,
+    y: ((north - lat) / (north - south)) * MAP_ROWS,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,18 +89,319 @@ function cy(row) { return row * CELL + CELL / 2; }   // center y of grid row
 // Canvas retina fix
 function setupCanvas(canvas, w, h) {
   const dpr = window.devicePixelRatio || 1;
-  canvas.width  = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width  = w + 'px';
-  canvas.style.height = h + 'px';
+  const safeW = Math.max(1, Math.floor(w));
+  const safeH = Math.max(1, Math.floor(h));
+  canvas.width  = safeW * dpr;
+  canvas.height = safeH * dpr;
+  canvas.style.width  = safeW + 'px';
+  canvas.style.height = safeH + 'px';
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
   return ctx;
 }
 
+function cssCanvasWidth(canvas) {
+  return canvas.width / (window.devicePixelRatio || 1);
+}
+
+function resizeBasemap(w, h) {
+  const el = document.getElementById('basemap');
+  if (!el) return;
+  el.style.width = `${Math.max(1, Math.floor(w))}px`;
+  el.style.height = `${Math.max(1, Math.floor(h))}px`;
+  if (baseMap) {
+    baseMap.resize();
+    baseMap.fitBounds(
+      [
+        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+      ],
+      { padding: 0, duration: 0 },
+    );
+  }
+}
+
+function makeFallbackBasemapStyle() {
+  return {
+    version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources: {
+      protomaps: {
+        type: 'vector',
+        url: `pmtiles://${PMTILES_URL}`,
+        attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+      },
+    },
+    layers: [
+      {
+        id: 'pm-mask',
+        source: 'protomaps',
+        'source-layer': 'mask',
+        type: 'fill',
+        paint: { 'fill-color': '#0f1726' },
+      },
+      {
+        id: 'pm-earth',
+        source: 'protomaps',
+        'source-layer': 'earth',
+        type: 'fill',
+        paint: { 'fill-color': '#121d2e' },
+      },
+      {
+        id: 'pm-water',
+        source: 'protomaps',
+        'source-layer': 'water',
+        type: 'fill',
+        paint: { 'fill-color': '#164969', 'fill-opacity': 0.85 },
+      },
+      {
+        id: 'pm-landuse',
+        source: 'protomaps',
+        'source-layer': 'landuse',
+        type: 'fill',
+        paint: { 'fill-color': '#1b2940', 'fill-opacity': 0.72 },
+      },
+      {
+        id: 'pm-buildings',
+        source: 'protomaps',
+        'source-layer': 'buildings',
+        type: 'fill',
+        paint: {
+          'fill-color': '#445873',
+          'fill-opacity': 0.68,
+          'fill-outline-color': '#6d86a8',
+        },
+      },
+      {
+        id: 'pm-roads',
+        source: 'protomaps',
+        'source-layer': 'roads',
+        type: 'line',
+        paint: {
+          'line-color': '#a9bdd5',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.8, 16, 3.2, 18, 5.6],
+          'line-opacity': 0.82,
+        },
+      },
+      {
+        id: 'pm-road-labels',
+        source: 'protomaps',
+        'source-layer': 'roads',
+        type: 'symbol',
+        filter: ['has', 'name'],
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 13, 9, 16, 11, 18, 13],
+          'text-padding': 2,
+        },
+        paint: {
+          'text-color': '#c9d6e7',
+          'text-halo-color': '#07101d',
+          'text-halo-width': 1.2,
+          'text-opacity': 0.76,
+        },
+      },
+    ],
+  };
+}
+
+function initBasemap() {
+  if (baseMap || !window.maplibregl || !window.pmtiles) return;
+
+  try {
+    if (!pmtilesProtocolInstalled) {
+      const protocol = new pmtiles.Protocol();
+      maplibregl.addProtocol('pmtiles', protocol.tile);
+      const archive = new pmtiles.PMTiles(PMTILES_URL);
+      protocol.add(archive);
+      pmtilesProtocolInstalled = true;
+    }
+
+    const style = makeFallbackBasemapStyle();
+
+    baseMap = new maplibregl.Map({
+      container: 'basemap',
+      style,
+      bounds: [
+        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+      ],
+      fitBoundsOptions: { padding: 0, duration: 0 },
+      interactive: false,
+      attributionControl: false,
+    });
+    baseMap.on('load', () => {
+      baseMapReady = true;
+      baseMap.fitBounds(
+        [
+          [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+          [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+        ],
+        { padding: 0, duration: 0 },
+      );
+    });
+    baseMap.on('idle', rebuildRoadNetwork);
+  } catch (err) {
+    console.warn('[basemap] PMTiles initialization failed:', err);
+  }
+}
+
+function flattenRoadCoordinates(geometry) {
+  if (!geometry) return [];
+  if (geometry.type === 'LineString') return [geometry.coordinates];
+  if (geometry.type === 'MultiLineString') return geometry.coordinates;
+  return [];
+}
+
+function segmentInMap(a, b) {
+  const margin = 1;
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxY = Math.max(a.y, b.y);
+  return maxX >= -margin && minX <= MAP_COLS + margin
+    && maxY >= -margin && minY <= MAP_ROWS + margin;
+}
+
+function rebuildRoadNetwork() {
+  if (!baseMap || !baseMapReady) return;
+  let features = [];
+  try {
+    features = baseMap.querySourceFeatures('protomaps', { sourceLayer: 'roads' });
+  } catch (err) {
+    console.warn('[basemap] road query failed:', err);
+    return;
+  }
+
+  const segments = [];
+  features.forEach(feature => {
+    flattenRoadCoordinates(feature.geometry).forEach(line => {
+      for (let i = 1; i < line.length; i++) {
+        const a = lngLatToGrid(line[i - 1][0], line[i - 1][1]);
+        const b = lngLatToGrid(line[i][0], line[i][1]);
+        if (segmentInMap(a, b)) segments.push({ a, b });
+      }
+    });
+  });
+
+  if (segments.length) {
+    roadSegments = segments;
+    roadNetworkReady = true;
+    window.__arcRoadSegments = roadSegments;
+    maybePostRoadCapture();
+  }
+}
+
+function maybePostRoadCapture() {
+  if (roadCapturePosted || !new URLSearchParams(window.location.search).has('captureRoads')) return;
+  roadCapturePosted = true;
+  fetch('http://localhost:8001/roads', {
+    method: 'POST',
+    mode: 'no-cors',
+    body: JSON.stringify({
+      bounds: GEO_BOUNDS_300M,
+      mapSize: [MAP_COLS, MAP_ROWS],
+      segments: roadSegments,
+    }),
+  }).catch(() => {});
+}
+
+function nearestRoadPoint(pos) {
+  if (!roadNetworkReady || roadSegments.length === 0) return pos;
+  let best = pos;
+  let bestDistSq = Infinity;
+
+  roadSegments.forEach(({ a, b }) => {
+    const vx = b.x - a.x;
+    const vy = b.y - a.y;
+    const lenSq = vx * vx + vy * vy;
+    if (lenSq <= 0.0001) return;
+    const t = Math.max(0, Math.min(1, ((pos.x - a.x) * vx + (pos.y - a.y) * vy) / lenSq));
+    const px = a.x + vx * t;
+    const py = a.y + vy * t;
+    const dx = pos.x - px;
+    const dy = pos.y - py;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      best = { x: px, y: py };
+    }
+  });
+
+  return best;
+}
+
+function constrainAgentPosition(agent, pos) {
+  if (agent.type !== 'ugv') return pos;
+  return roadNetworkReady ? nearestRoadPoint(pos) : pos;
+}
+
 // ---------------------------------------------------------------------------
 // Typewriter
 // ---------------------------------------------------------------------------
+let _thinkingTimer = null;
+let _thinkingQueue = [];
+let _thinkingTyping = false;
+
+function splitThinkingLog(text) {
+  return String(text || '')
+    .split(/(?<=[。！？.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function appendThinkingEntry(el, step, text, animate = true) {
+  const row = document.createElement('div');
+  row.className = 'thinking-row';
+  const label = document.createElement('span');
+  label.className = 'thinking-step';
+  label.textContent = `[${step}] `;
+  const body = document.createElement('span');
+  body.className = 'thinking-body';
+  row.append(label, body);
+  el.appendChild(row);
+
+  const finish = () => {
+    el.scrollTop = el.scrollHeight;
+    while (el.children.length > 80) el.removeChild(el.firstChild);
+  };
+
+  if (!animate) {
+    body.textContent = text;
+    finish();
+    return;
+  }
+
+  let i = 0;
+  _thinkingTyping = true;
+  clearInterval(_thinkingTimer);
+  _thinkingTimer = setInterval(() => {
+    body.textContent += text[i++] || '';
+    el.scrollTop = el.scrollHeight;
+    if (i >= text.length) {
+      clearInterval(_thinkingTimer);
+      _thinkingTyping = false;
+      finish();
+      playThinkingQueue(el);
+    }
+  }, 16);
+}
+
+function playThinkingQueue(el) {
+  if (_thinkingTyping || !_thinkingQueue.length) return;
+  const next = _thinkingQueue.shift();
+  appendThinkingEntry(el, next.step, next.text, next.animate);
+}
+
+function queueThinkingLog(el, step, text, animate = true) {
+  splitThinkingLog(text).forEach(line => {
+    _thinkingQueue.push({ step, text: line, animate });
+  });
+  playThinkingQueue(el);
+}
+
 let _twTimer = null;
 function typewriter(el, text, speed = 22) {
   clearInterval(_twTimer);
@@ -74,15 +415,20 @@ function typewriter(el, text, speed = 22) {
 }
 
 let _brTimer = null;
-function typewriterBriefing(el, text, speed = 18) {
-  clearInterval(_brTimer);
-  el.textContent = '';
-  let i = 0;
-  _brTimer = setInterval(() => {
-    el.textContent += text[i++] || '';
-    el.scrollTop = el.scrollHeight;
-    if (i >= text.length) clearInterval(_brTimer);
-  }, speed);
+function appendBriefingEntry(el, step, text) {
+  const row = document.createElement('div');
+  row.className = 'briefing-row';
+  const label = document.createElement('span');
+  label.className = 'briefing-step';
+  label.textContent = `[${step}] `;
+  const body = document.createElement('span');
+  body.className = 'briefing-body';
+  body.textContent = text;
+  row.append(label, body);
+  el.appendChild(row);
+
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 80) el.removeChild(el.firstChild);
 }
 
 // ---------------------------------------------------------------------------
@@ -127,11 +473,11 @@ let chartCtx = null;
 function renderSurvivalChart(frame) {
   if (!chartCtx) return;
   const victims = frame.victims;
-  const W = MAP_COLS * CELL; // same width as map (css handles it)
+  const W = cssCanvasWidth(chartCtx.canvas);
   const H = 90;
-  chartCtx.clearRect(0, 0, chartCtx.canvas.width / (window.devicePixelRatio||1), H);
+  chartCtx.clearRect(0, 0, W, H);
 
-  const barW = Math.min(40, (chartCtx.canvas.width / (window.devicePixelRatio||1)) / (victims.length + 1));
+  const barW = Math.max(2, Math.min(40, W / (victims.length + 1)));
   const gap  = barW * 0.2;
 
   victims.forEach((v, i) => {
@@ -233,14 +579,14 @@ function drawBlockedCells(ctx, cells) {
   cells.forEach(b => {
     const [col, row] = b.location;
     if (b.status === 'blocked') {
-      ctx.fillStyle = 'rgba(139,69,19,0.5)';
+      ctx.fillStyle = b.dynamic ? 'rgba(255,140,0,0.58)' : 'rgba(139,69,19,0.5)';
       ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
-      ctx.strokeStyle = '#8b4513';
+      ctx.strokeStyle = b.dynamic ? '#ff8c00' : '#8b4513';
       ctx.lineWidth = 1;
       ctx.strokeRect(col * CELL + 0.5, row * CELL + 0.5, CELL - 1, CELL - 1);
-      ctx.fillStyle = '#a0522d';
+      ctx.fillStyle = b.dynamic ? '#ffd27a' : '#a0522d';
       ctx.font = '9px Courier New';
-      ctx.fillText('BLK', col * CELL + 2, row * CELL + CELL / 2 + 3);
+      ctx.fillText(b.dynamic ? 'NEW' : 'BLK', col * CELL + 2, row * CELL + CELL / 2 + 3);
     } else {
       ctx.fillStyle = 'rgba(57,255,20,0.07)';
       ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
@@ -355,13 +701,18 @@ function drawUGV(ctx, x, y, battery, task, trail, chargingTarget) {
     ctx.setLineDash([3, 5]);
     ctx.strokeStyle = `rgba(57,255,20,0.3)`;
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    trail.forEach((p, i) => {
-      const px = p.x * CELL + CELL / 2;
-      const py = p.y * CELL + CELL / 2;
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    });
-    ctx.stroke();
+    for (let i = 1; i < trail.length; i++) {
+      const prev = trail[i - 1];
+      const cur = trail[i];
+      const dx = cur.x - prev.x;
+      const dy = cur.y - prev.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 1.75) continue;
+      ctx.beginPath();
+      ctx.moveTo(prev.x * CELL + CELL / 2, prev.y * CELL + CELL / 2);
+      ctx.lineTo(cur.x * CELL + CELL / 2, cur.y * CELL + CELL / 2);
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
   }
 
@@ -470,7 +821,7 @@ function renderFrame(frame, interpT, ts) {
   mapCtx.clearRect(0, 0, W, H);
 
   // Background
-  mapCtx.fillStyle = '#050d1a';
+  mapCtx.fillStyle = baseMapReady ? 'rgba(5,13,26,0.16)' : '#050d1a';
   mapCtx.fillRect(0, 0, W, H);
 
   drawGrid(mapCtx);
@@ -489,7 +840,12 @@ function renderFrame(frame, interpT, ts) {
 
   // Agents
   frame.agents.forEach(agent => {
-    const pos   = getInterpPos(agent, interpT);
+    if (agent.type === 'balloon') {
+      const st = agent.deployment_status;
+      if (st && st !== 'deployed') return;
+      if (agent.deployed === false) return;
+    }
+    const pos   = constrainAgentPosition(agent, getInterpPos(agent, interpT));
     const px    = pos.x * CELL + CELL / 2;
     const py    = pos.y * CELL + CELL / 2;
     const type  = agent.type;
@@ -527,7 +883,10 @@ function renderFrame(frame, interpT, ts) {
 function updateTrails(frame) {
   frame.agents.forEach(agent => {
     if (!trails[agent.id]) trails[agent.id] = [];
-    trails[agent.id].push({ x: agent.location[0], y: agent.location[1] });
+    trails[agent.id].push(constrainAgentPosition(agent, {
+      x: agent.location[0],
+      y: agent.location[1],
+    }));
     if (trails[agent.id].length > TRAIL_LEN) trails[agent.id].shift();
   });
 }
@@ -549,6 +908,8 @@ class ARCPlayer {
     // Cached stats for pop animation
     this._lastRescued    = 0;
     this._lastSacrificed = 0;
+    this._thinkingSeen = new Set();
+    this._briefingSeen = new Set();
 
     // Bind static scenario data into every frame for renderer access
     const firstFrame = this.frames[0];
@@ -556,33 +917,62 @@ class ARCPlayer {
 
     this._setupCanvases();
     this._bindControls();
+    this._bindResize();
+    document.getElementById('thinking-text').textContent = '';
+    document.getElementById('briefing-text').textContent = '';
     this._onStepChange(false);
     requestAnimationFrame(ts => this._loop(ts));
   }
 
   _injectMapData(firstFrame, timeline) {
+    const map = timeline.map || {};
+    MAP_COLS = map.size?.[0] || 30;
+    MAP_ROWS = map.size?.[1] || 30;
+
     // Extract from raw scenario embedded in timeline (if available)
     // or default to standard scenario_001 values
-    const rz = [
+    const rz = map.risk_zones || [
       { center: [18, 5],  radius: 3, type: 'collapse' },
       { center: [15, 17], radius: 2, type: 'fire'     },
     ];
-    const dz = [
+    const dz = map.communication_dead_zones || [
       { center: [18, 5], radius: 4 },
     ];
+    const base = map.base || [2, 2];
     this.frames.forEach(f => {
       f._risk_zones = rz;
       f._dead_zones = dz;
-      f._base       = [2, 2];
+      f._base       = base;
     });
   }
 
   _setupCanvases() {
     const mapCanvas   = document.getElementById('map-canvas');
     const chartCanvas = document.getElementById('chart-canvas');
-    mapCtx   = setupCanvas(mapCanvas,   MAP_COLS * CELL, MAP_ROWS * CELL);
-    chartCtx = setupCanvas(chartCanvas, 240, 90);
+    const mapContainer = document.getElementById('map-container');
+    const mapW = Math.max(320, mapContainer.clientWidth);
+    const mapH = Math.max(320, mapContainer.clientHeight);
+    CELL = Math.max(8, Math.floor(Math.min(mapW / MAP_COLS, mapH / MAP_ROWS)));
+    mapCtx = setupCanvas(mapCanvas, MAP_COLS * CELL, MAP_ROWS * CELL);
+    resizeBasemap(MAP_COLS * CELL, MAP_ROWS * CELL);
+    initBasemap();
+
+    const chartCell = chartCanvas.closest('.dash-cell');
+    const chartW = Math.max(160, chartCell ? chartCell.clientWidth - 24 : 240);
+    chartCtx = setupCanvas(chartCanvas, chartW, 90);
     document.getElementById('scrubber').max = this.total - 1;
+  }
+
+  _bindResize() {
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        this._setupCanvases();
+        renderFrame(this.frames[this.step], this.interpT, performance.now());
+        renderSurvivalChart(this.frames[this.step]);
+      }, 120);
+    });
   }
 
   _loop(ts) {
@@ -619,19 +1009,16 @@ class ARCPlayer {
     // Step counter
     document.getElementById('step-counter').textContent =
       `Step ${frame.step} / ${this.total}`;
+    const [west, north] = gridToLngLat(0, 0);
+    const [east, south] = gridToLngLat(MAP_COLS, MAP_ROWS);
+    document.getElementById('geo-badge').textContent =
+      `TACTICAL OSM · ${GEO_BOUNDS_300M.label} · ${MAP_COLS}×${MAP_ROWS} · ${west.toFixed(4)},${south.toFixed(4)} ↔ ${east.toFixed(4)},${north.toFixed(4)}`;
 
     // Scrubber
     document.getElementById('scrubber').value = this.step;
 
-    // Thinking log (typewriter if new content)
-    if (frame.thinking_log) {
-      typewriter(document.getElementById('thinking-text'), frame.thinking_log);
-    }
-
-    // Briefing
-    if (frame.briefing) {
-      typewriterBriefing(document.getElementById('briefing-text'), frame.briefing);
-    }
+    this._syncThinkingLog(animate);
+    this._syncBriefingLog(animate);
 
     // Stats
     const stats = frame.stats || {};
@@ -707,14 +1094,77 @@ class ARCPlayer {
     this.step   = s;
     this.elapsed = 0;
     this.interpT = 0;
+    this._rebuildThinkingLog(s);
+    this._rebuildBriefingLog(s);
     this._onStepChange(false);
+  }
+
+  _syncThinkingLog(animate) {
+    const frame = this.frames[this.step];
+    if (!frame.thinking_log) return;
+    const el = document.getElementById('thinking-text');
+    const parts = splitThinkingLog(frame.thinking_log);
+    parts.forEach((line, idx) => {
+      const key = `${frame.step}:${idx}:${line}`;
+      if (this._thinkingSeen.has(key)) return;
+      this._thinkingSeen.add(key);
+      queueThinkingLog(el, frame.step, line, animate);
+    });
+  }
+
+  _rebuildThinkingLog(step) {
+    clearInterval(_thinkingTimer);
+    _thinkingQueue = [];
+    _thinkingTyping = false;
+    this._thinkingSeen.clear();
+    const el = document.getElementById('thinking-text');
+    el.textContent = '';
+    for (let i = 0; i <= step; i++) {
+      const frame = this.frames[i];
+      if (!frame?.thinking_log) continue;
+      splitThinkingLog(frame.thinking_log).forEach((line, idx) => {
+        const key = `${i}:${idx}:${line}`;
+        if (this._thinkingSeen.has(key)) return;
+        this._thinkingSeen.add(key);
+        appendThinkingEntry(el, i, line, false);
+      });
+    }
+  }
+
+  _syncBriefingLog(animate) {
+    const frame = this.frames[this.step];
+    if (!frame.briefing) return;
+    const key = `${frame.step}:${frame.briefing}`;
+    if (this._briefingSeen.has(key)) return;
+    this._briefingSeen.add(key);
+    appendBriefingEntry(
+      document.getElementById('briefing-text'),
+      frame.step,
+      frame.briefing,
+      animate,
+    );
+  }
+
+  _rebuildBriefingLog(step) {
+    clearInterval(_brTimer);
+    this._briefingSeen.clear();
+    const el = document.getElementById('briefing-text');
+    el.textContent = '';
+    for (let i = 0; i <= step; i++) {
+      const frame = this.frames[i];
+      if (!frame?.briefing) continue;
+      const key = `${i}:${frame.briefing}`;
+      if (this._briefingSeen.has(key)) continue;
+      this._briefingSeen.add(key);
+      appendBriefingEntry(el, i, frame.briefing, false);
+    }
   }
 }
 
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
-fetch('timeline.json')
+fetch(`timeline.json?ts=${Date.now()}`, { cache: 'no-store' })
   .then(r => {
     if (!r.ok) throw new Error(`timeline.json not found (${r.status})`);
     return r.json();
@@ -725,7 +1175,7 @@ fetch('timeline.json')
   .catch(err => {
     document.getElementById('thinking-text').textContent =
       '⚠️ 无法加载 timeline.json\n\n' +
-      '请先运行:\n  python -m simulation.timeline_generator\n\n' +
+      '请先运行:\n  python -m arc_core.simulation.timeline_generator \\\n      --steps 200 --output demo_player/timeline.json\n\n' +
       '然后用 HTTP 服务器打开此页面:\n  python -m http.server 8080\n' +
       '访问: http://localhost:8080/demo_player/\n\n' + err.message;
   });
