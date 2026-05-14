@@ -8,6 +8,7 @@ import {
   ASSET_WAYPOINTS,
   applyWaypointLerp,
   getLoopTime,
+  getSearchOffset,
   LOOP_SECONDS,
 } from "./missionTimeline";
 import { ASSET_POSITIONS, ASSET_YAWS, AssetId, usePovTarget } from "./missionStore";
@@ -49,17 +50,25 @@ function updateDog(id: AssetId, g: Group | null, loopT: number, ahead: Vector3) 
   if (!g) return;
   const pos = ASSET_POSITIONS[id];
   applyWaypointLerp(pos, ASSET_WAYPOINTS[id], loopT);
+
+  // Per-phase search wandering — small drift during travel, real probing
+  // around the survivor during RESCUE.
+  const [sx, , sz] = getSearchOffset(id, loopT);
+  pos.x += sx;
+  pos.z += sz;
   g.position.copy(pos);
 
-  // Dogs only yaw — face the way they're walking. Use a slightly longer
-  // look-ahead than drones so the heading changes feel less twitchy. Wrap
-  // by LOOP_SECONDS (not a hardcode) so the look-ahead doesn't slingshot
-  // back to NAVIGATE waypoints near the loop end.
+  // Velocity-aligned yaw with smoothing; snap on big deltas (loop wrap).
   applyWaypointLerp(ahead, ASSET_WAYPOINTS[id], (loopT + 0.6) % LOOP_SECONDS);
   ahead.sub(pos);
-  if (ahead.lengthSq() > 0.0001) {
-    const yaw = Math.atan2(ahead.x, ahead.z);
-    g.rotation.set(0, yaw, 0);
-    ASSET_YAWS[id] = yaw;
+  if (ahead.x * ahead.x + ahead.z * ahead.z > 0.0001) {
+    const targetYaw = Math.atan2(ahead.x, ahead.z);
+    const currentYaw = g.rotation.y;
+    let delta = targetYaw - currentYaw;
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    const newYaw = Math.abs(delta) > 1.0 ? targetYaw : currentYaw + delta * 0.11;
+    g.rotation.set(0, newYaw, 0);
+    ASSET_YAWS[id] = newYaw;
   }
 }

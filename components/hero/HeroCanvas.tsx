@@ -8,6 +8,7 @@ import { DroneSwarm } from "./DroneSwarm";
 import { DogTeam } from "./DogTeam";
 import { ParticleField } from "./ParticleField";
 import { CameraRig } from "./CameraRig";
+import { CameraDebugBridge } from "./CameraDebugOverlay";
 import { DetectionHUD } from "./DetectionHUD";
 import { CommBeams } from "./CommBeams";
 import { ScanBeam } from "./ScanBeam";
@@ -92,6 +93,10 @@ export function HeroCanvas() {
             Previously it was outside Suspense → registered first → one-frame
             stale reads → camera lag in FPV. */}
         <CameraRig />
+        {/* CameraDebugBridge must be mounted AFTER CameraRig so its useFrame
+            runs last and samples the camera transform CameraRig wrote this
+            frame (otherwise the overlay reads one-frame-stale values). */}
+        <CameraDebugBridge />
       </Suspense>
 
       {ENABLE_POSTFX && <PostFX />}

@@ -13,7 +13,19 @@
       "WebFetch(domain:gltf-transform.dev)",
       "WebFetch(domain:www.igloo.inc)",
       "WebFetch(domain:activetheory.net)",
-      "WebFetch(domain:unseen.co)"
+      "WebFetch(domain:unseen.co)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx next *)",
+      "Bash(npx -y tsx -e \"import\\('./components/hero/sceneMap.ts'\\).then\\(m => { console.log\\('issues:', JSON.stringify\\(m.validateSceneMap\\(\\), null, 2\\)\\); }\\).catch\\(e => { console.error\\(e\\); process.exit\\(1\\); }\\)\")",
+      "Bash(npx -y tsx _smoke-validate.mts)",
+      "Bash(sed '1{/^\"use client\";$/d;}' components/hero/sceneMap.ts)",
+      "Bash(cp components/hero/missionTimeline.ts /tmp/missionTimeline.ts)",
+      "Bash(sed -i '1{/^\"use client\";$/d;}' /tmp/missionTimeline.ts)",
+      "Read(//tmp/**)",
+      "Bash(mkdir -p _smoke)",
+      "Bash(sed '1{/^\"use client\";$/d;}' components/hero/missionTimeline.ts)",
+      "Read(//c/c/Users/Timothy Lin/Projects/ARC_2026/_smoke/**)"
     ]
   }
 }

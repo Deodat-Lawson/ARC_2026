@@ -9,165 +9,107 @@ import {
   Mesh,
   MeshStandardMaterial,
   Object3D,
+  Texture,
   Vector3,
 } from "three";
 import { createTriplanarMaterial } from "./triplanarMaterial";
+import {
+  MATERIALS,
+  MaterialId,
+  ResolvedPlacement,
+  getPreloadGlbs,
+  getResolvedPlacements,
+} from "./sceneMap";
 
 /**
  * Hero environment — layered post-disaster cityscape.
  *
- * Geometry comes from converted EAM165 GLBs (the OBJ pipeline lost the source
- * V-Ray texture references). To get production-quality surfaces without doing
- * manual UV work in Blender, we apply a *triplanar-projected* PBR material
- * built from the KBS105 KitBash kit's PBR maps (concrete A, damaged bricks,
- * rusted metal). Triplanar projection samples by world position, not UVs, so
- * the textures tile correctly across any geometry regardless of what the
- * source UVs were.
- *
- * Each building is assigned a material variant for visual heterogeneity.
- *
- * Depth layers (camera path: z=26 → z=-14 → back, ~12s loop):
- *   • Skyline ring   (z ≈ -150)  — dark silhouettes against fog
- *   • Far layer      (z ≈ -60..-80)
- *   • Mid layer      (z ≈ -30..-50)
- *   • Hero layer     (z ≈ -10..-25, camera passes between)
- *   • Clutter        (z ≈ 0..-22) — vehicles, signs, rubble
- *   • Smoke columns + emissive fire glow
+ * What lives here vs. elsewhere:
+ *   • THIS file owns rendering: ground, skyline ring, smoke, fire, debris,
+ *     and the loop that instantiates every placement.
+ *   • [sceneMap.ts](sceneMap.ts) owns the materials registry, asset catalog,
+ *     regions, and placements. Edit there to add / move objects.
+ *   • [SceneMapDebug.tsx](SceneMapDebug.tsx) renders a top-down minimap of
+ *     the same data so you can see the layout while flying around.
  */
-const USE_PRIMITIVES_FALLBACK = false;
 
 export function Scene() {
-  if (USE_PRIMITIVES_FALLBACK) return null;
   return <BakedEnvironment />;
 }
 
-// ---- Preload GLBs ----
-useGLTF.preload("/models/building-apartment.glb");
-useGLTF.preload("/models/building-facade.glb");
-useGLTF.preload("/models/building-multistory.glb");
-useGLTF.preload("/models/building-mansion.glb");
-useGLTF.preload("/models/vehicle-taxi.glb");
-useGLTF.preload("/models/rubble-large.glb");
-useGLTF.preload("/models/street-signs.glb");
-
-type MaterialVariant = "concrete" | "bricks" | "rustMetal";
-
-type Placement = {
-  src: string;
-  position: [number, number, number];
-  rotation?: [number, number, number];
-  /** Desired height of the asset in scene units */
-  targetHeight: number;
-  /** Which triplanar material variant to use */
-  variant: MaterialVariant;
-  /** Subtle tint multiplier (per-instance variation on top of base PBR) */
-  tint?: string;
-};
-
-// ---- Placements ----
-const BUILDINGS: Placement[] = [
-  // HERO LAYER
-  { src: "/models/building-apartment.glb", position: [-12, 0, -16], rotation: [0, 0.2, 0], targetHeight: 14, variant: "bricks", tint: "#a89888" },
-  { src: "/models/building-mansion.glb", position: [13, 0, -20], rotation: [0, -0.55, 0], targetHeight: 13, variant: "concrete", tint: "#9a8e80" },
-
-  // MID LAYER
-  { src: "/models/building-multistory.glb", position: [-22, 0, -36], rotation: [0, 0.3, 0], targetHeight: 17, variant: "concrete", tint: "#8a8278" },
-  { src: "/models/building-mansion.glb", position: [22, 0, -38], rotation: [0, -0.4, 0], targetHeight: 15, variant: "bricks", tint: "#9c8a78" },
-  { src: "/models/building-apartment.glb", position: [4, 0, -42], rotation: [0, 1.5, 0], targetHeight: 13, variant: "concrete", tint: "#8c8478" },
-  // Moved off the central alley axis (was at -4,-32 which blocked the deep
-  // rescue zone). Now at -16,-34 — flanks the alley from the west, leaves
-  // x∈[-2,3] clear all the way back to z=-32.
-  { src: "/models/building-multistory.glb", position: [-16, 0, -34], rotation: [0, -0.8, 0], targetHeight: 12, variant: "bricks", tint: "#a08a78" },
-
-  // FAR LAYER
-  { src: "/models/building-facade.glb", position: [-8, 0, -68], rotation: [0, 0.05, 0], targetHeight: 22, variant: "concrete", tint: "#706a60" },
-  { src: "/models/building-multistory.glb", position: [28, 0, -64], rotation: [0, -0.6, 0], targetHeight: 20, variant: "concrete", tint: "#605a52" },
-  { src: "/models/building-mansion.glb", position: [-32, 0, -72], rotation: [0, 0.6, 0], targetHeight: 19, variant: "bricks", tint: "#766859" },
-  { src: "/models/building-apartment.glb", position: [40, 0, -78], rotation: [0, -1.2, 0], targetHeight: 18, variant: "concrete", tint: "#5a544a" },
-];
-
-const CLUTTER: Placement[] = [
-  // Vehicles — rusted metal
-  { src: "/models/vehicle-taxi.glb", position: [9, 0, 1], rotation: [0, -0.7, 0], targetHeight: 1.6, variant: "rustMetal", tint: "#a08070" },
-  { src: "/models/vehicle-taxi.glb", position: [-6, 0, -8], rotation: [0, 2.2, 0.15], targetHeight: 1.5, variant: "rustMetal", tint: "#8c7060" },
-
-  // Signs — concrete posts + metal plates
-  { src: "/models/street-signs.glb", position: [5, 0, -10], rotation: [0, 0.3, 0], targetHeight: 2.8, variant: "rustMetal", tint: "#9a8478" },
-  { src: "/models/street-signs.glb", position: [-9, 0, 0], rotation: [0, 1.8, 0], targetHeight: 2.4, variant: "rustMetal", tint: "#806c5c" },
-
-  // Rubble — concrete
-  { src: "/models/rubble-large.glb", position: [-2, 0, -4], rotation: [0, 1.2, 0], targetHeight: 1.4, variant: "concrete", tint: "#8c8478" },
-  { src: "/models/rubble-large.glb", position: [3, 0, -16], rotation: [0, -0.4, 0], targetHeight: 1.8, variant: "concrete", tint: "#928678" },
-  { src: "/models/rubble-large.glb", position: [-7, 0, -22], rotation: [0, 2.1, 0], targetHeight: 1.6, variant: "concrete", tint: "#827a6c" },
-  { src: "/models/rubble-large.glb", position: [14, 0, -10], rotation: [0, 0.9, 0], targetHeight: 1.3, variant: "concrete", tint: "#8e8270" },
-];
+// Auto-preload every GLB the catalog references — no duplicate manual list.
+getPreloadGlbs().forEach((src) => useGLTF.preload(src));
 
 function BakedEnvironment() {
-  // Load all PBR texture sets once and build shared materials per variant.
-  const concrete = useTexture({
-    map: "/textures/concrete-a_basecolor.jpg",
-    normalMap: "/textures/concrete-a_normal.jpg",
-    roughnessMap: "/textures/concrete-a_roughness.jpg",
-  });
-  const bricks = useTexture({
-    map: "/textures/bricks-damage_basecolor.jpg",
-    normalMap: "/textures/bricks-damage_normal.jpg",
-    roughnessMap: "/textures/bricks-damage_roughness.jpg",
-  });
-  const rustMetal = useTexture({
-    map: "/textures/metal-rust_basecolor.jpg",
-    normalMap: "/textures/metal-rust_normal.jpg",
-    roughnessMap: "/textures/metal-rust_roughness.jpg",
-  });
-
-  const materials = useMemo(
-    () => ({
-      concrete: createTriplanarMaterial({
-        basecolor: concrete.map,
-        normalMap: concrete.normalMap,
-        roughnessMap: concrete.roughnessMap,
-        scale: 0.16,
-        roughness: 1.0,
-        metalness: 0.0,
-        name: "concrete",
-      }),
-      bricks: createTriplanarMaterial({
-        basecolor: bricks.map,
-        normalMap: bricks.normalMap,
-        roughnessMap: bricks.roughnessMap,
-        scale: 0.22,
-        roughness: 0.95,
-        metalness: 0.0,
-        name: "bricks",
-      }),
-      rustMetal: createTriplanarMaterial({
-        basecolor: rustMetal.map,
-        normalMap: rustMetal.normalMap,
-        roughnessMap: rustMetal.roughnessMap,
-        scale: 0.65,
-        roughness: 0.7,
-        metalness: 0.55,
-        name: "rustMetal",
-      }),
-    }),
-    [concrete, bricks, rustMetal],
-  );
+  const materials = useMaterials();
+  const placements = getResolvedPlacements();
 
   return (
     <group>
       <Ground />
       <SkylineRing />
-      {BUILDINGS.map((p, i) => (
-        <RuinAsset key={`b${i}`} {...p} baseMaterial={materials[p.variant]} />
-      ))}
-      {CLUTTER.map((p, i) => (
-        <RuinAsset key={`c${i}`} {...p} baseMaterial={materials[p.variant]} />
+      {placements.map((p) => (
+        <RuinAsset key={p.id} entry={p} baseMaterial={materials[p.materialId]} />
       ))}
       <ProceduralDebris baseMaterial={materials.concrete} />
       <SmokeColumns />
       <BurningGlow />
     </group>
   );
+}
+
+// ---- KBS105 material palette ----
+// One explicit useTexture call per variant. Previously this was a single
+// useTexture call across a dynamic flat-key object; if drei resolved any one
+// key to undefined the material's `map` would silently become null and the
+// surface rendered as flat tint. Per-variant calls (with statically-known
+// keys) eliminate that failure mode — useTexture suspends until each set is
+// fully loaded.
+function useMaterials(): Record<MaterialId, MeshStandardMaterial> {
+  const concrete = useTexture({
+    map: MATERIALS.concrete.basecolor,
+    normalMap: MATERIALS.concrete.normalMap,
+    roughnessMap: MATERIALS.concrete.roughnessMap,
+  });
+  const bricks = useTexture({
+    map: MATERIALS.bricks.basecolor,
+    normalMap: MATERIALS.bricks.normalMap,
+    roughnessMap: MATERIALS.bricks.roughnessMap,
+  });
+  const plaster = useTexture({
+    map: MATERIALS.plaster.basecolor,
+    normalMap: MATERIALS.plaster.normalMap,
+    roughnessMap: MATERIALS.plaster.roughnessMap,
+  });
+  const metal = useTexture({
+    map: MATERIALS.metal.basecolor,
+    normalMap: MATERIALS.metal.normalMap,
+    roughnessMap: MATERIALS.metal.roughnessMap,
+  });
+
+  return useMemo(() => {
+    const build = (
+      id: MaterialId,
+      t: { map: Texture; normalMap: Texture; roughnessMap: Texture },
+    ) => {
+      const def = MATERIALS[id];
+      return createTriplanarMaterial({
+        basecolor: t.map,
+        normalMap: t.normalMap,
+        roughnessMap: t.roughnessMap,
+        scale: def.triplanarScale,
+        roughness: def.roughness,
+        metalness: def.metalness,
+        name: id,
+      });
+    };
+    return {
+      concrete: build("concrete", concrete),
+      bricks: build("bricks", bricks),
+      plaster: build("plaster", plaster),
+      metal: build("metal", metal),
+    };
+  }, [concrete, bricks, plaster, metal]);
 }
 
 // ---- Ground ----
@@ -205,7 +147,7 @@ function Ground() {
   );
 }
 
-// ---- Skyline silhouettes ----
+// ---- Skyline silhouettes (deep backdrop) ----
 function SkylineRing() {
   const buildings = useMemo(() => {
     const out: {
@@ -340,30 +282,28 @@ function BurningGlow() {
   );
 }
 
-// ---- Loaded asset with auto-sizing + triplanar PBR ----
+// ---- Loaded GLB with auto-sizing + triplanar PBR ----
 function RuinAsset({
-  src,
-  position,
-  rotation = [0, 0, 0],
-  targetHeight,
-  tint = "#ffffff",
+  entry,
   baseMaterial,
-}: Placement & { baseMaterial: MeshStandardMaterial }) {
-  const { scene } = useGLTF(src);
+}: {
+  entry: ResolvedPlacement;
+  baseMaterial: MeshStandardMaterial;
+}) {
+  const { scene } = useGLTF(entry.glb);
   const innerRef = useRef<Group>(null);
   const [computedScale, setComputedScale] = useState(1);
   const [computedOffset, setComputedOffset] = useState<[number, number, number]>([
     0, 0, 0,
   ]);
 
-  // Per-instance material: clone the variant + apply the tint multiplier.
-  // Cloning a material preserves the onBeforeCompile patch (shaders are
-  // shared by program cache key).
+  // Per-instance material so the per-entry tint doesn't bleed across siblings.
+  // Cloning preserves the onBeforeCompile patch (programs share via cache key).
   const instanceMaterial = useMemo(() => {
     const m = baseMaterial.clone();
-    m.color.set(tint);
+    if (entry.tint) m.color.set(entry.tint);
     return m;
-  }, [baseMaterial, tint]);
+  }, [baseMaterial, entry.tint]);
 
   const cloned = useMemo(() => {
     const c = scene.clone(true);
@@ -386,15 +326,15 @@ function RuinAsset({
     bbox.getSize(size);
     if (size.y <= 0) return;
 
-    const s = targetHeight / size.y;
+    const s = entry.height / size.y;
     const center = new Vector3();
     bbox.getCenter(center);
     setComputedScale(s);
     setComputedOffset([-center.x * s, -bbox.min.y * s, -center.z * s]);
-  }, [cloned, targetHeight]);
+  }, [cloned, entry.height]);
 
   return (
-    <group position={position} rotation={rotation}>
+    <group position={entry.position} rotation={entry.rotation} name={entry.id}>
       <group ref={innerRef} scale={computedScale} position={computedOffset}>
         <primitive object={cloned} />
       </group>

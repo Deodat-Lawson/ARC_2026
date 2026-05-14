@@ -107,10 +107,18 @@ export function createTriplanarMaterial({
       varying vec3 vTriWorldPos;
       varying vec3 vTriWorldNormal;
 
+      // Blend weights derived from |worldNormal|^bias, with a floor that
+      // guarantees we never sample with all-zero weights. If a mesh has a
+      // degenerate normal (zero-length, NaN), we fall back to the Z-plane —
+      // every surface still gets textured rather than rendering black.
       vec3 triBlendWeights() {
         vec3 n = abs( vTriWorldNormal );
+        // Floor so a near-zero component still contributes something.
+        n = max( n, vec3( 0.05 ) );
         n = pow( n, vec3( uBlendBias ) );
-        return n / max( ( n.x + n.y + n.z ), 0.0001 );
+        float sum = n.x + n.y + n.z;
+        if ( sum < 0.0001 ) return vec3( 0.0, 0.0, 1.0 );  // fallback: Z-plane
+        return n / sum;
       }
 
       vec4 triSample( sampler2D tex ) {

@@ -3,8 +3,8 @@
 /**
  * Single source of truth for the rescue-mission timeline.
  *
- * The mission is a seamless 15-second loop with 6 named phases that tell a
- * real rescue arc:
+ * The mission is a seamless 42-second loop with 6 phases (7s each) that
+ * tell a real rescue arc:
  *
  *   NAVIGATE  — flythrough into the disaster zone, dogs deploy
  *   IDENTIFY  — drones sweep, find T-01 (rubble) then T-02 (building)
@@ -19,23 +19,24 @@
 
 import { Vector3 } from "three";
 
-export const LOOP_SECONDS = 22;
+export const LOOP_SECONDS = 42;
 
-// Longer phase durations so motion feels less rushed and each beat has
-// breathing room. Total 22s, distributed:
-//   NAVIGATE  3s  — drones arrive, dogs deploy
-//   IDENTIFY  4s  — sweep + sequential detection (T-01 then T-02)
-//   DETERMINE 3s  — priority calc + dispatch plan
-//   DISPATCH  3s  — dogs vector out to their assignments
-//   RESCUE    5s  — dogs travel + ground-confirm vital signs
-//   REPORT    4s  — overseer uplinks SitRep, mission state held
+// Each phase is 7s — long enough for the dogs/drones to actually wander
+// within the phase (search sweeps, hover scans, ground probes) rather than
+// rocketing in a straight line from one waypoint to the next. Total 42s:
+//   NAVIGATE  7s  (0 – 7)   ingress + cluster forms up
+//   IDENTIFY  7s  (7 – 14)  drones sweep, T-01 then T-02 detected
+//   DETERMINE 7s  (14 – 21) priority calc + dispatch plan broadcast
+//   DISPATCH  7s  (21 – 28) dogs vector toward their targets
+//   RESCUE    7s  (28 – 35) dogs converge + ground-confirm vitals
+//   REPORT    7s  (35 – 42) overseer uplinks SitRep, mission state held
 export const PHASES = [
   { name: "NAVIGATE", t: 0 },
-  { name: "IDENTIFY", t: 3 },
-  { name: "DETERMINE", t: 7 },
-  { name: "DISPATCH", t: 10 },
-  { name: "RESCUE", t: 13 },
-  { name: "REPORT", t: 18 },
+  { name: "IDENTIFY", t: 7 },
+  { name: "DETERMINE", t: 14 },
+  { name: "DISPATCH", t: 21 },
+  { name: "RESCUE", t: 28 },
+  { name: "REPORT", t: 35 },
 ] as const;
 
 export type PhaseName = (typeof PHASES)[number]["name"];
@@ -105,6 +106,135 @@ export function applyWaypointLerp(
 }
 
 // ============================================================================
+// Per-phase search wandering
+// ============================================================================
+//
+// Returns an XYZ offset added on top of `applyWaypointLerp`. Each phase has
+// its own motion character so the assets actually feel like they're doing the
+// thing the narration says — sweeping, calculating, dispatching, probing —
+// instead of rocketing along a straight line.
+//
+//   NAVIGATE   gentle travel drift              (low amp)
+//   IDENTIFY   figure-8 sweep across rubble     (high amp, fast)
+//   DETERMINE  slow circular hover              (medium amp, slow)
+//   DISPATCH   small purposeful zigzag          (low-med amp)
+//   RESCUE     orbit (drones) / probe (dogs)    (high amp, slow)
+//   REPORT     settle, gentle drift             (low amp)
+//
+// Amplitudes for low-altitude drones (lead, perception) and dogs are capped
+// so the assets stay inside the alley column x∈[-2, 3]; the high-altitude
+// relay drone is allowed wider amplitude since it's above all building tops.
+
+export type SearchableAssetId = "lead" | "perception" | "relay" | "dog1" | "dog2";
+
+const ASSET_SEEDS: Record<SearchableAssetId, number> = {
+  lead: 0.0,
+  perception: 1.7,
+  relay: 3.1,
+  dog1: 4.5,
+  dog2: 6.2,
+};
+
+type SearchOffset = [number, number, number];
+
+function rawSearchOffset(
+  assetId: SearchableAssetId,
+  phaseIndex: number,
+  loopT: number,
+): SearchOffset {
+  const seed = ASSET_SEEDS[assetId];
+  const isDrone = assetId === "lead" || assetId === "perception" || assetId === "relay";
+  const isHigh = assetId === "relay";
+  // Lateral cap for alley-column assets; relay flies high so it's unconstrained.
+  const latCap = isHigh ? 2.5 : 0.9;
+  // Only drones get vertical drift.
+  const yScale = isDrone ? 1 : 0;
+
+  switch (phaseIndex) {
+    case 0: // NAVIGATE — gentle travel jitter
+      return [
+        Math.sin(loopT * 0.55 + seed) * Math.min(0.30, latCap),
+        Math.sin(loopT * 0.90 + seed) * 0.12 * yScale,
+        Math.cos(loopT * 0.45 + seed) * 0.35,
+      ];
+
+    case 1: // IDENTIFY — figure-8 sweep (Lissajous 1:2)
+      return [
+        Math.sin(loopT * 0.9 + seed) * Math.min(0.85, latCap),
+        Math.sin(loopT * 1.2 + seed) * 0.25 * yScale,
+        Math.sin(loopT * 1.8 + seed) * (isHigh ? 1.8 : 1.0),
+      ];
+
+    case 2: // DETERMINE — slow circular hover
+      return [
+        Math.cos(loopT * 0.50 + seed) * Math.min(0.7, latCap),
+        Math.sin(loopT * 0.70 + seed) * 0.18 * yScale,
+        Math.sin(loopT * 0.50 + seed) * (isHigh ? 1.2 : 0.7),
+      ];
+
+    case 3: // DISPATCH — small purposeful zigzag
+      return [
+        Math.sin(loopT * 1.1 + seed) * Math.min(0.4, latCap),
+        Math.sin(loopT * 0.8 + seed) * 0.10 * yScale,
+        Math.cos(loopT * 0.9 + seed) * 0.35,
+      ];
+
+    case 4: // RESCUE — overhead orbit (drones), forward/sideways probe (dogs)
+      if (isDrone) {
+        return [
+          Math.cos(loopT * 0.8 + seed) * Math.min(0.9, latCap),
+          Math.sin(loopT * 1.0 + seed) * 0.20 * yScale,
+          Math.sin(loopT * 0.8 + seed) * (isHigh ? 1.5 : 0.9),
+        ];
+      }
+      return [
+        Math.sin(loopT * 1.3 + seed) * 0.5,
+        0,
+        Math.cos(loopT * 1.1 + seed) * 0.4,
+      ];
+
+    case 5: // REPORT — settle, gentle drift
+      return [
+        Math.sin(loopT * 0.35 + seed) * Math.min(0.30, latCap),
+        Math.sin(loopT * 0.50 + seed) * 0.10 * yScale,
+        Math.cos(loopT * 0.40 + seed) * 0.30,
+      ];
+
+    default:
+      return [0, 0, 0];
+  }
+}
+
+/**
+ * Phase-aware search offset with cross-fade near phase boundaries (top 10%
+ * of each phase blends into the next). Prevents the wandering pattern from
+ * snapping discontinuously when the mission steps phase.
+ */
+export function getSearchOffset(
+  assetId: SearchableAssetId,
+  loopT: number,
+): SearchOffset {
+  const idx = currentPhaseIndex(loopT);
+  const start = PHASES[idx].t;
+  const end = idx === PHASES.length - 1 ? LOOP_SECONDS : PHASES[idx + 1].t;
+  const localT = (loopT - start) / (end - start);
+
+  const curr = rawSearchOffset(assetId, idx, loopT);
+
+  // Blend into next phase over the last 12% of the current phase.
+  if (localT > 0.88 && idx < PHASES.length - 1) {
+    const next = rawSearchOffset(assetId, idx + 1, loopT);
+    const blend = (localT - 0.88) / 0.12;
+    return [
+      curr[0] * (1 - blend) + next[0] * blend,
+      curr[1] * (1 - blend) + next[1] * blend,
+      curr[2] * (1 - blend) + next[2] * blend,
+    ];
+  }
+  return curr;
+}
+
+// ============================================================================
 // Survivors — two trapped people the cluster is rescuing
 // ============================================================================
 
@@ -141,16 +271,16 @@ export const SURVIVORS: Survivor[] = [
     id: "T-01",
     position: [-1, 0.5, -24],
     probability: 87,
-    identifyAtT: 4.5, // mid-IDENTIFY phase
-    rescuedAtT: 15, // mid-RESCUE phase
+    identifyAtT: 9.6, // mid-IDENTIFY (phase 7–14, ~37% in)
+    rescuedAtT: 30.1, // mid-RESCUE (phase 28–35, ~30% in)
     assignedDog: "dog1",
   },
   {
     id: "T-02",
     position: [2, 0.5, -28],
     probability: 71,
-    identifyAtT: 6.4, // late IDENTIFY phase
-    rescuedAtT: 16.8, // later in RESCUE
+    identifyAtT: 13.0, // late IDENTIFY (~86% in)
+    rescuedAtT: 32.8, // later in RESCUE (~69% in)
     assignedDog: "dog2",
   },
 ];
@@ -296,34 +426,34 @@ export type CommEvent = {
 };
 
 export const COMM_EVENTS: CommEvent[] = [
-  // NAVIGATE (0-3) — ingress chatter
-  { t: 0.5, duration: 1.0, link: "lead-perception", kind: "telemetry", log: "A-01 → A-02   formation lock · sector 14" },
-  { t: 1.3, duration: 1.0, link: "lead-relay", kind: "telemetry", log: "A-01 → A-03   uplink to CMD ready" },
-  { t: 2.0, duration: 1.0, link: "dog1-dog2", kind: "telemetry", log: "D-01 ↔ D-02   ground mesh online" },
-  { t: 2.6, duration: 0.9, link: "perception-relay", kind: "telemetry", log: "A-02 → A-03   telemetry · MESH 5/5" },
+  // NAVIGATE (0-7) — ingress chatter
+  { t: 1.2,  duration: 1.0, link: "lead-perception",  kind: "telemetry", log: "A-01 → A-02   formation lock · sector 14" },
+  { t: 3.0,  duration: 1.0, link: "lead-relay",       kind: "telemetry", log: "A-01 → A-03   uplink to CMD ready" },
+  { t: 4.7,  duration: 1.0, link: "dog1-dog2",        kind: "telemetry", log: "D-01 ↔ D-02   ground mesh online" },
+  { t: 6.1,  duration: 0.9, link: "perception-relay", kind: "telemetry", log: "A-02 → A-03   telemetry · MESH 5/5" },
 
-  // IDENTIFY (3-7) — both targets detected
-  { t: 3.5, duration: 1.0, link: "lead-perception", kind: "telemetry", log: "A-01 → A-02   sweep · sector 14-D" },
-  { t: 4.5, duration: 1.2, link: "lead-relay", kind: "alert", log: "A-01 → A-03   ALERT · T-01 detected · 4.2σ" },
-  { t: 6.4, duration: 1.2, link: "perception-relay", kind: "alert", log: "A-02 → A-03   ALERT · T-02 detected · 3.1σ" },
+  // IDENTIFY (7-14) — both targets detected
+  { t: 7.9,  duration: 1.0, link: "lead-perception",  kind: "telemetry", log: "A-01 → A-02   sweep · sector 14-D" },
+  { t: 9.6,  duration: 1.2, link: "lead-relay",       kind: "alert",     log: "A-01 → A-03   ALERT · T-01 detected · 4.2σ" },
+  { t: 13.0, duration: 1.2, link: "perception-relay", kind: "alert",     log: "A-02 → A-03   ALERT · T-02 detected · 3.1σ" },
 
-  // DETERMINE (7-10) — priority calculation + dispatch plan
-  { t: 7.6, duration: 1.2, link: "lead-relay", kind: "telemetry", log: "A-01 → A-03   priority calc · T-01 > T-02" },
-  { t: 8.8, duration: 1.2, link: "relay-command", kind: "command", log: "A-03 → ALL    dispatch plan · D-01→T-01 · D-02→T-02" },
+  // DETERMINE (14-21) — priority calculation + dispatch plan
+  { t: 15.4, duration: 1.2, link: "lead-relay",       kind: "telemetry", log: "A-01 → A-03   priority calc · T-01 > T-02" },
+  { t: 18.2, duration: 1.2, link: "relay-command",    kind: "command",   log: "A-03 → ALL    dispatch plan · D-01→T-01 · D-02→T-02" },
 
-  // DISPATCH (10-13) — dogs vectored
-  { t: 10.4, duration: 1.2, link: "lead-dog1", kind: "dispatch", log: "A-01 → D-01   DISPATCH · vector to T-01" },
-  { t: 11.0, duration: 1.2, link: "perception-dog2", kind: "dispatch", log: "A-02 → D-02   DISPATCH · vector to T-02" },
+  // DISPATCH (21-28) — dogs vectored
+  { t: 21.9, duration: 1.2, link: "lead-dog1",        kind: "dispatch",  log: "A-01 → D-01   DISPATCH · vector to T-01" },
+  { t: 23.3, duration: 1.2, link: "perception-dog2",  kind: "dispatch",  log: "A-02 → D-02   DISPATCH · vector to T-02" },
 
-  // RESCUE (13-18) — ground confirmations
-  { t: 14.5, duration: 1.0, link: "dog1-relay", kind: "telemetry", log: "D-01 → A-03   ground +  · T-01 vital sign +" },
-  { t: 15.4, duration: 1.0, link: "lead-perception", kind: "telemetry", log: "A-01 → A-02   T-01 ground lock · 87%" },
-  { t: 16.3, duration: 1.0, link: "dog2-relay", kind: "telemetry", log: "D-02 → A-03   ground +  · T-02 vital sign +" },
-  { t: 17.2, duration: 1.0, link: "perception-relay", kind: "telemetry", log: "A-02 → A-03   T-02 ground lock · 71%" },
+  // RESCUE (28-35) — ground confirmations
+  { t: 30.1, duration: 1.0, link: "dog1-relay",       kind: "telemetry", log: "D-01 → A-03   ground +  · T-01 vital sign +" },
+  { t: 31.4, duration: 1.0, link: "lead-perception",  kind: "telemetry", log: "A-01 → A-02   T-01 ground lock · 87%" },
+  { t: 32.6, duration: 1.0, link: "dog2-relay",       kind: "telemetry", log: "D-02 → A-03   ground +  · T-02 vital sign +" },
+  { t: 33.9, duration: 1.0, link: "perception-relay", kind: "telemetry", log: "A-02 → A-03   T-02 ground lock · 71%" },
 
-  // REPORT (18-22) — final uplink
-  { t: 18.6, duration: 1.6, link: "relay-command", kind: "command", log: "A-03 → CMD    SitRep · 2 lock · D-01 D-02 in attendance" },
-  { t: 20.4, duration: 1.0, link: "lead-relay", kind: "telemetry", log: "A-01 → A-03   mission state · RESCUE-IN-PROGRESS" },
+  // REPORT (35-42) — final uplink
+  { t: 36.1, duration: 1.6, link: "relay-command",    kind: "command",   log: "A-03 → CMD    SitRep · 2 lock · D-01 D-02 in attendance" },
+  { t: 39.2, duration: 1.0, link: "lead-relay",       kind: "telemetry", log: "A-01 → A-03   mission state · RESCUE-IN-PROGRESS" },
 ];
 
 export function commLinkEndpoints(
@@ -397,70 +527,70 @@ export const NARRATION_BEATS: NarrationBeat[] = [
     tone: "neutral",
   },
   {
-    fromT: 3,
+    fromT: 7,
     text: "Sweeping the rubble for life signs",
     sub: "A-01 acoustic · A-02 thermal · ground mesh online",
     tone: "neutral",
     focus: ["lead", "perception"],
   },
   {
-    fromT: 4.5,
+    fromT: 9.6,
     text: "T-01 detected · sub-acoustic signature",
     sub: "Under foreground rubble · 4.2σ above baseline",
     tone: "alert",
     focus: ["lead", "T-01"],
   },
   {
-    fromT: 6.4,
+    fromT: 13.0,
     text: "T-02 detected · thermal signature",
     sub: "Further inside the rubble · 3.1σ",
     tone: "alert",
     focus: ["perception", "T-02"],
   },
   {
-    fromT: 7.5,
+    fromT: 15.2,
     text: "Priority calculation · T-01 first",
     sub: "Survival window · T-01 lower than T-02 · dispatch plan locked",
     tone: "command",
     focus: ["relay", "T-01", "T-02"],
   },
   {
-    fromT: 10,
+    fromT: 21,
     text: "Dispatching ground units",
     sub: "D-01 → T-01 · D-02 → T-02",
     tone: "command",
     focus: ["dog1", "dog2"],
   },
   {
-    fromT: 13,
+    fromT: 28,
     text: "Ground units approaching targets",
     sub: "D-01 closing on T-01 · D-02 closing on T-02",
     tone: "neutral",
     focus: ["dog1", "dog2"],
   },
   {
-    fromT: 15,
+    fromT: 30.1,
     text: "T-01 vital sign confirmed · 87%",
     sub: "D-01 ground sensor positive · LOCK established",
     tone: "success",
     focus: ["dog1", "T-01"],
   },
   {
-    fromT: 16.8,
+    fromT: 32.8,
     text: "T-02 vital sign confirmed · 71%",
     sub: "D-02 ground sensor positive · LOCK established",
     tone: "success",
     focus: ["dog2", "T-02"],
   },
   {
-    fromT: 18,
+    fromT: 35,
     text: "Uplinking dual SitRep to command",
     sub: "A-03 high-bandwidth relay · 2 targets in attendance",
     tone: "command",
     focus: ["relay"],
   },
   {
-    fromT: 20,
+    fromT: 38.5,
     text: "Mission state · RESCUE IN PROGRESS",
     sub: "Cluster holding position · awaiting human team",
     tone: "success",
