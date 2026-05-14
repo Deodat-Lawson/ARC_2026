@@ -19,6 +19,9 @@ venv/
 env/
 .env/
 
+# LiteRT checkpoints (~GB); optional default path repo/models/ (see LITERT_MODEL_PATH)
+models/*.litertlm
+
 # Python cache and build output
 __pycache__/
 *.py[cod]

@@ -30,14 +30,18 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Default model path — set via env var or pass to constructor
+# Default: repo_root/models/gemma-4-E4B-it.litertlm (override with LITERT_MODEL_PATH)
+_DEFAULT_LITERT_UNDER_REPO = (
+    Path(__file__).resolve().parent.parent.parent / "models" / "gemma-4-E4B-it.litertlm"
+)
 DEFAULT_LITERT_MODEL_PATH = os.environ.get(
     "LITERT_MODEL_PATH",
-    "D:/3rd_semester/models/gemma4-litert/gemma-4-E4B-it.litertlm",
+    str(_DEFAULT_LITERT_UNDER_REPO),
 )
 
 ARC_SYSTEM_PROMPT = (

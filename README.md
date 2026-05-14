@@ -28,7 +28,7 @@ Runnable Python code lives under **`arc_core`**. Scenario and timeline defaults 
 
 - Install `litert-lm` (see `requirements.txt`).
 - Download **`gemma-4-E4B-it.litertlm`** from Hugging Face: [`litert-community/gemma-4-E4B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm)
-- Set environment variable `LITERT_MODEL_PATH` to the `.litertlm` file path, or place it at the default path used in `arc_core/perception/gemma_perceiver.py`.
+- Set environment variable `LITERT_MODEL_PATH` to the `.litertlm` file path, or place it at **`models/gemma-4-E4B-it.litertlm`** under the repository root (default if the env var is unset).
 
 ### Optional: faster cloud inference
 
