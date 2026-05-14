@@ -8,10 +8,18 @@
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const CELL     = 20;          // pixels per grid cell
-const MAP_COLS = 30;
-const MAP_ROWS = 30;
+let CELL     = 20;          // pixels per grid cell, recalculated from viewport
+let MAP_COLS = 30;
+let MAP_ROWS = 30;
 const MS_PER_STEP_BASE = 800; // at 1× speed
+const PMTILES_URL = 'https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles';
+const GEO_BOUNDS_1KM = {
+  label: 'Firenze Centro 1km x 1km',
+  // [south, west], [north, east]. Center: 43.7696, 11.2558.
+  // Approx 1km square at this latitude: 0.00898 deg lat x 0.01244 deg lon.
+  southWest: [43.76511, 11.24958],
+  northEast: [43.77409, 11.26202],
+};
 
 const COLORS = {
   uav:     '#00bfff',
@@ -32,12 +40,30 @@ const TOAST_CFG = {
   sacrifice:        { icon: '💀', color: '#ff8c00', bg: 'rgba(80,30,0,0.9)' },
   energy_transfer:  { icon: '⚡', color: '#ffe44d', bg: 'rgba(60,55,0,0.9)' },
   blockade_cleared: { icon: '🚧', color: '#ffe44d', bg: 'rgba(60,50,0,0.9)' },
+  dynamic_obstacle: { icon: '⚠️', color: '#ff8c00', bg: 'rgba(85,35,0,0.92)' },
   balloon_deployed: { icon: '🎈', color: '#c8b4ff', bg: 'rgba(40,20,80,0.9)' },
   comm_restored:    { icon: '📡', color: '#c8b4ff', bg: 'rgba(20,10,60,0.9)' },
   alert:            { icon: '🚨', color: '#ff4444', bg: 'rgba(80,0,0,0.9)' },
   victim_dead:      { icon: '💔', color: '#ff4444', bg: 'rgba(60,0,0,0.9)' },
   default:          { icon: 'ℹ️',  color: '#c0d8f0', bg: 'rgba(10,20,40,0.9)' },
 };
+
+let baseMap = null;
+let baseMapReady = false;
+let pmtilesProtocolInstalled = false;
+
+function gridToLngLat(col, row) {
+  const west = GEO_BOUNDS_1KM.southWest[1];
+  const south = GEO_BOUNDS_1KM.southWest[0];
+  const east = GEO_BOUNDS_1KM.northEast[1];
+  const north = GEO_BOUNDS_1KM.northEast[0];
+  const x = Math.min(1, Math.max(0, col / Math.max(1, MAP_COLS)));
+  const y = Math.min(1, Math.max(0, row / Math.max(1, MAP_ROWS)));
+  return [
+    west + x * (east - west),
+    north - y * (north - south),
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,13 +75,162 @@ function cy(row) { return row * CELL + CELL / 2; }   // center y of grid row
 // Canvas retina fix
 function setupCanvas(canvas, w, h) {
   const dpr = window.devicePixelRatio || 1;
-  canvas.width  = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width  = w + 'px';
-  canvas.style.height = h + 'px';
+  const safeW = Math.max(1, Math.floor(w));
+  const safeH = Math.max(1, Math.floor(h));
+  canvas.width  = safeW * dpr;
+  canvas.height = safeH * dpr;
+  canvas.style.width  = safeW + 'px';
+  canvas.style.height = safeH + 'px';
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
   return ctx;
+}
+
+function cssCanvasWidth(canvas) {
+  return canvas.width / (window.devicePixelRatio || 1);
+}
+
+function resizeBasemap(w, h) {
+  const el = document.getElementById('basemap');
+  if (!el) return;
+  el.style.width = `${Math.max(1, Math.floor(w))}px`;
+  el.style.height = `${Math.max(1, Math.floor(h))}px`;
+  if (baseMap) {
+    baseMap.resize();
+    baseMap.fitBounds(
+      [
+        [GEO_BOUNDS_1KM.southWest[1], GEO_BOUNDS_1KM.southWest[0]],
+        [GEO_BOUNDS_1KM.northEast[1], GEO_BOUNDS_1KM.northEast[0]],
+      ],
+      { padding: 0, duration: 0 },
+    );
+  }
+}
+
+function makeFallbackBasemapStyle() {
+  return {
+    version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources: {
+      protomaps: {
+        type: 'vector',
+        url: `pmtiles://${PMTILES_URL}`,
+        attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+      },
+    },
+    layers: [
+      {
+        id: 'pm-mask',
+        source: 'protomaps',
+        'source-layer': 'mask',
+        type: 'fill',
+        paint: { 'fill-color': '#0f1726' },
+      },
+      {
+        id: 'pm-earth',
+        source: 'protomaps',
+        'source-layer': 'earth',
+        type: 'fill',
+        paint: { 'fill-color': '#121d2e' },
+      },
+      {
+        id: 'pm-water',
+        source: 'protomaps',
+        'source-layer': 'water',
+        type: 'fill',
+        paint: { 'fill-color': '#164969', 'fill-opacity': 0.85 },
+      },
+      {
+        id: 'pm-landuse',
+        source: 'protomaps',
+        'source-layer': 'landuse',
+        type: 'fill',
+        paint: { 'fill-color': '#1b2940', 'fill-opacity': 0.72 },
+      },
+      {
+        id: 'pm-buildings',
+        source: 'protomaps',
+        'source-layer': 'buildings',
+        type: 'fill',
+        paint: {
+          'fill-color': '#445873',
+          'fill-opacity': 0.68,
+          'fill-outline-color': '#6d86a8',
+        },
+      },
+      {
+        id: 'pm-roads',
+        source: 'protomaps',
+        'source-layer': 'roads',
+        type: 'line',
+        paint: {
+          'line-color': '#a9bdd5',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.8, 16, 3.2, 18, 5.6],
+          'line-opacity': 0.82,
+        },
+      },
+      {
+        id: 'pm-road-labels',
+        source: 'protomaps',
+        'source-layer': 'roads',
+        type: 'symbol',
+        filter: ['has', 'name'],
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 13, 9, 16, 11, 18, 13],
+          'text-padding': 2,
+        },
+        paint: {
+          'text-color': '#c9d6e7',
+          'text-halo-color': '#07101d',
+          'text-halo-width': 1.2,
+          'text-opacity': 0.76,
+        },
+      },
+    ],
+  };
+}
+
+function initBasemap() {
+  if (baseMap || !window.maplibregl || !window.pmtiles) return;
+
+  try {
+    if (!pmtilesProtocolInstalled) {
+      const protocol = new pmtiles.Protocol();
+      maplibregl.addProtocol('pmtiles', protocol.tile);
+      const archive = new pmtiles.PMTiles(PMTILES_URL);
+      protocol.add(archive);
+      pmtilesProtocolInstalled = true;
+    }
+
+    const style = makeFallbackBasemapStyle();
+
+    baseMap = new maplibregl.Map({
+      container: 'basemap',
+      style,
+      bounds: [
+        [GEO_BOUNDS_1KM.southWest[1], GEO_BOUNDS_1KM.southWest[0]],
+        [GEO_BOUNDS_1KM.northEast[1], GEO_BOUNDS_1KM.northEast[0]],
+      ],
+      fitBoundsOptions: { padding: 0, duration: 0 },
+      interactive: false,
+      attributionControl: false,
+    });
+    baseMap.on('load', () => {
+      baseMapReady = true;
+      baseMap.fitBounds(
+        [
+          [GEO_BOUNDS_1KM.southWest[1], GEO_BOUNDS_1KM.southWest[0]],
+          [GEO_BOUNDS_1KM.northEast[1], GEO_BOUNDS_1KM.northEast[0]],
+        ],
+        { padding: 0, duration: 0 },
+      );
+    });
+  } catch (err) {
+    console.warn('[basemap] PMTiles initialization failed:', err);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -127,11 +302,11 @@ let chartCtx = null;
 function renderSurvivalChart(frame) {
   if (!chartCtx) return;
   const victims = frame.victims;
-  const W = MAP_COLS * CELL; // same width as map (css handles it)
+  const W = cssCanvasWidth(chartCtx.canvas);
   const H = 90;
-  chartCtx.clearRect(0, 0, chartCtx.canvas.width / (window.devicePixelRatio||1), H);
+  chartCtx.clearRect(0, 0, W, H);
 
-  const barW = Math.min(40, (chartCtx.canvas.width / (window.devicePixelRatio||1)) / (victims.length + 1));
+  const barW = Math.max(2, Math.min(40, W / (victims.length + 1)));
   const gap  = barW * 0.2;
 
   victims.forEach((v, i) => {
@@ -233,14 +408,14 @@ function drawBlockedCells(ctx, cells) {
   cells.forEach(b => {
     const [col, row] = b.location;
     if (b.status === 'blocked') {
-      ctx.fillStyle = 'rgba(139,69,19,0.5)';
+      ctx.fillStyle = b.dynamic ? 'rgba(255,140,0,0.58)' : 'rgba(139,69,19,0.5)';
       ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
-      ctx.strokeStyle = '#8b4513';
+      ctx.strokeStyle = b.dynamic ? '#ff8c00' : '#8b4513';
       ctx.lineWidth = 1;
       ctx.strokeRect(col * CELL + 0.5, row * CELL + 0.5, CELL - 1, CELL - 1);
-      ctx.fillStyle = '#a0522d';
+      ctx.fillStyle = b.dynamic ? '#ffd27a' : '#a0522d';
       ctx.font = '9px Courier New';
-      ctx.fillText('BLK', col * CELL + 2, row * CELL + CELL / 2 + 3);
+      ctx.fillText(b.dynamic ? 'NEW' : 'BLK', col * CELL + 2, row * CELL + CELL / 2 + 3);
     } else {
       ctx.fillStyle = 'rgba(57,255,20,0.07)';
       ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
@@ -470,7 +645,7 @@ function renderFrame(frame, interpT, ts) {
   mapCtx.clearRect(0, 0, W, H);
 
   // Background
-  mapCtx.fillStyle = '#050d1a';
+  mapCtx.fillStyle = baseMapReady ? 'rgba(5,13,26,0.16)' : '#050d1a';
   mapCtx.fillRect(0, 0, W, H);
 
   drawGrid(mapCtx);
@@ -556,11 +731,24 @@ class ARCPlayer {
 
     this._setupCanvases();
     this._bindControls();
+    this._bindResize();
     this._onStepChange(false);
     requestAnimationFrame(ts => this._loop(ts));
   }
 
   _injectMapData(firstFrame, timeline) {
+    const allLocations = [];
+    this.frames.forEach(f => {
+      (f.agents || []).forEach(a => allLocations.push(a.location));
+      (f.victims || []).forEach(v => allLocations.push(v.location));
+      (f.blocked_cells || []).forEach(c => allLocations.push(c));
+    });
+    const maxX = Math.max(29, ...allLocations.map(p => Number(p?.[0]) || 0));
+    const maxY = Math.max(29, ...allLocations.map(p => Number(p?.[1]) || 0));
+    const isLargeScenario = timeline.scenario_id === 'mega_disaster_001' || maxX > 30 || maxY > 30;
+    MAP_COLS = isLargeScenario ? 100 : Math.ceil(maxX) + 1;
+    MAP_ROWS = isLargeScenario ? 100 : Math.ceil(maxY) + 1;
+
     // Extract from raw scenario embedded in timeline (if available)
     // or default to standard scenario_001 values
     const rz = [
@@ -580,9 +768,30 @@ class ARCPlayer {
   _setupCanvases() {
     const mapCanvas   = document.getElementById('map-canvas');
     const chartCanvas = document.getElementById('chart-canvas');
-    mapCtx   = setupCanvas(mapCanvas,   MAP_COLS * CELL, MAP_ROWS * CELL);
-    chartCtx = setupCanvas(chartCanvas, 240, 90);
+    const mapContainer = document.getElementById('map-container');
+    const mapW = Math.max(320, mapContainer.clientWidth);
+    const mapH = Math.max(320, mapContainer.clientHeight);
+    CELL = Math.max(8, Math.floor(Math.min(mapW / MAP_COLS, mapH / MAP_ROWS)));
+    mapCtx = setupCanvas(mapCanvas, MAP_COLS * CELL, MAP_ROWS * CELL);
+    resizeBasemap(MAP_COLS * CELL, MAP_ROWS * CELL);
+    initBasemap();
+
+    const chartCell = chartCanvas.closest('.dash-cell');
+    const chartW = Math.max(160, chartCell ? chartCell.clientWidth - 24 : 240);
+    chartCtx = setupCanvas(chartCanvas, chartW, 90);
     document.getElementById('scrubber').max = this.total - 1;
+  }
+
+  _bindResize() {
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        this._setupCanvases();
+        renderFrame(this.frames[this.step], this.interpT, performance.now());
+        renderSurvivalChart(this.frames[this.step]);
+      }, 120);
+    });
   }
 
   _loop(ts) {
@@ -619,6 +828,10 @@ class ARCPlayer {
     // Step counter
     document.getElementById('step-counter').textContent =
       `Step ${frame.step} / ${this.total}`;
+    const [west, north] = gridToLngLat(0, 0);
+    const [east, south] = gridToLngLat(MAP_COLS, MAP_ROWS);
+    document.getElementById('geo-badge').textContent =
+      `TACTICAL OSM · ${GEO_BOUNDS_1KM.label} · ${MAP_COLS}×${MAP_ROWS} · ${west.toFixed(4)},${south.toFixed(4)} ↔ ${east.toFixed(4)},${north.toFixed(4)}`;
 
     // Scrubber
     document.getElementById('scrubber').value = this.step;
@@ -714,7 +927,7 @@ class ARCPlayer {
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
-fetch('timeline.json')
+fetch(`timeline.json?ts=${Date.now()}`, { cache: 'no-store' })
   .then(r => {
     if (!r.ok) throw new Error(`timeline.json not found (${r.status})`);
     return r.json();

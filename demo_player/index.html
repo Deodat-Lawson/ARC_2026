@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>A.R.C. — Autonomous Rescue Cluster | Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="player.css">
 </head>
 <body>
@@ -13,11 +14,13 @@
   <header id="hud-header">
     <span class="logo">A · R · C</span>
     <span id="step-counter">Step 0 / —</span>
+    <span id="geo-badge">1KM GEO GRID</span>
     <span id="mode-badge">EDGE_ONLY</span>
   </header>
 
   <!-- ── Map ── -->
   <div id="map-container">
+    <div id="basemap" aria-hidden="true"></div>
     <canvas id="map-canvas"></canvas>
     <div id="toast-layer"></div>
   </div>
@@ -80,6 +83,8 @@
   </nav>
 
 </div>
-<script src="player.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
+<script src="player.js?v=tactical-basemap"></script>
 </body>
 </html>

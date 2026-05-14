@@ -36,6 +36,10 @@ SCENARIO_PATH = _REPO_ROOT / "ARC_2026-arc-lite-2d-demo" / "scenario_001.json"
 OUTPUT_PATH   = _REPO_ROOT / "demo_player" / "timeline.json"
 TOTAL_STEPS   = 200
 CELL_SIZE_M   = 10.0
+DYNAMIC_OBSTACLE_SEED = 20260514
+DYNAMIC_OBSTACLE_INTERVAL = 25
+DYNAMIC_OBSTACLE_START = 20
+DYNAMIC_OBSTACLE_MAX = 8
 
 # ---------------------------------------------------------------------------
 # Gemma 4 API 接口层（Mock / Real 可切换）
@@ -166,6 +170,68 @@ def _calc_comm_coverage(agents: List[EdgeAgent], map_size: List[int]) -> float:
 
 def _survival_pct(hp: int, hp_max: int) -> float:
     return round(max(0.0, hp / max(hp_max, 1) * 100), 1)
+
+
+def _make_dynamic_obstacle_schedule(
+    map_size: List[int],
+    blocked_cells: List[dict],
+    steps: int,
+) -> Dict[int, List[dict]]:
+    """
+    Schedule stochastic secondary blockades that appear mid-mission.
+
+    These model aftershocks, debris slides, vehicle pile-ups, or fire-spread
+    closures. They are deterministic for reproducibility, but still random
+    with respect to position and timing.
+    """
+    rng = random.Random(DYNAMIC_OBSTACLE_SEED)
+    cols, rows = map_size
+    occupied = {
+        tuple(b.get("location", [-1, -1]))
+        for b in blocked_cells
+    }
+    schedule: Dict[int, List[dict]] = {}
+    if steps <= DYNAMIC_OBSTACLE_START:
+        return schedule
+
+    candidate_steps = list(range(
+        DYNAMIC_OBSTACLE_START,
+        steps,
+        DYNAMIC_OBSTACLE_INTERVAL,
+    ))
+    rng.shuffle(candidate_steps)
+    spawn_steps = sorted(candidate_steps[:DYNAMIC_OBSTACLE_MAX])
+
+    for idx, spawn_step in enumerate(spawn_steps, start=1):
+        loc = None
+        for _ in range(200):
+            c = rng.randint(8, max(8, cols - 9))
+            r = rng.randint(8, max(8, rows - 9))
+            if (c, r) in occupied:
+                continue
+            # Keep the two bases from being sealed immediately.
+            if (c < 10 and r < 10) or (c > cols - 12 and r > rows - 12):
+                continue
+            loc = [c, r]
+            occupied.add((c, r))
+            break
+        if loc is None:
+            continue
+
+        obstacle = {
+            "id": f"DYN{idx:02d}",
+            "location": loc,
+            "repair_cost": rng.randint(45, 120),
+            "clear_progress": 0,
+            "clear_rate": rng.randint(12, 24),
+            "status": "blocked",
+            "dynamic": True,
+            "spawn_step": spawn_step,
+            "reason": rng.choice(["aftershock", "debris_slide", "vehicle_pileup", "fire_spread"]),
+        }
+        schedule.setdefault(spawn_step, []).append(obstacle)
+
+    return schedule
 
 
 def _generate_briefing(
@@ -305,6 +371,7 @@ def run(
     blocked_cells = map_data.get("blocked_cells", [])
     risk_zones    = map_data.get("risk_zones", [])
     dead_zones    = map_data.get("communication_dead_zones", [])
+    dynamic_obstacles = _make_dynamic_obstacle_schedule(map_size, blocked_cells, steps)
 
     # Mutable victim state (keep hp / damage_per_step from raw JSON)
     victims_raw: Dict[str, dict] = {
@@ -321,6 +388,18 @@ def run(
 
     for step in range(steps):
         hub_events: List[dict] = []
+
+        # ── 0. Dynamic obstacle emergence ─────────────────────────────────
+        for obstacle in dynamic_obstacles.get(step, []):
+            blocked_cells.append(obstacle)
+            hub_events.append({
+                "type": "dynamic_obstacle",
+                "description": (
+                    f"⚠️ 新障碍 {obstacle['id']} 出现 "
+                    f"({obstacle['reason']})，位置 {obstacle['location']}"
+                ),
+                "agents_involved": [],
+            })
 
         # ── 1. Hub formation ────────────────────────────────────────────────
         for agent in agents:
