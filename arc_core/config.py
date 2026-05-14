@@ -136,9 +136,9 @@ class HubConfig:
     """Decision Hub formation and governance parameters."""
     min_agents_for_hub: int = 3           # Minimum agents to auto-form a hub
     leader_score_weights: Dict = field(default_factory=lambda: {
-        "battery": 0.4,
-        "compute_power": 0.3,   # UGV (E4B) > UAV/Balloon (E2B)
-        "comm_capability": 0.3,
+        "battery": 0.35,
+        "compute_power": 0.55,  # UGV (E4B=1.0) >> UAV/Balloon (E2B=0.5): UGV wins
+        "comm_capability": 0.10,
     })
     sacrifice_efficiency_threshold: float = 0.30  # Sacrifice if overall efficiency gain > 30%
     hub_comm_interval_sec: float = 10.0            # Inter-hub sync interval
@@ -155,14 +155,20 @@ class TriggerConfig:
 
 @dataclass
 class SimulationConfig:
-    """Simulation environment parameters."""
+    """Simulation environment parameters.
+    
+    Single-depot reference config (covers ~50 km²):
+      15 UAV + 8 UGV + 20 Balloon + 2 × 50kW diesel generators
+    Full 4-depot city deployment: ×4 of the above.
+    """
     tick_duration_sec: float = 1.0       # Simulation time step
     map_width_m: float = 5000.0
     map_height_m: float = 5000.0
-    default_fleet_size: int = 8          # Total agents in default scenario
-    default_ugv_count: int = 2
-    default_uav_count: int = 4
-    default_balloon_count: int = 2
+    default_ugv_count: int = 8
+    default_uav_count: int = 15
+    default_balloon_count: int = 20
+    default_generator_count: int = 2     # 50 kW diesel generators per depot
+    default_fleet_size: int = default_ugv_count + default_uav_count + default_balloon_count  # 43
 
 
 # ============================================================================

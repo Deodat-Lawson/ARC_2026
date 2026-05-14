@@ -21,7 +21,7 @@ import pytest
 # Fixtures
 # ---------------------------------------------------------------------------
 
-REPO_ROOT      = Path(__file__).resolve().parent.parent
+REPO_ROOT      = Path(__file__).resolve().parent.parent.parent
 SCENARIO_PATH  = REPO_ROOT / "ARC_2026-arc-lite-2d-demo" / "scenario_001.json"
 TIMELINE_PATH  = REPO_ROOT / "demo_player" / "timeline.json"
 
@@ -42,7 +42,7 @@ def timeline():
     if not TIMELINE_PATH.exists():
         print("\n[fixture] timeline.json not found — regenerating...")
         result = subprocess.run(
-            [sys.executable, "-m", "simulation.timeline_generator",
+            [sys.executable, "-m", "arc_core.simulation.timeline_generator",
              "--steps", "80", "--output", str(TIMELINE_PATH)],
             cwd=REPO_ROOT,
             capture_output=True,

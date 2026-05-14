@@ -102,14 +102,16 @@ class ScenarioAdapter:
         """Convert Yihang's agent list to EdgeAgent instances."""
         agents = []
         for a in data.get("agents", []):
-            # Map Yihang's types to arc_core AgentType
-            raw_type = a.get("type", "")
+            # Map agent type string to arc_core AgentType
+            # Supports both new canonical format ("ugv","uav","balloon")
+            # and legacy Yihang format ("drone","ground_rescue","ground_clear")
+            raw_type = a.get("type", "").lower()
             if raw_type == "balloon":
                 agent_type = AgentType.BALLOON
-            elif raw_type.startswith("drone"):
-                agent_type = AgentType.UAV
-            elif "ground" in raw_type:
+            elif raw_type == "ugv" or "ground" in raw_type:
                 agent_type = AgentType.UGV
+            elif raw_type in ("uav", "drone") or raw_type.startswith("drone"):
+                agent_type = AgentType.UAV
             else:
                 agent_type = AgentType.UAV
 

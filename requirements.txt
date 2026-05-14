@@ -1,0 +1,24 @@
+# A.R.C. (Autonomous Rescue Cluster) — Dependencies
+
+# ── Gemma 4 / Google AI ──────────────────────────────────────────────────────
+google-genai>=1.0.0          # Gemma 4 + Gemini API (Google AI Studio)
+google-generativeai>=0.8     # Gemini 3 cloud orchestration
+
+# ── LiteRT Edge Deployment (Special Technology Track — LiteRT award) ─────────
+litert-lm>=0.11.0            # google-ai-edge/LiteRT-LM: Gemma 4 on-device inference
+                             # Model: litert-community/gemma-4-E4B-it-litert-lm
+
+# ── Numerical / Scientific ───────────────────────────────────────────────────
+numpy>=1.24.0                # GA task allocator, position arithmetic
+scipy>=1.11.0                # CMA-ES optimisation (GATaskAllocator)
+
+# ── Web / API ────────────────────────────────────────────────────────────────
+flask>=3.0                   # REST API for Timmy's Landing Page
+websockets>=12.0             # Real-time push to frontend demo player
+
+# ── Visualisation ────────────────────────────────────────────────────────────
+matplotlib>=3.8              # Debug plots, trajectory visualisation
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+pytest>=8.0
+pytest-cov>=4.0

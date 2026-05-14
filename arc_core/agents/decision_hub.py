@@ -12,6 +12,7 @@ Implements the "brain" in the Octopus Brain architecture.
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -20,6 +21,9 @@ from typing import Dict, List, Optional
 from arc_core.config import DEFAULT_CONFIG, AgentTask, AgentType
 from arc_core.agents.agent_types import Coordinate3D, Survivor
 from arc_core.agents.edge_agent import EdgeAgent
+from arc_core.perception.gemma_perceiver import GemmaPerceiver
+from arc_core.scheduler.task_allocator import TaskAllocator
+from arc_core.scheduler.survival_scorer import SurvivalScorer, SurvivorContext
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +73,16 @@ class DecisionHub:
         self._rescue_log: List[RescueLogEntry] = []
         self._active_plan: str = "initializing"
         self._step_thinking: List[str] = []
+
+        # Gemma 4 perceiver (one per hub — LLM2Swarm Direct Integration pattern)
+        self._perceiver = GemmaPerceiver(
+            api_key=os.environ.get("GEMMA_API_KEY") or os.environ.get("GOOGLE_API_KEY"),
+            mode="auto",
+            agent_id=self.hub_id,
+            gemma_model="E4B",   # Hub leader is always UGV (E4B)
+        )
+        # Scheduler modules
+        self._allocator = TaskAllocator(scorer=SurvivalScorer())
 
         # Register members and elect leader
         for agent in members:
@@ -146,6 +160,17 @@ class DecisionHub:
         """Append one reasoning entry to this step's thinking log."""
         self._step_thinking.append(msg)
 
+    def _gemma_reason(self, context: str) -> str:
+        """
+        Call Gemma 4 for real reasoning and append to thinking log.
+        Falls back to deterministic mock if API unavailable (EDGE_ONLY mode).
+        LLM2Swarm Direct Integration: each hub calls independently.
+        """
+        result = self._perceiver.reason(context)
+        reasoning = result.reasoning_chain or result.raw_text
+        self._think(reasoning)
+        return reasoning
+
     def get_thinking_log_for_step(self) -> str:
         """Return the full reasoning chain for this step as a single string."""
         return " ".join(self._step_thinking)
@@ -168,7 +193,7 @@ class DecisionHub:
 
     # -- Task Allocation -----------------------------------------------------
 
-    def allocate_tasks(self, survivors: List[Survivor]) -> Dict[str, str]:
+    def allocate_tasks(self, survivors: List[Survivor], use_gemma: bool = True) -> Dict[str, str]:
         """
         Assign rescue tasks to members based on survivor priorities and agent capabilities.
         
@@ -179,57 +204,34 @@ class DecisionHub:
         
         Returns: {agent_id: task_description}
         """
-        assignment: Dict[str, str] = {}
         self._active_plan = f"rescue_{len(survivors)}_survivors"
 
-        uavs = [a for a in self._members.values() if a.agent_type == AgentType.UAV]
-        ugvs = [a for a in self._members.values() if a.agent_type == AgentType.UGV]
-        balloons = [a for a in self._members.values() if a.agent_type == AgentType.BALLOON]
+        # Gemma 4 high-level reasoning before task dispatch
+        if use_gemma and survivors:
+            context = (
+                f"决策枢纽{self.hub_id}需要为{len(survivors)}名幸存者制定救援方案。"
+                f"集群成员: {[a.agent_id for a in self._members.values()]}，"
+                f"平均电量{self.total_battery:.0%}。"
+                f"请分析最优救援策略，优先级最高的幸存者应最先得到响应。"
+            )
+            self._gemma_reason(context)
 
-        # Balloons → always relay/monitor
-        for b in balloons:
-            b.current_task = AgentTask.RELAY
-            assignment[b.agent_id] = "communication_relay_and_monitoring"
-            self._think(f"{b.agent_id}(气球)已部署通信中继，覆盖范围扩大。")
+        # Delegate to TaskAllocator (greedy-by-priority, backed by SurvivalScorer)
+        assignment_raw, log_entries = self._allocator.allocate(
+            agents=list(self._members.values()),
+            survivors=survivors,
+        )
 
-        # Assign survivors to available UAVs and UGVs
-        available_uavs = list(uavs)
-        available_ugvs = list(ugvs)
+        assignment: Dict[str, str] = dict(assignment_raw)
 
-        for i, survivor in enumerate(survivors):
-            severity_pct = int(survivor.injury_severity * 100)
-            # UAV scouts first
-            if available_uavs:
-                scout = available_uavs.pop(0)
-                scout.current_task = AgentTask.SEARCH
-                assignment[scout.agent_id] = f"search_survivor_{survivor.survivor_id}"
-                self._think(
-                    f"检测到{survivor.survivor_id}，伤势{severity_pct}%，"
-                    f"指派{scout.agent_id}(UAV)执行空中侦察确认。"
-                )
-                self._log_event(
-                    f"Detected survivor {survivor.survivor_id}",
-                    f"Assigned {scout.agent_id} (UAV) to search",
-                )
-
-            # UGV follows for rescue
-            if available_ugvs:
-                rescuer = available_ugvs.pop(0)
-                rescuer.current_task = AgentTask.RESCUE
-                assignment[rescuer.agent_id] = f"rescue_survivor_{survivor.survivor_id}"
-                self._think(
-                    f"指派{rescuer.agent_id}(UGV)地面推进救援{survivor.survivor_id}。"
-                )
-                self._log_event(
-                    f"Rescue plan for {survivor.survivor_id}",
-                    f"Assigned {rescuer.agent_id} (UGV) to rescue",
-                )
-
-        # Remaining idle agents
-        for agent in self._members.values():
-            if agent.agent_id not in assignment:
-                agent.current_task = AgentTask.RECON
-                assignment[agent.agent_id] = "area_reconnaissance"
+        # Log all allocation decisions
+        for entry in log_entries:
+            self._think(entry.get("reason", ""))
+            self._log_event(
+                f"Task assigned to {entry['agent_id']}",
+                entry.get("assigned_task", ""),
+                {k: v for k, v in entry.items() if k not in ("agent_id", "assigned_task")},
+            )
 
         return assignment
 

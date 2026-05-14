@@ -2,9 +2,9 @@
 A.R.C. Scenario Builder — 交互式受灾场景生成器
 
 用法:
-    python -m simulation.scenario_builder                  # 交互模式
-    python -m simulation.scenario_builder --preset flood   # 预设场景
-    python -m simulation.scenario_builder --output ARC_2026-arc-lite-2d-demo/scenario_002.json
+    python -m arc_core.simulation.scenario_builder                  # 交互模式
+    python -m arc_core.simulation.scenario_builder --preset flood   # 预设场景
+    python -m arc_core.simulation.scenario_builder --output ARC_2026-arc-lite-2d-demo/scenario_002.json
 
 支持的预设: earthquake (默认) | flood | fire | landslide
 """
@@ -15,6 +15,8 @@ import argparse
 import json
 import random
 from pathlib import Path
+
+from arc_core.paths import REPO_ROOT
 
 # ---------------------------------------------------------------------------
 # 可调参数说明 (所有参数均有默认值，可按需覆盖)
@@ -357,7 +359,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output", type=Path,
-        default=Path(__file__).resolve().parent.parent
+        default=REPO_ROOT
                 / "ARC_2026-arc-lite-2d-demo" / "scenario_002.json",
         help="输出路径",
     )
@@ -388,6 +390,6 @@ if __name__ == "__main__":
           f"RiskZones: {len(data['map']['risk_zones'])}  "
           f"DeadZones: {len(data['map']['communication_dead_zones'])}")
     print(f"\nNext step:")
-    print(f"  python -m simulation.timeline_generator "
+    print(f"  python -m arc_core.simulation.timeline_generator "
           f"--scenario {args.output} "
           f"--output demo_player/timeline.json")

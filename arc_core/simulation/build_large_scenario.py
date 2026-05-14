@@ -14,8 +14,8 @@ A.R.C. Large-Scale Scenario Builder
   - 温湿度随机 (影响生存概率计算)
 
 用法:
-    python -m simulation.build_large_scenario
-    python -m simulation.build_large_scenario --seed 2026 --output ARC_2026-arc-lite-2d-demo/scenario_large.json
+    python -m arc_core.simulation.build_large_scenario
+    python -m arc_core.simulation.build_large_scenario --seed 2026 --output ARC_2026-arc-lite-2d-demo/scenario_large.json
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ import json
 import math
 import random
 from pathlib import Path
+
+from arc_core.paths import REPO_ROOT
 
 # ---------------------------------------------------------------------------
 # Configurable top-level parameters
@@ -530,7 +532,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed",   type=int,  default=2026, help="随机种子")
     parser.add_argument(
         "--output", type=Path,
-        default=Path(__file__).resolve().parent.parent
+        default=REPO_ROOT
                 / "ARC_2026-arc-lite-2d-demo" / "scenario_large.json",
     )
     args = parser.parse_args()
@@ -586,4 +588,4 @@ if __name__ == "__main__":
     print(f"     AQI      : {w['air_quality_aqi']}")
 
     print(f"\nNext step:")
-    print(f"  python -m simulation.timeline_generator --scenario {args.output} --steps 300 --output demo_player/timeline.json")
+    print(f"  python -m arc_core.simulation.timeline_generator --scenario {args.output} --steps 300 --output demo_player/timeline.json")

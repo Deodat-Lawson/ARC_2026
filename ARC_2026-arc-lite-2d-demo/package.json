@@ -22,6 +22,9 @@
     "react-dom": "^19.0.0",
     "three": "^0.170.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["sharp", "unrs-resolver"]
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@gltf-transform/cli": "^4.1.0",

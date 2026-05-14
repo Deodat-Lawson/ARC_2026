@@ -16,6 +16,7 @@ from typing import List
 from arc_core.config import DisasterType
 from arc_core.agents.agent_types import Coordinate3D, Survivor
 from arc_core.interfaces.scenario_reader import DisasterScenario, InfrastructureStatus
+from arc_core.paths import SIMULATION_DATA_DIR
 
 
 def generate_earthquake_scenario(
@@ -121,7 +122,10 @@ def save_scenario(scenario: DisasterScenario, filepath: str):
 
 if __name__ == "__main__":
     scenario = generate_earthquake_scenario(num_survivors=5, severity=0.7)
-    save_scenario(scenario, "simulation/data/earthquake_demo.json")
+    save_scenario(
+        scenario,
+        str(SIMULATION_DATA_DIR / "earthquake_demo.json"),
+    )
     print(f"Generated scenario: {scenario.scenario_id}")
     print(f"  Disaster: {scenario.disaster_type.value} (severity={scenario.disaster_severity})")
     print(f"  Survivors: {len(scenario.survivors)}")
