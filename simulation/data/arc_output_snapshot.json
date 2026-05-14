@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-13T19:14:11Z",
+  "timestamp": "2026-05-14T16:52:54Z",
   "system_state": "edge_only",
   "fleet_status": [
     {
@@ -13,7 +13,7 @@
         "y": 2500.0,
         "z": 0
       },
-      "in_hub": "hub-da261b",
+      "in_hub": "hub-5d0096",
       "gemma_model": "E4B"
     },
     {
@@ -27,7 +27,7 @@
         "y": 2700.0,
         "z": 0
       },
-      "in_hub": "hub-2e9993",
+      "in_hub": "hub-8ef808",
       "gemma_model": "E4B"
     },
     {
@@ -41,7 +41,7 @@
         "y": 2400.0,
         "z": 50
       },
-      "in_hub": "hub-da261b",
+      "in_hub": "hub-5d0096",
       "gemma_model": "E2B"
     },
     {
@@ -55,7 +55,7 @@
         "y": 2600.0,
         "z": 50
       },
-      "in_hub": "hub-da261b",
+      "in_hub": "hub-5d0096",
       "gemma_model": "E2B"
     },
     {
@@ -69,7 +69,7 @@
         "y": 2700.0,
         "z": 50
       },
-      "in_hub": "hub-da261b",
+      "in_hub": "hub-5d0096",
       "gemma_model": "E2B"
     },
     {
@@ -83,7 +83,7 @@
         "y": 2300.0,
         "z": 50
       },
-      "in_hub": "hub-da261b",
+      "in_hub": "hub-5d0096",
       "gemma_model": "E2B"
     },
     {
@@ -97,7 +97,7 @@
         "y": 2500.0,
         "z": 200
       },
-      "in_hub": "hub-2e9993",
+      "in_hub": "hub-8ef808",
       "gemma_model": "E2B"
     },
     {
@@ -111,7 +111,7 @@
         "y": 3000.0,
         "z": 200
       },
-      "in_hub": "hub-2e9993",
+      "in_hub": "hub-8ef808",
       "gemma_model": "E2B"
     }
   ],
@@ -149,7 +149,7 @@
   ],
   "decision_hubs": [
     {
-      "hub_id": "hub-da261b",
+      "hub_id": "hub-5d0096",
       "leader": "UGV-1",
       "members": [
         "UGV-1",
@@ -167,12 +167,12 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-2e9993"
+        "hub-8ef808"
       ],
       "rescue_log_count": 10
     },
     {
-      "hub_id": "hub-2e9993",
+      "hub_id": "hub-8ef808",
       "leader": "BAL-1",
       "members": [
         "UGV-2",
@@ -188,92 +188,92 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-da261b"
+        "hub-5d0096"
       ],
       "rescue_log_count": 2
     }
   ],
   "rescue_log": [
     {
-      "time": 1778699651.1972022,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.2656288,
+      "hub_id": "hub-5d0096",
       "event": "Hub formed",
       "action": "Members: ['UGV-1', 'UAV-1', 'UAV-2', 'UAV-3', 'UAV-4']",
       "details": {}
     },
     {
-      "time": 1778699651.197345,
-      "hub_id": "hub-2e9993",
+      "time": 1778777574.2656891,
+      "hub_id": "hub-8ef808",
       "event": "Hub formed",
       "action": "Members: ['UGV-2', 'BAL-1', 'BAL-2']",
       "details": {}
     },
     {
-      "time": 1778699651.1973906,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.265714,
+      "hub_id": "hub-5d0096",
       "event": "Detected survivor person_01",
       "action": "Assigned UAV-1 (UAV) to search",
       "details": {}
     },
     {
-      "time": 1778699651.1973925,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.265716,
+      "hub_id": "hub-5d0096",
       "event": "Rescue plan for person_01",
       "action": "Assigned UGV-1 (UGV) to rescue",
       "details": {}
     },
     {
-      "time": 1778699651.1973941,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.265717,
+      "hub_id": "hub-5d0096",
       "event": "Detected survivor person_02",
       "action": "Assigned UAV-2 (UAV) to search",
       "details": {}
     },
     {
-      "time": 1778699651.197395,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.265718,
+      "hub_id": "hub-5d0096",
       "event": "Detected survivor person_03",
       "action": "Assigned UAV-3 (UAV) to search",
       "details": {}
     },
     {
-      "time": 1778699651.1973963,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.265719,
+      "hub_id": "hub-5d0096",
       "event": "Detected survivor person_04",
       "action": "Assigned UAV-4 (UAV) to search",
       "details": {}
     },
     {
-      "time": 1778699651.1974044,
-      "hub_id": "hub-2e9993",
+      "time": 1778777574.2657259,
+      "hub_id": "hub-8ef808",
       "event": "Rescue plan for person_01",
       "action": "Assigned UGV-2 (UGV) to rescue",
       "details": {}
     },
     {
-      "time": 1778699651.1974192,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.265735,
+      "hub_id": "hub-5d0096",
       "event": "Energy transfer: UGV-1 → UAV-1",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778699651.1974254,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.265738,
+      "hub_id": "hub-5d0096",
       "event": "Energy transfer: UGV-1 → UAV-2",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778699651.1974282,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.265742,
+      "hub_id": "hub-5d0096",
       "event": "Energy transfer: UGV-1 → UAV-3",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778699651.1974304,
-      "hub_id": "hub-da261b",
+      "time": 1778777574.2657459,
+      "hub_id": "hub-5d0096",
       "event": "Energy transfer: UGV-1 → UAV-4",
       "action": "Transferred 10.0% battery",
       "details": {}

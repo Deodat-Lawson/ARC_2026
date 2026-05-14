@@ -13,12 +13,12 @@ let MAP_COLS = 30;
 let MAP_ROWS = 30;
 const MS_PER_STEP_BASE = 800; // at 1× speed
 const PMTILES_URL = 'https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles';
-const GEO_BOUNDS_1KM = {
-  label: 'Firenze Centro 1km x 1km',
+const GEO_BOUNDS_300M = {
+  label: 'Firenze Centro 300m x 300m',
   // [south, west], [north, east]. Center: 43.7696, 11.2558.
-  // Approx 1km square at this latitude: 0.00898 deg lat x 0.01244 deg lon.
-  southWest: [43.76511, 11.24958],
-  northEast: [43.77409, 11.26202],
+  // Approx 300m square at this latitude: 0.00269 deg lat x 0.00373 deg lon.
+  southWest: [43.76825, 11.25393],
+  northEast: [43.77095, 11.25767],
 };
 
 const COLORS = {
@@ -51,18 +51,32 @@ const TOAST_CFG = {
 let baseMap = null;
 let baseMapReady = false;
 let pmtilesProtocolInstalled = false;
+let roadSegments = [];
+let roadNetworkReady = false;
+let roadCapturePosted = false;
 
 function gridToLngLat(col, row) {
-  const west = GEO_BOUNDS_1KM.southWest[1];
-  const south = GEO_BOUNDS_1KM.southWest[0];
-  const east = GEO_BOUNDS_1KM.northEast[1];
-  const north = GEO_BOUNDS_1KM.northEast[0];
+  const west = GEO_BOUNDS_300M.southWest[1];
+  const south = GEO_BOUNDS_300M.southWest[0];
+  const east = GEO_BOUNDS_300M.northEast[1];
+  const north = GEO_BOUNDS_300M.northEast[0];
   const x = Math.min(1, Math.max(0, col / Math.max(1, MAP_COLS)));
   const y = Math.min(1, Math.max(0, row / Math.max(1, MAP_ROWS)));
   return [
     west + x * (east - west),
     north - y * (north - south),
   ];
+}
+
+function lngLatToGrid(lng, lat) {
+  const west = GEO_BOUNDS_300M.southWest[1];
+  const south = GEO_BOUNDS_300M.southWest[0];
+  const east = GEO_BOUNDS_300M.northEast[1];
+  const north = GEO_BOUNDS_300M.northEast[0];
+  return {
+    x: ((lng - west) / (east - west)) * MAP_COLS,
+    y: ((north - lat) / (north - south)) * MAP_ROWS,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -99,8 +113,8 @@ function resizeBasemap(w, h) {
     baseMap.resize();
     baseMap.fitBounds(
       [
-        [GEO_BOUNDS_1KM.southWest[1], GEO_BOUNDS_1KM.southWest[0]],
-        [GEO_BOUNDS_1KM.northEast[1], GEO_BOUNDS_1KM.northEast[0]],
+        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
       ],
       { padding: 0, duration: 0 },
     );
@@ -211,8 +225,8 @@ function initBasemap() {
       container: 'basemap',
       style,
       bounds: [
-        [GEO_BOUNDS_1KM.southWest[1], GEO_BOUNDS_1KM.southWest[0]],
-        [GEO_BOUNDS_1KM.northEast[1], GEO_BOUNDS_1KM.northEast[0]],
+        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
       ],
       fitBoundsOptions: { padding: 0, duration: 0 },
       interactive: false,
@@ -222,20 +236,172 @@ function initBasemap() {
       baseMapReady = true;
       baseMap.fitBounds(
         [
-          [GEO_BOUNDS_1KM.southWest[1], GEO_BOUNDS_1KM.southWest[0]],
-          [GEO_BOUNDS_1KM.northEast[1], GEO_BOUNDS_1KM.northEast[0]],
+          [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+          [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
         ],
         { padding: 0, duration: 0 },
       );
     });
+    baseMap.on('idle', rebuildRoadNetwork);
   } catch (err) {
     console.warn('[basemap] PMTiles initialization failed:', err);
   }
 }
 
+function flattenRoadCoordinates(geometry) {
+  if (!geometry) return [];
+  if (geometry.type === 'LineString') return [geometry.coordinates];
+  if (geometry.type === 'MultiLineString') return geometry.coordinates;
+  return [];
+}
+
+function segmentInMap(a, b) {
+  const margin = 1;
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxY = Math.max(a.y, b.y);
+  return maxX >= -margin && minX <= MAP_COLS + margin
+    && maxY >= -margin && minY <= MAP_ROWS + margin;
+}
+
+function rebuildRoadNetwork() {
+  if (!baseMap || !baseMapReady) return;
+  let features = [];
+  try {
+    features = baseMap.querySourceFeatures('protomaps', { sourceLayer: 'roads' });
+  } catch (err) {
+    console.warn('[basemap] road query failed:', err);
+    return;
+  }
+
+  const segments = [];
+  features.forEach(feature => {
+    flattenRoadCoordinates(feature.geometry).forEach(line => {
+      for (let i = 1; i < line.length; i++) {
+        const a = lngLatToGrid(line[i - 1][0], line[i - 1][1]);
+        const b = lngLatToGrid(line[i][0], line[i][1]);
+        if (segmentInMap(a, b)) segments.push({ a, b });
+      }
+    });
+  });
+
+  if (segments.length) {
+    roadSegments = segments;
+    roadNetworkReady = true;
+    window.__arcRoadSegments = roadSegments;
+    maybePostRoadCapture();
+  }
+}
+
+function maybePostRoadCapture() {
+  if (roadCapturePosted || !new URLSearchParams(window.location.search).has('captureRoads')) return;
+  roadCapturePosted = true;
+  fetch('http://localhost:8001/roads', {
+    method: 'POST',
+    mode: 'no-cors',
+    body: JSON.stringify({
+      bounds: GEO_BOUNDS_300M,
+      mapSize: [MAP_COLS, MAP_ROWS],
+      segments: roadSegments,
+    }),
+  }).catch(() => {});
+}
+
+function nearestRoadPoint(pos) {
+  if (!roadNetworkReady || roadSegments.length === 0) return pos;
+  let best = pos;
+  let bestDistSq = Infinity;
+
+  roadSegments.forEach(({ a, b }) => {
+    const vx = b.x - a.x;
+    const vy = b.y - a.y;
+    const lenSq = vx * vx + vy * vy;
+    if (lenSq <= 0.0001) return;
+    const t = Math.max(0, Math.min(1, ((pos.x - a.x) * vx + (pos.y - a.y) * vy) / lenSq));
+    const px = a.x + vx * t;
+    const py = a.y + vy * t;
+    const dx = pos.x - px;
+    const dy = pos.y - py;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      best = { x: px, y: py };
+    }
+  });
+
+  return best;
+}
+
+function constrainAgentPosition(agent, pos) {
+  if (agent.type !== 'ugv') return pos;
+  return roadNetworkReady ? nearestRoadPoint(pos) : pos;
+}
+
 // ---------------------------------------------------------------------------
 // Typewriter
 // ---------------------------------------------------------------------------
+let _thinkingTimer = null;
+let _thinkingQueue = [];
+let _thinkingTyping = false;
+
+function splitThinkingLog(text) {
+  return String(text || '')
+    .split(/(?<=[。！？.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function appendThinkingEntry(el, step, text, animate = true) {
+  const row = document.createElement('div');
+  row.className = 'thinking-row';
+  const label = document.createElement('span');
+  label.className = 'thinking-step';
+  label.textContent = `[${step}] `;
+  const body = document.createElement('span');
+  body.className = 'thinking-body';
+  row.append(label, body);
+  el.appendChild(row);
+
+  const finish = () => {
+    el.scrollTop = el.scrollHeight;
+    while (el.children.length > 80) el.removeChild(el.firstChild);
+  };
+
+  if (!animate) {
+    body.textContent = text;
+    finish();
+    return;
+  }
+
+  let i = 0;
+  _thinkingTyping = true;
+  clearInterval(_thinkingTimer);
+  _thinkingTimer = setInterval(() => {
+    body.textContent += text[i++] || '';
+    el.scrollTop = el.scrollHeight;
+    if (i >= text.length) {
+      clearInterval(_thinkingTimer);
+      _thinkingTyping = false;
+      finish();
+      playThinkingQueue(el);
+    }
+  }, 16);
+}
+
+function playThinkingQueue(el) {
+  if (_thinkingTyping || !_thinkingQueue.length) return;
+  const next = _thinkingQueue.shift();
+  appendThinkingEntry(el, next.step, next.text, next.animate);
+}
+
+function queueThinkingLog(el, step, text, animate = true) {
+  splitThinkingLog(text).forEach(line => {
+    _thinkingQueue.push({ step, text: line, animate });
+  });
+  playThinkingQueue(el);
+}
+
 let _twTimer = null;
 function typewriter(el, text, speed = 22) {
   clearInterval(_twTimer);
@@ -249,15 +415,20 @@ function typewriter(el, text, speed = 22) {
 }
 
 let _brTimer = null;
-function typewriterBriefing(el, text, speed = 18) {
-  clearInterval(_brTimer);
-  el.textContent = '';
-  let i = 0;
-  _brTimer = setInterval(() => {
-    el.textContent += text[i++] || '';
-    el.scrollTop = el.scrollHeight;
-    if (i >= text.length) clearInterval(_brTimer);
-  }, speed);
+function appendBriefingEntry(el, step, text) {
+  const row = document.createElement('div');
+  row.className = 'briefing-row';
+  const label = document.createElement('span');
+  label.className = 'briefing-step';
+  label.textContent = `[${step}] `;
+  const body = document.createElement('span');
+  body.className = 'briefing-body';
+  body.textContent = text;
+  row.append(label, body);
+  el.appendChild(row);
+
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 80) el.removeChild(el.firstChild);
 }
 
 // ---------------------------------------------------------------------------
@@ -530,13 +701,18 @@ function drawUGV(ctx, x, y, battery, task, trail, chargingTarget) {
     ctx.setLineDash([3, 5]);
     ctx.strokeStyle = `rgba(57,255,20,0.3)`;
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    trail.forEach((p, i) => {
-      const px = p.x * CELL + CELL / 2;
-      const py = p.y * CELL + CELL / 2;
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    });
-    ctx.stroke();
+    for (let i = 1; i < trail.length; i++) {
+      const prev = trail[i - 1];
+      const cur = trail[i];
+      const dx = cur.x - prev.x;
+      const dy = cur.y - prev.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 1.75) continue;
+      ctx.beginPath();
+      ctx.moveTo(prev.x * CELL + CELL / 2, prev.y * CELL + CELL / 2);
+      ctx.lineTo(cur.x * CELL + CELL / 2, cur.y * CELL + CELL / 2);
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
   }
 
@@ -664,7 +840,8 @@ function renderFrame(frame, interpT, ts) {
 
   // Agents
   frame.agents.forEach(agent => {
-    const pos   = getInterpPos(agent, interpT);
+    if (agent.type === 'balloon' && agent.deployment_status !== 'deployed') return;
+    const pos   = constrainAgentPosition(agent, getInterpPos(agent, interpT));
     const px    = pos.x * CELL + CELL / 2;
     const py    = pos.y * CELL + CELL / 2;
     const type  = agent.type;
@@ -702,7 +879,10 @@ function renderFrame(frame, interpT, ts) {
 function updateTrails(frame) {
   frame.agents.forEach(agent => {
     if (!trails[agent.id]) trails[agent.id] = [];
-    trails[agent.id].push({ x: agent.location[0], y: agent.location[1] });
+    trails[agent.id].push(constrainAgentPosition(agent, {
+      x: agent.location[0],
+      y: agent.location[1],
+    }));
     if (trails[agent.id].length > TRAIL_LEN) trails[agent.id].shift();
   });
 }
@@ -724,6 +904,8 @@ class ARCPlayer {
     // Cached stats for pop animation
     this._lastRescued    = 0;
     this._lastSacrificed = 0;
+    this._thinkingSeen = new Set();
+    this._briefingSeen = new Set();
 
     // Bind static scenario data into every frame for renderer access
     const firstFrame = this.frames[0];
@@ -732,36 +914,31 @@ class ARCPlayer {
     this._setupCanvases();
     this._bindControls();
     this._bindResize();
+    document.getElementById('thinking-text').textContent = '';
+    document.getElementById('briefing-text').textContent = '';
     this._onStepChange(false);
     requestAnimationFrame(ts => this._loop(ts));
   }
 
   _injectMapData(firstFrame, timeline) {
-    const allLocations = [];
-    this.frames.forEach(f => {
-      (f.agents || []).forEach(a => allLocations.push(a.location));
-      (f.victims || []).forEach(v => allLocations.push(v.location));
-      (f.blocked_cells || []).forEach(c => allLocations.push(c));
-    });
-    const maxX = Math.max(29, ...allLocations.map(p => Number(p?.[0]) || 0));
-    const maxY = Math.max(29, ...allLocations.map(p => Number(p?.[1]) || 0));
-    const isLargeScenario = timeline.scenario_id === 'mega_disaster_001' || maxX > 30 || maxY > 30;
-    MAP_COLS = isLargeScenario ? 100 : Math.ceil(maxX) + 1;
-    MAP_ROWS = isLargeScenario ? 100 : Math.ceil(maxY) + 1;
+    const map = timeline.map || {};
+    MAP_COLS = map.size?.[0] || 30;
+    MAP_ROWS = map.size?.[1] || 30;
 
     // Extract from raw scenario embedded in timeline (if available)
     // or default to standard scenario_001 values
-    const rz = [
+    const rz = map.risk_zones || [
       { center: [18, 5],  radius: 3, type: 'collapse' },
       { center: [15, 17], radius: 2, type: 'fire'     },
     ];
-    const dz = [
+    const dz = map.communication_dead_zones || [
       { center: [18, 5], radius: 4 },
     ];
+    const base = map.base || [2, 2];
     this.frames.forEach(f => {
       f._risk_zones = rz;
       f._dead_zones = dz;
-      f._base       = [2, 2];
+      f._base       = base;
     });
   }
 
@@ -831,20 +1008,13 @@ class ARCPlayer {
     const [west, north] = gridToLngLat(0, 0);
     const [east, south] = gridToLngLat(MAP_COLS, MAP_ROWS);
     document.getElementById('geo-badge').textContent =
-      `TACTICAL OSM · ${GEO_BOUNDS_1KM.label} · ${MAP_COLS}×${MAP_ROWS} · ${west.toFixed(4)},${south.toFixed(4)} ↔ ${east.toFixed(4)},${north.toFixed(4)}`;
+      `TACTICAL OSM · ${GEO_BOUNDS_300M.label} · ${MAP_COLS}×${MAP_ROWS} · ${west.toFixed(4)},${south.toFixed(4)} ↔ ${east.toFixed(4)},${north.toFixed(4)}`;
 
     // Scrubber
     document.getElementById('scrubber').value = this.step;
 
-    // Thinking log (typewriter if new content)
-    if (frame.thinking_log) {
-      typewriter(document.getElementById('thinking-text'), frame.thinking_log);
-    }
-
-    // Briefing
-    if (frame.briefing) {
-      typewriterBriefing(document.getElementById('briefing-text'), frame.briefing);
-    }
+    this._syncThinkingLog(animate);
+    this._syncBriefingLog(animate);
 
     // Stats
     const stats = frame.stats || {};
@@ -920,7 +1090,70 @@ class ARCPlayer {
     this.step   = s;
     this.elapsed = 0;
     this.interpT = 0;
+    this._rebuildThinkingLog(s);
+    this._rebuildBriefingLog(s);
     this._onStepChange(false);
+  }
+
+  _syncThinkingLog(animate) {
+    const frame = this.frames[this.step];
+    if (!frame.thinking_log) return;
+    const el = document.getElementById('thinking-text');
+    const parts = splitThinkingLog(frame.thinking_log);
+    parts.forEach((line, idx) => {
+      const key = `${frame.step}:${idx}:${line}`;
+      if (this._thinkingSeen.has(key)) return;
+      this._thinkingSeen.add(key);
+      queueThinkingLog(el, frame.step, line, animate);
+    });
+  }
+
+  _rebuildThinkingLog(step) {
+    clearInterval(_thinkingTimer);
+    _thinkingQueue = [];
+    _thinkingTyping = false;
+    this._thinkingSeen.clear();
+    const el = document.getElementById('thinking-text');
+    el.textContent = '';
+    for (let i = 0; i <= step; i++) {
+      const frame = this.frames[i];
+      if (!frame?.thinking_log) continue;
+      splitThinkingLog(frame.thinking_log).forEach((line, idx) => {
+        const key = `${frame.step}:${idx}:${line}`;
+        if (this._thinkingSeen.has(key)) return;
+        this._thinkingSeen.add(key);
+        appendThinkingEntry(el, frame.step, line, false);
+      });
+    }
+  }
+
+  _syncBriefingLog(animate) {
+    const frame = this.frames[this.step];
+    if (!frame.briefing) return;
+    const key = `${frame.step}:${frame.briefing}`;
+    if (this._briefingSeen.has(key)) return;
+    this._briefingSeen.add(key);
+    appendBriefingEntry(
+      document.getElementById('briefing-text'),
+      frame.step,
+      frame.briefing,
+      animate,
+    );
+  }
+
+  _rebuildBriefingLog(step) {
+    clearInterval(_brTimer);
+    this._briefingSeen.clear();
+    const el = document.getElementById('briefing-text');
+    el.textContent = '';
+    for (let i = 0; i <= step; i++) {
+      const frame = this.frames[i];
+      if (!frame?.briefing) continue;
+      const key = `${frame.step}:${frame.briefing}`;
+      if (this._briefingSeen.has(key)) continue;
+      this._briefingSeen.add(key);
+      appendBriefingEntry(el, frame.step, frame.briefing, false);
+    }
   }
 }
 

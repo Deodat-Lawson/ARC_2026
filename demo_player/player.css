@@ -184,14 +184,25 @@ html, body {
   flex: 1;
   padding: 10px 12px;
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.55;
   color: #a0c8e8;
   overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
+  white-space: normal;
+  word-break: break-word;
 }
 #thinking-text::-webkit-scrollbar { width: 4px; }
 #thinking-text::-webkit-scrollbar-thumb { background: var(--border); }
+.thinking-row {
+  padding: 5px 0 6px;
+  border-bottom: 1px solid rgba(0,191,255,0.09);
+}
+.thinking-step {
+  color: var(--balloon);
+  font-weight: bold;
+}
+.thinking-body {
+  color: #a0c8e8;
+}
 
 #event-log {
   padding: 6px 10px;
@@ -250,11 +261,24 @@ html, body {
 }
 #briefing-text {
   font-size: 11px;
-  line-height: 1.7;
+  line-height: 1.45;
   color: var(--text);
-  white-space: pre-wrap;
+  white-space: normal;
   overflow-y: auto;
   height: 90px;
+}
+#briefing-text::-webkit-scrollbar { width: 4px; }
+#briefing-text::-webkit-scrollbar-thumb { background: var(--border); }
+.briefing-row {
+  padding: 3px 0 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.briefing-step {
+  color: var(--yellow);
+  font-weight: bold;
+}
+.briefing-body {
+  color: var(--text);
 }
 #stats-box {
   display: flex;

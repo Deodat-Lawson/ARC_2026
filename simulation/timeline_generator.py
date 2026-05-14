@@ -27,6 +27,7 @@ from arc_core.agents.decision_hub import DecisionHub
 from arc_core.agents.edge_agent import EdgeAgent
 from arc_core.bridge.scenario_adapter import ScenarioAdapter
 from arc_core.config import AgentTask, AgentType, HealthStatus
+from simulation.road_network import RoadNetwork, RouteState
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -34,12 +35,17 @@ from arc_core.config import AgentTask, AgentType, HealthStatus
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENARIO_PATH = _REPO_ROOT / "ARC_2026-arc-lite-2d-demo" / "scenario_001.json"
 OUTPUT_PATH   = _REPO_ROOT / "demo_player" / "timeline.json"
+ROAD_GRAPH_PATH = _REPO_ROOT / "simulation" / "data" / "firenze_300m_roads.json"
 TOTAL_STEPS   = 200
 CELL_SIZE_M   = 10.0
 DYNAMIC_OBSTACLE_SEED = 20260514
-DYNAMIC_OBSTACLE_INTERVAL = 25
-DYNAMIC_OBSTACLE_START = 20
+DYNAMIC_OBSTACLE_INTERVAL = 12
+DYNAMIC_OBSTACLE_START = 18
 DYNAMIC_OBSTACLE_MAX = 8
+DYNAMIC_OBSTACLE_SPAWN_MIN = 1
+DYNAMIC_OBSTACLE_SPAWN_MAX = 2
+BALLOON_DEPLOY_RADIUS_CELLS = 1.5
+BALLOON_MONITOR_RANGE_CELLS = 12.0
 
 # ---------------------------------------------------------------------------
 # Gemma 4 API 接口层（Mock / Real 可切换）
@@ -153,7 +159,11 @@ def _step_toward(
     )
 
 
-def _calc_comm_coverage(agents: List[EdgeAgent], map_size: List[int]) -> float:
+def _calc_comm_coverage(
+    agents: List[EdgeAgent],
+    map_size: List[int],
+    balloon_states: Optional[Dict[str, dict]] = None,
+) -> float:
     """Estimate % of map cells covered by any agent's communication range."""
     cols, rows = map_size
     covered = 0
@@ -161,7 +171,13 @@ def _calc_comm_coverage(agents: List[EdgeAgent], map_size: List[int]) -> float:
         for col in range(cols):
             cx, cy = col * CELL_SIZE_M, row * CELL_SIZE_M
             for agent in agents:
-                if (agent.health_status != HealthStatus.OFFLINE
+                balloon_state = (balloon_states or {}).get(agent.agent_id, {})
+                balloon_inactive = (
+                    agent.agent_type == AgentType.BALLOON
+                    and balloon_state.get("status") != "deployed"
+                )
+                if (not balloon_inactive
+                        and agent.health_status != HealthStatus.OFFLINE
                         and agent.position.distance_2d(Coordinate3D(cx, cy)) <= agent.comm_range_m):
                     covered += 1
                     break
@@ -199,37 +215,47 @@ def _make_dynamic_obstacle_schedule(
         steps,
         DYNAMIC_OBSTACLE_INTERVAL,
     ))
-    rng.shuffle(candidate_steps)
-    spawn_steps = sorted(candidate_steps[:DYNAMIC_OBSTACLE_MAX])
+    spawn_steps = candidate_steps[:DYNAMIC_OBSTACLE_MAX]
 
-    for idx, spawn_step in enumerate(spawn_steps, start=1):
-        loc = None
-        for _ in range(200):
-            c = rng.randint(8, max(8, cols - 9))
-            r = rng.randint(8, max(8, rows - 9))
-            if (c, r) in occupied:
+    idx = 1
+    for spawn_step in spawn_steps:
+        for _ in range(rng.randint(DYNAMIC_OBSTACLE_SPAWN_MIN, DYNAMIC_OBSTACLE_SPAWN_MAX)):
+            loc = None
+            for _attempt in range(300):
+                c = rng.randint(2, max(2, cols - 3))
+                r = rng.randint(2, max(2, rows - 3))
+                if (c, r) in occupied:
+                    continue
+                # Keep the initial base area open enough for launch.
+                if c < 6 and r < 6:
+                    continue
+                loc = [c, r]
+                occupied.add((c, r))
+                break
+            if loc is None:
                 continue
-            # Keep the two bases from being sealed immediately.
-            if (c < 10 and r < 10) or (c > cols - 12 and r > rows - 12):
-                continue
-            loc = [c, r]
-            occupied.add((c, r))
-            break
-        if loc is None:
-            continue
 
-        obstacle = {
-            "id": f"DYN{idx:02d}",
-            "location": loc,
-            "repair_cost": rng.randint(45, 120),
-            "clear_progress": 0,
-            "clear_rate": rng.randint(12, 24),
-            "status": "blocked",
-            "dynamic": True,
-            "spawn_step": spawn_step,
-            "reason": rng.choice(["aftershock", "debris_slide", "vehicle_pileup", "fire_spread"]),
-        }
-        schedule.setdefault(spawn_step, []).append(obstacle)
+            obstacle = {
+                "id": f"DYN{idx:02d}",
+                "location": loc,
+                "repair_cost": None,
+                "clear_progress": 0,
+                "clear_rate": 0,
+                "status": "blocked",
+                "clearable": False,
+                "dynamic": True,
+                "spawn_step": spawn_step,
+                "reason": rng.choice([
+                    "aftershock",
+                    "debris_slide",
+                    "vehicle_pileup",
+                    "fire_spread",
+                    "road_collapse",
+                    "gas_leak",
+                ]),
+            }
+            schedule.setdefault(spawn_step, []).append(obstacle)
+            idx += 1
 
     return schedule
 
@@ -240,14 +266,174 @@ def _generate_briefing(
     victims_raw: Dict[str, dict],
     rescued: int,
     sacrificed: int,
+    balloon_states: Optional[Dict[str, dict]] = None,
 ) -> str:
-    alive = [a for a in agents if a.health_status != HealthStatus.OFFLINE]
+    alive = [
+        a for a in agents
+        if a.health_status != HealthStatus.OFFLINE
+        and not (
+            a.agent_type == AgentType.BALLOON
+            and (balloon_states or {}).get(a.agent_id, {}).get("status") != "deployed"
+        )
+    ]
     active_victims = [v for v in victims_raw.values() if v.get("status") not in ("rescued", "dead")]
     return (
         f"[Step {step}] 活跃无人器 {len(alive)} 台，"
         f"待救幸存者 {len(active_victims)} 人，"
         f"已救援 {rescued} 人，已牺牲 {sacrificed} 台无人器。"
     )
+
+
+def _grid_xy(agent: EdgeAgent) -> Tuple[float, float]:
+    return (agent.position.x / CELL_SIZE_M, agent.position.y / CELL_SIZE_M)
+
+
+def _choose_balloon_deploy_target(map_data: dict, map_size: List[int]) -> List[float]:
+    dead_zones = map_data.get("communication_dead_zones", [])
+    if dead_zones:
+        return [float(v) for v in dead_zones[0].get("center", [map_size[0] / 2, map_size[1] / 2])]
+    risk_zones = map_data.get("risk_zones", [])
+    if risk_zones:
+        return [float(v) for v in risk_zones[0].get("center", [map_size[0] / 2, map_size[1] / 2])]
+    return [map_size[0] / 2, map_size[1] / 2]
+
+
+def _init_balloon_states(
+    raw_agents: List[dict],
+    agents: List[EdgeAgent],
+    map_data: dict,
+    map_size: List[int],
+) -> Dict[str, dict]:
+    """Initial balloon state: carried by UGV/UAV until deployed at a priority area."""
+    balloons = [a for a in agents if a.agent_type == AgentType.BALLOON]
+    carriers = (
+        [a for a in agents if a.agent_type == AgentType.UGV]
+        + [a for a in agents if a.agent_type == AgentType.UAV]
+    )
+    deploy_target = _choose_balloon_deploy_target(map_data, map_size)
+    states: Dict[str, dict] = {}
+
+    for idx, balloon in enumerate(balloons):
+        carrier = carriers[idx % len(carriers)] if carriers else None
+        raw = next((a for a in raw_agents if a.get("id") == balloon.agent_id), {})
+        status = raw.get("deployment_status", "carried" if carrier else "stored")
+        if status == "not_deployed":
+            status = "carried" if carrier else "stored"
+
+        states[balloon.agent_id] = {
+            "status": status,
+            "carrier_id": carrier.agent_id if carrier else None,
+            "deployment_target": deploy_target,
+            "deployed_step": None,
+            "comm_restored": False,
+        }
+        if carrier:
+            balloon.position = Coordinate3D(carrier.position.x, carrier.position.y, 20.0)
+        balloon.current_task = AgentTask.DEPLOY_BALLOON if status != "deployed" else AgentTask.RELAY
+    return states
+
+
+def _find_agent(agents: List[EdgeAgent], agent_id: Optional[str]) -> Optional[EdgeAgent]:
+    if not agent_id:
+        return None
+    return next((a for a in agents if a.agent_id == agent_id), None)
+
+
+def _sync_carried_balloons(agents: List[EdgeAgent], balloon_states: Dict[str, dict]) -> None:
+    for balloon_id, state in balloon_states.items():
+        if state.get("status") == "deployed":
+            continue
+        balloon = _find_agent(agents, balloon_id)
+        carrier = _find_agent(agents, state.get("carrier_id"))
+        if balloon and carrier:
+            balloon.position = Coordinate3D(carrier.position.x, carrier.position.y, 20.0)
+
+
+def _update_balloon_deployments(
+    agents: List[EdgeAgent],
+    balloon_states: Dict[str, dict],
+    step: int,
+) -> List[dict]:
+    events: List[dict] = []
+    for balloon_id, state in balloon_states.items():
+        balloon = _find_agent(agents, balloon_id)
+        carrier = _find_agent(agents, state.get("carrier_id"))
+        if balloon is None:
+            continue
+
+        if state.get("status") != "deployed" and carrier is not None:
+            tx, ty = state["deployment_target"]
+            cx, cy = _grid_xy(carrier)
+            if _grid_dist(cx, cy, tx, ty) <= BALLOON_DEPLOY_RADIUS_CELLS:
+                state["status"] = "deployed"
+                state["deployed_step"] = step
+                carrier.current_task = AgentTask.RESCUE
+                balloon.current_task = AgentTask.RELAY
+                balloon.position = Coordinate3D(tx * CELL_SIZE_M, ty * CELL_SIZE_M, 200.0)
+                events.append({
+                    "type": "balloon_deployed",
+                    "description": (
+                        f"🎈 {balloon_id} deployed by {carrier.agent_id} "
+                        f"at priority relay zone {state['deployment_target']}"
+                    ),
+                    "agents_involved": [carrier.agent_id, balloon_id],
+                })
+            else:
+                balloon.position = Coordinate3D(carrier.position.x, carrier.position.y, 20.0)
+
+        if (
+            state.get("status") == "deployed"
+            and state.get("deployed_step") is not None
+            and not state.get("comm_restored")
+            and step >= int(state["deployed_step"]) + 3
+        ):
+            state["comm_restored"] = True
+            events.append({
+                "type": "comm_restored",
+                "description": f"📡 External comm restored via {balloon_id} relay",
+                "agents_involved": [balloon_id],
+            })
+    return events
+
+
+def _balloon_monitor_targets(
+    agents: List[EdgeAgent],
+    balloon_states: Dict[str, dict],
+    victims_raw: Dict[str, dict],
+) -> List[str]:
+    discovered: List[str] = []
+    for balloon_id, state in balloon_states.items():
+        if state.get("status") != "deployed":
+            continue
+        balloon = _find_agent(agents, balloon_id)
+        if balloon is None:
+            continue
+        bx, by = _grid_xy(balloon)
+        for vid, victim in victims_raw.items():
+            if victim.get("status") in ("rescued", "dead"):
+                continue
+            vx, vy = victim["location"]
+            if _grid_dist(bx, by, vx, vy) <= BALLOON_MONITOR_RANGE_CELLS:
+                victim.setdefault("discovered_by", balloon_id)
+                discovered.append(vid)
+    return discovered
+
+
+def _blocked_points(blocked_cells: List[dict]) -> List[Tuple[float, float]]:
+    return [
+        (float(b["location"][0]), float(b["location"][1]))
+        for b in blocked_cells
+        if b.get("status") == "blocked"
+    ]
+
+
+def _obstacle_signature(blocked_cells: List[dict]) -> str:
+    active = [
+        f"{b.get('id')}@{b.get('location')}"
+        for b in blocked_cells
+        if b.get("status") == "blocked"
+    ]
+    return "|".join(active)
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +446,7 @@ def _assign_agent_targets(
     blocked_cells: List[dict],
     step: int,
     map_size: List[int],
+    balloon_states: Optional[Dict[str, dict]] = None,
 ) -> Dict[str, Optional[str]]:
     """Return {agent_id: target_victim_id_or_None}."""
     targets: Dict[str, Optional[str]] = {}
@@ -277,7 +464,7 @@ def _assign_agent_targets(
             targets[agent.agent_id] = None
             continue
         if agent.agent_type == AgentType.BALLOON:
-            targets[agent.agent_id] = None  # Balloon drifts to center
+            targets[agent.agent_id] = None
         elif agent.agent_type == AgentType.UAV:
             if uav_idx < len(active):
                 targets[agent.agent_id] = active[uav_idx]["id"]
@@ -285,10 +472,15 @@ def _assign_agent_targets(
             else:
                 targets[agent.agent_id] = None
         else:  # UGV
-            # UGV-2 clears blockades for the first 30 steps
-            if agent.agent_id == "UGV-2" and step < 30 and blocked_cells:
-                targets[agent.agent_id] = f"__block_{blocked_cells[0]['id']}"
-            elif ugv_idx < len(active):
+            carried_balloon = next((
+                balloon_id for balloon_id, state in (balloon_states or {}).items()
+                if state.get("carrier_id") == agent.agent_id
+                and state.get("status") != "deployed"
+            ), None)
+            if carried_balloon:
+                targets[agent.agent_id] = f"__deploy_balloon_{carried_balloon}"
+                continue
+            if ugv_idx < len(active):
                 targets[agent.agent_id] = active[min(ugv_idx, len(active) - 1)]["id"]
                 ugv_idx += 1
             else:
@@ -303,9 +495,12 @@ def _move_agents(
     blocked_cells: List[dict],
     map_size: List[int],
     step: int,
+    road_network: Optional[RoadNetwork] = None,
+    road_route_cache: Optional[Dict[str, RouteState]] = None,
+    balloon_states: Optional[Dict[str, dict]] = None,
 ):
     map_center = (map_size[0] / 2, map_size[1] / 2)
-    blocked_set = {b["id"]: b for b in blocked_cells}
+    obstacle_signature = _obstacle_signature(blocked_cells)
 
     for agent in agents:
         if agent.health_status == HealthStatus.OFFLINE:
@@ -314,40 +509,72 @@ def _move_agents(
         speed = agent.max_speed_mps / CELL_SIZE_M  # cells per step
 
         if agent.agent_type == AgentType.BALLOON:
-            # Drift to map center, then hover with micro-drift
-            tx, ty = map_center
-            cur_cx = agent.position.x / CELL_SIZE_M
-            cur_cy = agent.position.y / CELL_SIZE_M
-            if _grid_dist(cur_cx, cur_cy, tx, ty) > 0.5:
-                agent.position = _step_toward(agent.position, tx, ty, speed)
+            state = (balloon_states or {}).get(agent.agent_id, {})
+            if state.get("status") != "deployed":
+                carrier = _find_agent(agents, state.get("carrier_id"))
+                if carrier:
+                    agent.position = Coordinate3D(carrier.position.x, carrier.position.y, 20.0)
             else:
-                # Micro hover drift
-                agent.position = Coordinate3D(
-                    agent.position.x + random.uniform(-0.5, 0.5),
-                    agent.position.y + random.uniform(-0.5, 0.5),
-                    agent.position.z,
-                )
+                tx, ty = state.get("deployment_target", map_center)
+                agent.position = Coordinate3D(tx * CELL_SIZE_M, ty * CELL_SIZE_M, 200.0)
             continue
 
         target_id = targets.get(agent.agent_id)
         if target_id is None:
+            if road_route_cache is not None:
+                road_route_cache.pop(agent.agent_id, None)
             continue
 
-        # Clearing blockade
-        if target_id.startswith("__block_"):
-            block_id = target_id[len("__block_"):]
-            if block_id in blocked_set:
-                b = blocked_set[block_id]
-                tx, ty = b["location"]
-                agent.position = _step_toward(agent.position, tx, ty, speed)
+        if target_id.startswith("__deploy_balloon_"):
+            balloon_id = target_id[len("__deploy_balloon_"):]
+            state = (balloon_states or {}).get(balloon_id)
+            if state:
+                tx, ty = state["deployment_target"]
+                agent.current_task = AgentTask.DEPLOY_BALLOON
+                agent.position = _step_agent(
+                    agent, tx, ty, speed, f"{target_id}|{obstacle_signature}",
+                    road_network, road_route_cache, blocked_cells
+                )
             continue
 
         # Move toward victim
         victim = victims_raw.get(target_id)
         if victim is None or victim.get("status") in ("rescued", "dead"):
+            if road_route_cache is not None:
+                road_route_cache.pop(agent.agent_id, None)
             continue
         tx, ty = victim["location"]
-        agent.position = _step_toward(agent.position, tx, ty, speed)
+        agent.position = _step_agent(
+            agent, tx, ty, speed, f"{target_id}|{obstacle_signature}",
+            road_network, road_route_cache, blocked_cells
+        )
+
+
+def _step_agent(
+    agent: EdgeAgent,
+    tx: float,
+    ty: float,
+    speed_cells: float,
+    target_key: str,
+    road_network: Optional[RoadNetwork],
+    road_route_cache: Optional[Dict[str, RouteState]],
+    blocked_cells: Optional[List[dict]] = None,
+) -> Coordinate3D:
+    if agent.agent_type != AgentType.UGV or road_network is None or not road_network.available:
+        return _step_toward(agent.position, tx, ty, speed_cells)
+
+    cur_grid = (agent.position.x / CELL_SIZE_M, agent.position.y / CELL_SIZE_M)
+    next_grid, route_state = road_network.route_step(
+        cur_grid,
+        (tx, ty),
+        speed_cells,
+        target_key,
+        road_route_cache.get(agent.agent_id) if road_route_cache is not None else None,
+        blocked_points=_blocked_points(blocked_cells or []),
+    )
+    if road_route_cache is not None:
+        road_route_cache[agent.agent_id] = route_state
+    return Coordinate3D(next_grid[0] * CELL_SIZE_M, next_grid[1] * CELL_SIZE_M, agent.position.z)
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +599,18 @@ def run(
     risk_zones    = map_data.get("risk_zones", [])
     dead_zones    = map_data.get("communication_dead_zones", [])
     dynamic_obstacles = _make_dynamic_obstacle_schedule(map_size, blocked_cells, steps)
+    road_network = RoadNetwork.from_file(ROAD_GRAPH_PATH) if ROAD_GRAPH_PATH.exists() else None
+    road_route_cache: Dict[str, RouteState] = {}
+    if road_network and road_network.available:
+        print(
+            f"[timeline_generator] Road network loaded: "
+            f"{len(road_network.graph)} nodes, {len(road_network.segments)} segments"
+        )
+    else:
+        print("[timeline_generator] Road network unavailable; UGVs use direct grid movement.")
+    balloon_states = _init_balloon_states(
+        raw.get("agents", []), agents, map_data, map_size
+    )
 
     # Mutable victim state (keep hp / damage_per_step from raw JSON)
     victims_raw: Dict[str, dict] = {
@@ -507,37 +746,41 @@ def run(
 
         # ── 3. Agent movement ─────────────────────────────────────────────
         targets = _assign_agent_targets(
-            agents, victims_raw, blocked_cells, step, map_size
+            agents, victims_raw, blocked_cells, step, map_size, balloon_states=balloon_states
         )
-        _move_agents(agents, victims_raw, targets, blocked_cells, map_size, step)
+        _move_agents(
+            agents,
+            victims_raw,
+            targets,
+            blocked_cells,
+            map_size,
+            step,
+            road_network=road_network,
+            road_route_cache=road_route_cache,
+            balloon_states=balloon_states,
+        )
+        _sync_carried_balloons(agents, balloon_states)
+        hub_events.extend(_update_balloon_deployments(agents, balloon_states, step))
+        monitored_targets = _balloon_monitor_targets(agents, balloon_states, victims_raw)
+        if monitored_targets and step % 10 == 0:
+            hub_events.append({
+                "type": "comm_restored",
+                "description": (
+                    f"📡 Balloon relay monitoring targets: "
+                    f"{', '.join(sorted(set(monitored_targets))[:4])}"
+                ),
+                "agents_involved": [
+                    bid for bid, state in balloon_states.items()
+                    if state.get("status") == "deployed"
+                ],
+            })
 
         # ── 4. Battery drain ──────────────────────────────────────────────
         for agent in agents:
             if agent.health_status != HealthStatus.OFFLINE:
                 agent._drain_battery()
 
-        # ── 5. Blockade clearing (UGV-2) ──────────────────────────────────
-        for agent in agents:
-            if agent.agent_id == "UGV-2" and step < 30:
-                for b in blocked_cells:
-                    if b.get("status") == "blocked":
-                        bx, by = b["location"]
-                        dist = _grid_dist(
-                            agent.position.x / CELL_SIZE_M,
-                            agent.position.y / CELL_SIZE_M,
-                            bx, by,
-                        )
-                        if dist < 1.5:
-                            b["clear_progress"] = min(
-                                100, b.get("clear_progress", 0) + b.get("clear_rate", 20)
-                            )
-                            if b["clear_progress"] >= 100:
-                                b["status"] = "cleared"
-                                hub_events.append({
-                                    "type": "blockade_cleared",
-                                    "description": f"🚧 障碍 {b['id']} 已清除，地面通道开放",
-                                    "agents_involved": ["UGV-2"],
-                                })
+        # ── 5. Blockades are permanent; UGVs must route around them ───────
 
         # ── 6. Rescue check ───────────────────────────────────────────────
         for vid, victim in victims_raw.items():
@@ -594,20 +837,7 @@ def run(
                         "agents_involved": [],
                     })
 
-        # ── 8. Balloon comm relay milestone ───────────────────────────────
-        balloon = next((a for a in agents if a.agent_type == AgentType.BALLOON), None)
-        if balloon and step == 15:
-            hub_events.append({
-                "type": "balloon_deployed",
-                "description": "🎈 Balloon-1 deployed — comm coverage +40%",
-                "agents_involved": ["Balloon-1"],
-            })
-        if balloon and step == 50:
-            hub_events.append({
-                "type": "comm_restored",
-                "description": "📡 External comm restored via Balloon-1 relay",
-                "agents_involved": ["Balloon-1"],
-            })
+        # ── 8. Balloon relay/monitoring state is event-driven ─────────────
 
         # ── 9. Serialize frame ────────────────────────────────────────────
         hp_max_map = {
@@ -630,6 +860,7 @@ def run(
 
         frame_agents = []
         for agent in agents:
+            balloon_state = balloon_states.get(agent.agent_id, {})
             frame_agents.append({
                 **agent.to_dict(),
                 "location": [
@@ -637,6 +868,9 @@ def run(
                     round(agent.position.y / CELL_SIZE_M, 2),
                 ],
                 "target": targets.get(agent.agent_id),
+                "deployment_status": balloon_state.get("status"),
+                "carrier_id": balloon_state.get("carrier_id"),
+                "deployment_target": balloon_state.get("deployment_target"),
                 "thinking": "",
             })
 
@@ -651,16 +885,21 @@ def run(
             ],
             "events": hub_events,
             "briefing": _generate_briefing(
-                step, agents, victims_raw, rescued_count, sacrificed_count
+                step, agents, victims_raw, rescued_count, sacrificed_count, balloon_states
             ),
             "thinking_log": thinking_log,
             "stats": {
                 "rescued": rescued_count,
                 "sacrificed": sacrificed_count,
                 "active_agents": sum(
-                    1 for a in agents if a.health_status != HealthStatus.OFFLINE
+                    1 for a in agents
+                    if a.health_status != HealthStatus.OFFLINE
+                    and not (
+                        a.agent_type == AgentType.BALLOON
+                        and balloon_states.get(a.agent_id, {}).get("status") != "deployed"
+                    )
                 ),
-                "comm_coverage_pct": _calc_comm_coverage(agents, map_size),
+                "comm_coverage_pct": _calc_comm_coverage(agents, map_size, balloon_states),
             },
         })
 
@@ -675,6 +914,13 @@ def run(
     # ── Output ────────────────────────────────────────────────────────────
     output_data = {
         "scenario_id": raw.get("scenario_id", "urban_quake_001"),
+        "map": {
+            "size": map_size,
+            "cell_size_m": map_data.get("cell_size_m", CELL_SIZE_M),
+            "base": map_data.get("base", [2, 2]),
+            "risk_zones": risk_zones,
+            "communication_dead_zones": dead_zones,
+        },
         "total_steps": len(frames),
         "frames": frames,
     }
