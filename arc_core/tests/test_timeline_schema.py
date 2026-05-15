@@ -22,7 +22,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT      = Path(__file__).resolve().parent.parent.parent
-SCENARIO_PATH  = REPO_ROOT / "ARC_2026-arc-lite-2d-demo" / "scenario_001.json"
+SCENARIO_PATH  = REPO_ROOT / "arc_core" / "simulation" / "data" / "scenario_001.json"
 TIMELINE_PATH  = REPO_ROOT / "demo_player" / "timeline.json"
 
 VALID_AGENT_TYPES   = {"uav", "ugv", "balloon", "drone", "ground_rescue", "ground_clear"}

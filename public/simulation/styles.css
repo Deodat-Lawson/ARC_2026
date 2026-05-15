@@ -790,14 +790,41 @@ input[type="range"]::-moz-range-thumb {
   justify-content: center;
 }
 
+.canvas-frame #tacticalBasemap {
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(4, 6, 10, 0.48), rgba(4, 6, 10, 0.48)),
+    #0a1018;
+}
+
+.canvas-frame #tacticalBasemap .maplibregl-canvas {
+  filter: invert(1) hue-rotate(178deg) saturate(0.72) contrast(1.06) brightness(0.64);
+}
+
+.canvas-frame #tacticalBasemap .maplibregl-control-container {
+  display: none;
+}
+
 canvas#simCanvas {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  background: #04060a;
+  background: transparent;
   border: none;
   aspect-ratio: 1;
 }
@@ -805,6 +832,7 @@ canvas#simCanvas {
 .canvas-scanlines {
   position: absolute;
   inset: 0;
+  z-index: 2;
   pointer-events: none;
   background: repeating-linear-gradient(
     0deg,
@@ -814,6 +842,13 @@ canvas#simCanvas {
     transparent 4px
   );
   mix-blend-mode: screen;
+}
+
+.canvas-corners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
 }
 
 .canvas-corners span {

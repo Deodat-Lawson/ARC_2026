@@ -39,7 +39,7 @@ from lite_sim.road_network import RoadNetwork, RouteState
 # Paths (timeline_generator.py → lite_sim → ARC_2026-arc-lite-2d-demo → repo root)
 # ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SCENARIO_PATH = _REPO_ROOT / "ARC_2026-arc-lite-2d-demo" / "scenario_001.json"
+SCENARIO_PATH = _REPO_ROOT / "arc_core" / "simulation" / "data" / "scenario_001.json"
 OUTPUT_PATH   = _REPO_ROOT / "demo_player" / "timeline.json"
 ROAD_GRAPH_PATH = Path(__file__).resolve().parent / "data" / "firenze_300m_roads.json"
 TOTAL_STEPS   = 200

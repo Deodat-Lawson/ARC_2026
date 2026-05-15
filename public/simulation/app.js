@@ -58,16 +58,296 @@ const TOAST_STYLES = {
 };
 function lerp(a, b, t) { return a + (b - a) * Math.min(1, Math.max(0, t)); }
 
+/* ------------------------------------------------------------------------- */
+/* Tactical basemap — MapLibre + PMTiles (Firenze), aligned with demo_player */
+/* ------------------------------------------------------------------------- */
+const TACTICAL_PMTILES_REMOTE = "https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles";
+const GEO_BOUNDS_300M = {
+  label: "Firenze Centro 300m x 300m",
+  southWest: [43.76825, 11.25393],
+  northEast: [43.77095, 11.25767],
+};
+
+function resolveTacticalPmtilesUrl() {
+  try {
+    const o = window.location?.origin;
+    if (o && o !== "null" && window.location?.protocol !== "file:") {
+      return `${o}/api/pmtiles-proxy`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return TACTICAL_PMTILES_REMOTE;
+}
+
+let tacticalPmtilesUrl = resolveTacticalPmtilesUrl();
+let tacticalBaseMap = null;
+let tacticalBaseMapReady = false;
+let tacticalPmtilesProtoInstalled = false;
+let tacticalPmtilesProtocol = null;
+let tacticalRoadSegments = [];
+let tacticalRoadNetworkReady = false;
+
+function getTacticalGridDims() {
+  if (state?.map?.size) return state.map.size;
+  return [30, 30];
+}
+
+function tacticalLngLatToGrid(lng, lat) {
+  const [cols, rows] = getTacticalGridDims();
+  const west = GEO_BOUNDS_300M.southWest[1];
+  const east = GEO_BOUNDS_300M.northEast[1];
+  const north = GEO_BOUNDS_300M.northEast[0];
+  const south = GEO_BOUNDS_300M.southWest[0];
+  return {
+    x: ((lng - west) / (east - west)) * cols,
+    y: ((north - lat) / (north - south)) * rows,
+  };
+}
+
+function syncTacticalBasemapSize() {
+  const el = document.getElementById("tacticalBasemap");
+  if (!el || !canvas) return;
+  const w = Math.max(1, Math.floor(canvas.clientWidth));
+  const h = Math.max(1, Math.floor(canvas.clientHeight));
+  el.style.width = `${w}px`;
+  el.style.height = `${h}px`;
+  if (tacticalBaseMap) {
+    tacticalBaseMap.resize();
+    tacticalBaseMap.fitBounds(
+      [
+        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+      ],
+      { padding: 0, duration: 0 },
+    );
+  }
+}
+
+function makeTacticalBasemapStyle() {
+  return {
+    version: 8,
+    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+    sources: {
+      protomaps: {
+        type: "vector",
+        url: `pmtiles://${tacticalPmtilesUrl}`,
+        attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+      },
+    },
+    layers: [
+      {
+        id: "pm-mask",
+        source: "protomaps",
+        "source-layer": "mask",
+        type: "fill",
+        paint: { "fill-color": "#0f1726" },
+      },
+      {
+        id: "pm-earth",
+        source: "protomaps",
+        "source-layer": "earth",
+        type: "fill",
+        paint: { "fill-color": "#121d2e" },
+      },
+      {
+        id: "pm-water",
+        source: "protomaps",
+        "source-layer": "water",
+        type: "fill",
+        paint: { "fill-color": "#164969", "fill-opacity": 0.85 },
+      },
+      {
+        id: "pm-landuse",
+        source: "protomaps",
+        "source-layer": "landuse",
+        type: "fill",
+        paint: { "fill-color": "#1b2940", "fill-opacity": 0.72 },
+      },
+      {
+        id: "pm-buildings",
+        source: "protomaps",
+        "source-layer": "buildings",
+        type: "fill",
+        paint: {
+          "fill-color": "#445873",
+          "fill-opacity": 0.68,
+          "fill-outline-color": "#6d86a8",
+        },
+      },
+      {
+        id: "pm-roads",
+        source: "protomaps",
+        "source-layer": "roads",
+        type: "line",
+        paint: {
+          "line-color": "#a9bdd5",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 16, 3.2, 18, 5.6],
+          "line-opacity": 0.82,
+        },
+      },
+      {
+        id: "pm-road-labels",
+        source: "protomaps",
+        "source-layer": "roads",
+        type: "symbol",
+        filter: ["has", "name"],
+        layout: {
+          "symbol-placement": "line",
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9, 16, 11, 18, 13],
+          "text-padding": 2,
+        },
+        paint: {
+          "text-color": "#c9d6e7",
+          "text-halo-color": "#07101d",
+          "text-halo-width": 1.2,
+          "text-opacity": 0.76,
+        },
+      },
+    ],
+  };
+}
+
+function flattenTacticalRoadCoords(geometry) {
+  if (!geometry) return [];
+  if (geometry.type === "LineString") return [geometry.coordinates];
+  if (geometry.type === "MultiLineString") return geometry.coordinates;
+  return [];
+}
+
+function tacticalSegmentInMap(a, b) {
+  const [cols, rows] = getTacticalGridDims();
+  const margin = 1;
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxY = Math.max(a.y, b.y);
+  return maxX >= -margin && minX <= cols + margin && maxY >= -margin && minY <= rows + margin;
+}
+
+function rebuildTacticalRoadNetwork() {
+  if (!tacticalBaseMap || !tacticalBaseMapReady) return;
+  let features = [];
+  try {
+    features = tacticalBaseMap.querySourceFeatures("protomaps", { sourceLayer: "roads" });
+  } catch (err) {
+    console.warn("[tactical basemap] road query failed:", err);
+    return;
+  }
+  const segments = [];
+  for (const feature of features) {
+    for (const line of flattenTacticalRoadCoords(feature.geometry)) {
+      for (let i = 1; i < line.length; i += 1) {
+        const a = tacticalLngLatToGrid(line[i - 1][0], line[i - 1][1]);
+        const b = tacticalLngLatToGrid(line[i][0], line[i][1]);
+        if (tacticalSegmentInMap(a, b)) segments.push({ a, b });
+      }
+    }
+  }
+  if (segments.length) {
+    tacticalRoadSegments = segments;
+    tacticalRoadNetworkReady = true;
+    window.__arcSimulationRoadSegments = tacticalRoadSegments;
+  }
+}
+
+function installTacticalPmtilesProtocol() {
+  const ml = globalThis.maplibregl;
+  const Pm = globalThis.pmtiles;
+  if (!ml || !Pm) return;
+  if (!tacticalPmtilesProtoInstalled) {
+    tacticalPmtilesProtocol = new Pm.Protocol();
+    ml.addProtocol("pmtiles", tacticalPmtilesProtocol.tile);
+    tacticalPmtilesProtoInstalled = true;
+  }
+  tacticalPmtilesProtocol.add(new Pm.PMTiles(tacticalPmtilesUrl));
+}
+
+function initTacticalBasemap() {
+  const ml = globalThis.maplibregl;
+  const Pm = globalThis.pmtiles;
+  if (tacticalBaseMap || !ml || !Pm) return;
+  const mount = document.getElementById("tacticalBasemap");
+  if (!mount) return;
+
+  tacticalPmtilesUrl = resolveTacticalPmtilesUrl();
+  try {
+    installTacticalPmtilesProtocol();
+    tacticalBaseMap = new ml.Map({
+      container: mount,
+      style: makeTacticalBasemapStyle(),
+      bounds: [
+        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+      ],
+      fitBoundsOptions: { padding: 0, duration: 0 },
+      interactive: false,
+      attributionControl: false,
+    });
+    tacticalBaseMap.on("load", () => {
+      tacticalBaseMapReady = true;
+      tacticalBaseMap.fitBounds(
+        [
+          [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+          [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+        ],
+        { padding: 0, duration: 0 },
+      );
+      syncTacticalBasemapSize();
+    });
+    tacticalBaseMap.on("idle", rebuildTacticalRoadNetwork);
+    tacticalBaseMap.on("error", (e) => {
+      console.warn("[tactical basemap] map error:", e?.error || e);
+    });
+  } catch (err) {
+    console.warn("[tactical basemap] initialization failed:", err);
+  }
+}
+
+function wireTacticalBasemapResize() {
+  const frame = canvas?.closest(".canvas-frame");
+  if (!frame || typeof ResizeObserver === "undefined") return;
+  const ro = new ResizeObserver(() => syncTacticalBasemapSize());
+  ro.observe(frame);
+}
+
 let defaultScenario;
 
-fetch("/simulation/scenario_001.json")
-  .then((response) => response.json())
+function resolveScenarioFilename() {
+  const params = new URLSearchParams(window.location.search);
+  let raw = (params.get("scenario") || params.get("s") || "scenario_001.json").trim();
+  if (/^\d+$/.test(raw)) {
+    raw = `scenario_${String(parseInt(raw, 10)).padStart(3, "0")}.json`;
+  } else if (raw && !raw.endsWith(".json")) {
+    raw = `${raw}.json`;
+  }
+  if (!raw || /[\\/]/.test(raw) || raw.startsWith(".")) {
+    raw = "scenario_001.json";
+  }
+  return raw;
+}
+
+const scenarioFile = resolveScenarioFilename();
+fetch(`/simulation/${encodeURIComponent(scenarioFile)}`)
+  .then((response) => {
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response.json();
+  })
   .then((scenario) => {
     defaultScenario = scenario;
     initialScenario = synthesizeScenario(scenario, readConfig());
     init3D(initialScenario);
     reset();
     setupCommandCenter();
+  })
+  .catch((err) => {
+    console.error(`[simulation] Failed to load /simulation/${scenarioFile}:`, err);
+    const id = document.getElementById("briefText");
+    if (id) {
+      id.textContent = `Could not load scenario file “${scenarioFile}”. Use ?scenario=scenario_002.json or check the console.`;
+    }
   });
 
 function clone(value) {
@@ -92,6 +372,7 @@ function reset() {
   stopAuto();
   renderOnce();
   startRafLoop();
+  if (tacticalBaseMapReady) rebuildTacticalRoadNetwork();
 }
 
 function recordSurvivalSample() {
@@ -400,9 +681,9 @@ function drawMap(t) {
 }
 
 function drawGrid(cols, rows, cell) {
-  ctx.fillStyle = "#04060a";
+  ctx.fillStyle = tacticalBaseMapReady ? "rgba(4, 6, 10, 0.40)" : "#04060a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+  ctx.strokeStyle = tacticalBaseMapReady ? "rgba(93, 255, 180, 0.06)" : "rgba(255, 255, 255, 0.04)";
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
     ctx.beginPath();
@@ -416,7 +697,8 @@ function drawGrid(cols, rows, cell) {
     ctx.lineTo(canvas.width, i * cell);
     ctx.stroke();
   }
-  ctx.fillStyle = "rgba(60, 80, 110, 0.32)";
+  const arterialAlpha = tacticalBaseMapReady ? 0.14 : 0.32;
+  ctx.fillStyle = `rgba(60, 80, 110, ${arterialAlpha})`;
   for (let y = 2; y < rows; y += 5) ctx.fillRect(0, y * cell + cell * 0.28, canvas.width, cell * 0.44);
   for (let x = 2; x < cols; x += 6) ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, canvas.height);
 }
@@ -2566,3 +2848,7 @@ function setupCommandCenter() {
   // Initial label paint
   updateMissionLabels(readConfig());
 }
+
+initTacticalBasemap();
+wireTacticalBasemapResize();
+requestAnimationFrame(() => syncTacticalBasemapSize());

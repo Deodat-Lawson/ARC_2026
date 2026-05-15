@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="/simulation/styles.css?v=pov-focus">
     <script type="importmap">
       {
@@ -264,11 +265,13 @@
               </div>
               <div class="vp-tags">
                 <span class="panel-tag">REPLAY · LIVE</span>
+                <span class="panel-tag" id="geoGridBadge" title="Protomaps vector basemap · Firenze (ODbL)">300M GEO</span>
                 <span class="panel-tag accent" id="gridBadge">30 × 30</span>
               </div>
             </header>
             <div id="toastLayer" class="toast-layer"></div>
             <div class="canvas-frame">
+              <div id="tacticalBasemap" aria-hidden="true"></div>
               <canvas id="simCanvas" width="720" height="720" aria-label="2D rescue simulation map"></canvas>
               <div class="canvas-scanlines" aria-hidden="true"></div>
               <div class="canvas-corners" aria-hidden="true">
@@ -413,6 +416,8 @@
       </footer>
     </main>
 
+    <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
     <script type="module" src="/simulation/app.js"></script>
   </body>
 </html>
