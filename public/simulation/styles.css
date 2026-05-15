@@ -666,6 +666,129 @@ input[type="range"]::-moz-range-thumb {
 .rail-section.grow { flex: 1; min-height: 0; }
 .rail-section:last-child { border-bottom: none; }
 
+.rail-section.rail-decision {
+  max-height: 260px;
+  flex-shrink: 0;
+}
+.rail-section.rail-legend {
+  flex-shrink: 0;
+  padding-bottom: 10px;
+}
+.rail-section-head.compact-head {
+  margin-bottom: 6px;
+}
+.rail-section-head.compact-head h2 {
+  font-size: 11px;
+}
+
+/* Decision Hub (demo_player-style feed + typewriter rows) */
+.thinking-feed {
+  flex: 1;
+  min-height: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 6px 4px 8px 2px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--fg-dim);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(200, 180, 255, 0.28) transparent;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(200, 180, 255, 0.10);
+  border-radius: var(--radius-sm);
+}
+.thinking-feed::-webkit-scrollbar { width: 4px; }
+.thinking-feed::-webkit-scrollbar-thumb {
+  background: rgba(200, 180, 255, 0.3);
+  border-radius: 999px;
+}
+.thinking-row {
+  padding: 6px 8px 7px;
+  border-bottom: 1px solid rgba(200, 180, 255, 0.08);
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.thinking-row:last-child {
+  border-bottom: none;
+  background: rgba(200, 180, 255, 0.04);
+  border-radius: var(--radius-sm);
+}
+.thinking-step {
+  color: var(--violet);
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 10px;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+.thinking-body {
+  color: rgba(232, 234, 237, 0.82);
+  flex: 1;
+}
+/* blinking cursor appended to last row while typing */
+.thinking-row:last-child .thinking-body::after {
+  content: "▋";
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--violet);
+  animation: thinking-cursor 0.9s step-end infinite;
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+.fleet-legend-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+}
+.fleet-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fleet-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.fleet-dot-square {
+  border-radius: 2px;
+}
+
+/* Commander brief — stacked entries (demo_player briefing-text) */
+.briefing-row {
+  padding: 7px 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 2px solid rgba(255, 217, 93, 0.5);
+  background: rgba(255, 217, 93, 0.03);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-bottom: 6px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.briefing-row:last-child { border-bottom: none; margin-bottom: 0; }
+.briefing-step {
+  color: var(--warn);
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 10px;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+.briefing-body {
+  color: rgba(232, 234, 237, 0.85);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 .rail-section-head {
   display: flex;
   justify-content: space-between;
@@ -1021,15 +1144,18 @@ canvas#simCanvas {
 .toast {
   background: rgba(11, 15, 22, 0.92);
   border: 1px solid var(--line);
-  border-left: 2px solid var(--accent);
+  border-left: 3px solid var(--accent);
   color: var(--fg);
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   font-size: 10px;
   letter-spacing: 0.04em;
+  line-height: 1.45;
   backdrop-filter: blur(8px);
   font-family: var(--mono);
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
   opacity: 0;
 }
 
@@ -1040,12 +1166,18 @@ canvas#simCanvas {
   font-size: 12px;
   line-height: 1.55;
   color: var(--fg-dim);
-  padding-right: 4px;
+  padding: 6px 4px 6px 8px;
   scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-color: rgba(255, 217, 93, 0.25) transparent;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 217, 93, 0.10);
+  border-radius: var(--radius-sm);
 }
 .brief-body::-webkit-scrollbar { width: 4px; }
-.brief-body::-webkit-scrollbar-thumb { background: var(--line-strong); }
+.brief-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 217, 93, 0.28);
+  border-radius: 999px;
+}
 
 #survivalChart {
   width: 100% !important;
@@ -1055,6 +1187,331 @@ canvas#simCanvas {
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+}
+
+/* ── Gemma 4 · Fleet dialogue feed (vertical, newest on top) ─ */
+@keyframes cot-block-enter {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes cot-latest-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(200, 180, 255, 0.14),
+                         0 0 0 0 rgba(200, 180, 255, 0); }
+  50%       { box-shadow: inset 0 0 0 1px rgba(200, 180, 255, 0.40),
+                         0 0 18px rgba(200, 180, 255, 0.08); }
+}
+@keyframes thinking-cursor {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+@keyframes cot-live-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px currentColor; }
+  50%       { opacity: 0.35; box-shadow: none; }
+}
+@keyframes cot-line-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.vp-mission-head {
+  align-items: center;
+}
+.vp-mission-head .cot-carousel-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.cot-slide-meta {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 1.2em;
+}
+.cot-meta-sep { opacity: 0.4; }
+.cot-auto-hint {
+  color: var(--violet);
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+/* ── Viewport ─────────────────────────────────────────────────── */
+.cot-carousel-viewport {
+  flex: 1;
+  min-height: 140px;
+  max-height: 320px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(200, 180, 255, 0.20);
+  border-radius: var(--radius);
+  background: rgba(4, 6, 10, 0.72);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(200, 180, 255, 0.28) transparent;
+  position: relative;
+  box-shadow:
+    inset 0 0 0 1px rgba(200, 180, 255, 0.06),
+    inset 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+.cot-carousel-viewport::-webkit-scrollbar { width: 4px; }
+.cot-carousel-viewport::-webkit-scrollbar-thumb {
+  background: rgba(200, 180, 255, 0.25);
+  border-radius: 999px;
+}
+
+/* ── Feed stack ───────────────────────────────────────────────── */
+.cot-feed-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  width: 100%;
+  gap: 0;
+}
+
+/* ── Heartbeat block ──────────────────────────────────────────── */
+.cot-feed-block {
+  padding: 0;
+  border-bottom: 1px solid rgba(200, 180, 255, 0.08);
+  background: transparent;
+  transition: background 250ms;
+}
+.cot-feed-block:last-child {
+  background: rgba(200, 180, 255, 0.028);
+  animation: cot-latest-pulse 3s ease-in-out infinite;
+}
+
+/* Block header bar — NOT sticky (sticky causes z-index overlap with meta label above) */
+.cot-feed-block-head {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(93, 255, 180, 0.65);
+  margin: 0;
+  padding: 6px 12px 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(93, 255, 180, 0.035);
+  border-bottom: 1px solid rgba(93, 255, 180, 0.09);
+}
+/* live pulse dot */
+.cot-feed-block-head .cot-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent);
+  flex-shrink: 0;
+  animation: cot-live-dot 1.4s ease-in-out infinite;
+}
+/* latest block — brighter header */
+.cot-feed-block:last-child .cot-feed-block-head {
+  color: #b8ffde;
+  background: rgba(93, 255, 180, 0.07);
+  border-bottom-color: rgba(93, 255, 180, 0.18);
+}
+/* LIVE badge shown only on newest block */
+.cot-feed-block .cot-live-badge { display: none; }
+.cot-feed-block:last-child .cot-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+/* ── Section inside block ─────────────────────────────────────── */
+.cot-feed-section {
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.cot-feed-section:last-child { border-bottom: none; }
+
+.cot-feed-section-title {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: rgba(200, 180, 255, 0.55);
+  margin: 0 0 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cot-feed-section-title::before {
+  content: "›";
+  font-size: 11px;
+  color: rgba(200, 180, 255, 0.4);
+  line-height: 1;
+}
+
+/* ── Turn container ───────────────────────────────────────────── */
+.cot-turn {
+  margin-bottom: 10px;
+}
+.cot-feed-section .cot-turn:last-child { margin-bottom: 0; }
+
+/* ── CoT turn (Gemma reasoning block) ────────────────────────── */
+.cot-turn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8.5px;
+  font-family: var(--mono);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--violet);
+  background: rgba(200, 180, 255, 0.08);
+  border: 1px solid rgba(200, 180, 255, 0.22);
+  border-radius: 999px;
+  padding: 2px 8px 2px 5px;
+  margin-bottom: 5px;
+}
+.cot-turn-label .cot-label-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--violet);
+  animation: cot-live-dot 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+/* CoT node id */
+.cot-turn.cot .cot-turn-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--violet);
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.9;
+}
+
+/* CoT bubble — shared base */
+.cot-bubble {
+  border-radius: 0 var(--radius) var(--radius) var(--radius);
+  padding: 8px 11px;
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: rgba(232, 234, 237, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(8, 10, 16, 0.70);
+}
+/* CoT (Gemma reasoning): soft violet tint */
+.cot-turn.cot .cot-bubble {
+  border-left: 2px solid rgba(200, 180, 255, 0.50);
+  background: rgba(18, 14, 30, 0.72);
+  border-color: rgba(200, 180, 255, 0.14);
+}
+
+/* CoT line list — no native bullets, use ::before arrows */
+.cot-line-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cot-line-list li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  animation: cot-line-in 200ms ease both;
+}
+.cot-line-list li::before {
+  content: "›";
+  color: rgba(200, 180, 255, 0.5);
+  font-size: 11px;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
+/* ── Msg turn (radio comms) ───────────────────────────────────── */
+.cot-turn.msg .cot-turn-head {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.cot-callsign {
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+/* Sender callsign — black on light chip (same contrast as receiver) */
+.cot-callsign-out {
+  color: #0a0c10;
+  background: rgba(236, 238, 242, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 2px 7px;
+  border-left: 2px solid #4a9fd4;
+}
+.cot-turn.msg.ugv .cot-callsign-out {
+  border-left-color: #2ebd7a;
+}
+.cot-turn.msg.mesh .cot-callsign-out {
+  border-left-color: #7a8698;
+}
+.cot-arrow {
+  color: rgba(10, 12, 16, 0.45);
+  font-size: 10px;
+}
+/* Receiver callsign — black on light chip so it stays legible on dark chrome */
+.cot-callsign-in {
+  color: #0a0c10;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: rgba(236, 238, 242, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+
+/* ── Msg bubbles: dark background + accent left border only ────── */
+/* Drone → blue left border */
+.cot-turn.msg.drone .cot-bubble {
+  border-left: 2px solid rgba(130, 200, 255, 0.55);
+  background: rgba(6, 10, 18, 0.75);
+  border-color: rgba(130, 200, 255, 0.10);
+  color: rgba(200, 220, 240, 0.90);
+}
+/* UGV → green left border */
+.cot-turn.msg.ugv .cot-bubble {
+  border-left: 2px solid rgba(93, 255, 180, 0.50);
+  background: rgba(6, 14, 10, 0.75);
+  border-color: rgba(93, 255, 180, 0.10);
+  color: rgba(200, 240, 220, 0.90);
+}
+/* Mesh → subtle grey left border */
+.cot-turn.msg.mesh .cot-bubble {
+  border-left: 2px solid rgba(160, 170, 190, 0.28);
+  background: rgba(8, 10, 14, 0.68);
+  border-color: rgba(255, 255, 255, 0.05);
+  color: rgba(180, 190, 205, 0.80);
 }
 
 pre {

@@ -173,7 +173,6 @@
           "type": "ugv",
           "battery": 0.87,
           "health": "nominal",
-          "task": "idle",
           "position": {
             "x": 44.47213595499959,
             "y": 38.94427190999916,
