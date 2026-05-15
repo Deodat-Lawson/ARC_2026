@@ -7,8 +7,7 @@ Endpoints:
   GET  /api/state    — Get current system state
   GET  /api/rescue_log — Get accumulated rescue log
 
-Run:
-  cd D:\\3rd_semester\\ARC_2026
+Run from the repository root:
   python -m arc_core.bridge.arc_bridge
 """
 

@@ -111,7 +111,7 @@ function DemoCta() {
           </p>
         </div>
         <a
-          href="/demo"
+          href="/simulation"
           className="group inline-flex h-12 items-center gap-3 rounded-sm bg-arc-accent px-6 text-sm font-medium tracking-wide text-arc-bg transition-[opacity,gap] hover:opacity-90 hover:gap-4"
         >
           Open the live simulation

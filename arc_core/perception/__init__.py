@@ -1,1 +1,3 @@
-"""Perception layer: disaster detection, life signal sensing, 3D scene reconstruction."""
+from arc_core.perception.gemma_perceiver import GemmaPerceiver, PerceptionResult
+
+__all__ = ["GemmaPerceiver", "PerceptionResult"]

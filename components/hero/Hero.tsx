@@ -6,7 +6,6 @@ import { useIsMobile } from "@/lib/useIsMobile";
 import { HeroFallback } from "./HeroFallback";
 import { HeroHUD } from "./HeroHUD";
 import { PovHUD } from "./PovHUD";
-import { CameraDebugOverlay } from "./CameraDebugOverlay";
 import { SceneMapDebug } from "./SceneMapDebug";
 import { getPovFromUrl, setPovTarget, usePovTarget } from "./missionStore";
 import { HeroOverlay } from "@/components/ui/HeroOverlay";
@@ -51,7 +50,6 @@ export function Hero() {
         <>
           <HeroHUD />
           <PovHUD />
-          <CameraDebugOverlay />
           {showSceneMapDebug && <SceneMapDebug />}
         </>
       )}
