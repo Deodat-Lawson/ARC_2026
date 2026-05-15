@@ -3,11 +3,17 @@ Timeline Generator — A.R.C. 预计算引擎
 
 将 scenario_001.json 驱动 arc_core 逐步推演，输出 timeline.json 供前端零延迟回放。
 
-用法:
-    python -m simulation.timeline_generator
-    python -m simulation.timeline_generator --steps 200 --output demo_player/timeline.json
+Run from repository root::
 
-Gemma 4 API 接口:
+    PYTHONPATH=".:ARC_2026-arc-lite-2d-demo" python -m lite_sim.timeline_generator \\
+        --steps 200 --output demo_player/timeline.json
+
+Or from ``ARC_2026-arc-lite-2d-demo``::
+
+    PYTHONPATH=".:.." python -m lite_sim.timeline_generator \\
+        --steps 200 --output ../demo_player/timeline.json
+
+Gemma 4 API:
     默认使用 Mock 模式（USE_GEMMA_API=False）。
     将环境变量 GEMMA_API_KEY 设置后，令 USE_GEMMA_API=True 可切换为真实推理。
 """
@@ -27,15 +33,15 @@ from arc_core.agents.decision_hub import DecisionHub
 from arc_core.agents.edge_agent import EdgeAgent
 from arc_core.bridge.scenario_adapter import ScenarioAdapter
 from arc_core.config import AgentTask, AgentType, HealthStatus
-from simulation.road_network import RoadNetwork, RouteState
+from lite_sim.road_network import RoadNetwork, RouteState
 
 # ---------------------------------------------------------------------------
-# Paths
+# Paths (timeline_generator.py → lite_sim → ARC_2026-arc-lite-2d-demo → repo root)
 # ---------------------------------------------------------------------------
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SCENARIO_PATH = _REPO_ROOT / "ARC_2026-arc-lite-2d-demo" / "scenario_001.json"
 OUTPUT_PATH   = _REPO_ROOT / "demo_player" / "timeline.json"
-ROAD_GRAPH_PATH = _REPO_ROOT / "simulation" / "data" / "firenze_300m_roads.json"
+ROAD_GRAPH_PATH = Path(__file__).resolve().parent / "data" / "firenze_300m_roads.json"
 TOTAL_STEPS   = 200
 CELL_SIZE_M   = 10.0
 DYNAMIC_OBSTACLE_SEED = 20260514

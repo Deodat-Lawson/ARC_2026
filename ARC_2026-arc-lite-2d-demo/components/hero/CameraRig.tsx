@@ -85,9 +85,9 @@ export function CameraRig() {
       const sinY = Math.sin(yaw);
 
       // Rotate local eye offset by yaw (Y-axis only)
-      let worldX = assetPos.x + ex * cosY + ez * sinY;
+      const worldX = assetPos.x + ex * cosY + ez * sinY;
       let worldY = assetPos.y + ey;
-      let worldZ = assetPos.z + (-ex * sinY + ez * cosY);
+      const worldZ = assetPos.z + (-ex * sinY + ez * cosY);
 
       // Subtle motion bob (gait for dogs, vibration for drones)
       const tt = state.clock.elapsedTime;

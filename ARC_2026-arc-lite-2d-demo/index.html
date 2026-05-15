@@ -1,16 +1,23 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>A.R.C. Lite 2D Simulation</title>
+    <title>A.R.C. Lite Simulation</title>
     <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.170.0/build/three.module.js"
+        }
+      }
+    </script>
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
         <div>
-          <h1>A.R.C. Lite</h1>
+          <h1 class="logo">A · R · C</h1>
           <p>Gemma-powered Rescue Triage and Mission Planning Simulator</p>
         </div>
         <div class="controls" aria-label="simulation controls">
@@ -32,6 +39,7 @@
               <small>rescued</small>
             </div>
           </div>
+          <div id="toastLayer"></div>
           <canvas id="simCanvas" width="720" height="720" aria-label="2D rescue simulation map"></canvas>
           <div class="legend" aria-label="map legend">
             <span><i class="road"></i>road</span>
@@ -42,6 +50,30 @@
             <span><i class="drone"></i>drone</span>
             <span><i class="ugv"></i>UGV</span>
           </div>
+
+          <div class="panel-head pov-head">
+            <div>
+              <h2 id="povHeading">FPV · Drone-1</h2>
+              <p id="povTitle">First-person feed</p>
+            </div>
+          </div>
+          <div class="pov-frame">
+            <canvas id="povCanvas" aria-label="3D first-person drone feed"></canvas>
+            <div class="pov-reticle">
+              <div class="reticle-ring"></div>
+              <div class="reticle-cross h"></div>
+              <div class="reticle-cross v"></div>
+            </div>
+            <div class="pov-telemetry">
+              <div><span>ALT</span><b id="hudAlt">2.0</b></div>
+              <div><span>HDG</span><b id="hudHdg">000</b></div>
+              <div><span>VEL</span><b id="hudVel">0.0</b></div>
+              <div><span>PWR</span><b id="hudPwr">--</b></div>
+            </div>
+            <div class="pov-corner tl">REC ●</div>
+            <div class="pov-corner tr" id="hudTarget">TGT —</div>
+          </div>
+          <div class="pov-switcher" id="droneSwitcher" aria-label="drone selector"></div>
         </div>
 
         <aside class="side-panel">
@@ -53,6 +85,10 @@
             <h2>Agent Status</h2>
             <div id="agentList" class="agent-list"></div>
           </section>
+          <section>
+            <h2>Event Log</h2>
+            <div id="eventLog" class="event-log"></div>
+          </section>
         </aside>
       </section>
 
@@ -62,12 +98,16 @@
           <p id="briefText"></p>
         </article>
         <article class="briefing">
+          <h2>Survival Trend</h2>
+          <canvas id="survivalChart" width="380" height="160"></canvas>
+        </article>
+        <article class="briefing">
           <h2>Mission Plan JSON</h2>
           <pre id="missionJson"></pre>
         </article>
       </section>
     </main>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

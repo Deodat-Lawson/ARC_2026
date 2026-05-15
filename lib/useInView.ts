@@ -1,32 +1,41 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useState, type RefCallback } from "react";
+
+type UseInViewOptions = {
+  threshold?: number | number[];
+  root?: Element | Document | null;
+  rootMargin?: string;
+};
 
 /**
- * IntersectionObserver-backed visibility hook. Stays `true` once entered so
- * reveal animations don't replay on every scroll-up.
+ * Returns a ref callback and whether the observed element is in the viewport.
  */
-export function useInView<T extends Element = HTMLElement>(
-  options: IntersectionObserverInit = { threshold: 0.25 },
-): [React.RefObject<T | null>, boolean] {
-  const ref = useRef<T>(null);
+export function useInView<T extends HTMLElement = HTMLElement>(
+  options: UseInViewOptions = {},
+): [RefCallback<T>, boolean] {
   const [inView, setInView] = useState(false);
 
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || inView) return;
-    const obs = new IntersectionObserver((entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) {
-          setInView(true);
-          obs.disconnect();
-          break;
-        }
-      }
-    }, options);
-    obs.observe(node);
-    return () => obs.disconnect();
-  }, [inView, options]);
+  const ref = useCallback(
+    (node: T | null) => {
+      if (node === null) return;
+
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          setInView(entry?.isIntersecting ?? false);
+        },
+        {
+          threshold: options.threshold ?? 0,
+          root: options.root ?? null,
+          rootMargin: options.rootMargin,
+        },
+      );
+
+      observer.observe(node);
+      return () => observer.disconnect();
+    },
+    [options.threshold, options.root, options.rootMargin],
+  );
 
   return [ref, inView];
 }

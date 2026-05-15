@@ -25,7 +25,8 @@ from arc_core.agents.edge_agent import EdgeAgent
 from arc_core.agents.decision_hub import DecisionHub
 from arc_core.interfaces.scenario_reader import ScenarioReader
 from arc_core.interfaces.api_output import APIOutput
-from simulation.mock_scenario import generate_earthquake_scenario, save_scenario
+from arc_core.paths import SIMULATION_DATA_DIR
+from arc_core.simulation.mock_scenario import generate_earthquake_scenario, save_scenario
 
 # Configure logging
 logging.basicConfig(
@@ -49,7 +50,7 @@ def main():
     scenario = generate_earthquake_scenario(num_survivors=5, severity=0.7)
     
     # Also save to file for reference
-    save_scenario(scenario, "simulation/data/earthquake_demo.json")
+    save_scenario(scenario, str(SIMULATION_DATA_DIR / "earthquake_demo.json"))
 
     print(f"   Scenario ID: {scenario.scenario_id}")
     print(f"   Disaster: {scenario.disaster_type.value} (severity={scenario.disaster_severity})")
@@ -183,7 +184,7 @@ def main():
         ],
     )
 
-    output_path = "simulation/data/arc_output_snapshot.json"
+    output_path = str(SIMULATION_DATA_DIR / "arc_output_snapshot.json")
     api.save_snapshot(snapshot, output_path)
     
     print(f"   Snapshot saved to: {output_path}")

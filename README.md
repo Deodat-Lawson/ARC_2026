@@ -4,7 +4,7 @@ Post-disaster heterogeneous rescue fleet: **UGV + UAV + aerostat** coordinated b
 
 Built for **Gemma 4 Good Hackathon** (impact: disaster resilience; tech: LiteRT on-device).
 
-The repository combines the **`Complete-Workflow-v1.0`** Python core with the **`arc-lite-2d-demo`** marketing site at the repo root (Next.js 15 hero / Three.js) and the tactical **`demo_player`** (MapLibre basemap + canvas overlay).
+The repository combines the **`Complete-Workflow-v1.0`** Python core (`arc_core`) with the **root marketing site** (Next.js 15 hero / Three.js), the **`ARC_2026-arc-lite-2d-demo`** subtree (Next.js + **canvas 2D Lite sim** + scenario JSON + optional **`lite_sim`** road-aware timeline generator), and the tactical **`demo_player`** (MapLibre basemap + canvas overlay).
 
 ## Repository layout
 
@@ -12,7 +12,7 @@ The repository combines the **`Complete-Workflow-v1.0`** Python core with the **
 |------|---------|
 | `arc_core/` | Python package: agents, perception (Gemma), scheduler, communication, simulation pipelines, CLI runners, tests |
 | `app/`, `components/` (root) | Main marketing landing: Next.js 15 App Router + React Three Fiber hero |
-| `ARC_2026-arc-lite-2d-demo/` | Secondary Next.js subtree with scenario JSON variants (same stack; optional local install) |
+| `ARC_2026-arc-lite-2d-demo/` | Next.js subtree + **`index.html` / `app.js` / `styles.css`** (browser canvas 2D sim), **`scenario_canvas_lite.json`** (small demo map), **`scenario_*.json`** for tooling, **`lite_sim/`** (road-graph timeline generator; optional vs `arc_core`) |
 | `demo_player/` | Static playback UI for `timeline.json` |
 | `requirements.txt` | Python dependencies |
 | `pytest.ini` | Test discovery under `arc_core/tests` |
@@ -90,7 +90,9 @@ pnpm dev
 
 Open http://localhost:3000 .
 
-## Run — Frontend (`ARC_2026-arc-lite-2d-demo`)
+## Run — `ARC_2026-arc-lite-2d-demo` (Next.js + static canvas)
+
+### Next.js dev server
 
 ```bash
 cd ARC_2026-arc-lite-2d-demo
@@ -98,7 +100,36 @@ pnpm install
 pnpm dev
 ```
 
+Open http://localhost:3000 (or the port Next prints).
+
 Do not commit **`node_modules/`** or **`.next/`**.
+
+### Canvas 2D Lite simulation (static HTML)
+
+From **`ARC_2026-arc-lite-2d-demo/`** (serve this folder over HTTP so ES modules / fetch work):
+
+```bash
+cd ARC_2026-arc-lite-2d-demo
+python -m http.server 8080
+# Open http://localhost:8080/index.html
+```
+
+The canvas loads **`scenario_canvas_lite.json`** (5-victim / 4-agent demo). **`scenario_001.json`** in the same folder is the larger JSON used by Python / timeline tooling.
+
+### Optional: road-aware timeline (`lite_sim`)
+
+From repo root (needs both **`arc_core`** and **`lite_sim`** on `PYTHONPATH`):
+
+```bash
+PYTHONPATH=".:ARC_2026-arc-lite-2d-demo" python -m lite_sim.timeline_generator --steps 200 --output demo_player/timeline.json
+```
+
+Or from inside **`ARC_2026-arc-lite-2d-demo`**:
+
+```bash
+cd ARC_2026-arc-lite-2d-demo
+PYTHONPATH=".:.." python -m lite_sim.timeline_generator --steps 200 --output ../demo_player/timeline.json
+```
 
 ## Frontend stack (from arc-lite)
 
