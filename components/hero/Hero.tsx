@@ -37,7 +37,10 @@ export function Hero() {
 
   return (
     <section className="relative h-screen w-full overflow-hidden bg-arc-bg">
-      <div aria-hidden className="absolute inset-0">
+      <div
+        aria-hidden
+        className="absolute inset-0 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-[1] after:h-48 after:bg-gradient-to-t after:from-arc-bg after:via-arc-bg/50 after:to-transparent"
+      >
         {isMobile ? (
           <HeroFallback />
         ) : (

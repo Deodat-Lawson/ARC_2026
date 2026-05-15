@@ -30,7 +30,7 @@ export function RescueFlowSection() {
   const [ref, inView] = useInView<HTMLDivElement>({ threshold: 0.12 });
 
   return (
-    <section className="border-t border-white/5 px-6 py-20 md:px-10 md:py-28">
+    <section className="arc-home-deck arc-home-deck--flow border-t border-white/5 px-6 py-20 md:px-10 md:py-28">
       <div
         ref={ref}
         className={`mx-auto max-w-7xl transition-[opacity,transform] duration-700 ease-out ${

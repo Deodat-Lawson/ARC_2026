@@ -67,6 +67,136 @@ main > section,
   scroll-snap-align: start;
 }
 
+/* ─── Home marketing page — atmospheric backdrop (fixed layers below content) ─── */
+main.arc-home {
+  isolation: isolate;
+}
+
+.arc-home-atmosphere,
+.arc-home-atmosphere-grain {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.arc-home-atmosphere {
+  background-color: #0a0b0d;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 0%, transparent 35%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.024) 0px,
+      transparent 1px,
+      transparent 47px,
+      rgba(255, 255, 255, 0.024) 48px,
+      transparent 49px,
+      transparent 96px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.024) 0px,
+      transparent 1px,
+      transparent 47px,
+      rgba(255, 255, 255, 0.024) 48px,
+      transparent 49px,
+      transparent 96px
+    ),
+    radial-gradient(
+      ellipse 125% 75% at 50% -12%,
+      rgba(93, 255, 180, 0.085),
+      transparent 56%
+    ),
+    radial-gradient(
+      ellipse 90% 55% at 88% 32%,
+      rgba(72, 130, 210, 0.065),
+      transparent 52%
+    ),
+    radial-gradient(
+      ellipse 70% 45% at 12% 62%,
+      rgba(93, 255, 180, 0.038),
+      transparent 54%
+    ),
+    linear-gradient(180deg, #0c131c 0%, #0a0b0d 42%, #080910 100%);
+  background-size:
+    100% 100%,
+    96px 96px,
+    96px 96px,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%;
+  background-repeat: no-repeat, repeat, repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+}
+
+.arc-home-atmosphere-grain {
+  opacity: 0.055;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 240px 240px;
+}
+
+main.arc-home > :not(.arc-home-atmosphere):not(.arc-home-atmosphere-grain) {
+  position: relative;
+  z-index: 1;
+}
+
+.arc-home-deck {
+  position: relative;
+}
+
+.arc-home-deck::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.arc-home-deck > * {
+  position: relative;
+  z-index: 1;
+}
+
+.arc-home-deck--mission::before {
+  background: radial-gradient(
+    ellipse 120% 85% at 50% -25%,
+    rgba(93, 255, 180, 0.055),
+    transparent 52%
+  );
+}
+
+.arc-home-deck--flow::before {
+  background: radial-gradient(
+    ellipse 100% 70% at 78% 5%,
+    rgba(110, 165, 230, 0.045),
+    transparent 56%
+  );
+}
+
+.arc-home-deck--system::before {
+  background: radial-gradient(
+    ellipse 95% 55% at 50% 45%,
+    rgba(93, 255, 180, 0.032),
+    transparent 58%
+  );
+}
+
+.arc-home-deck--team::before {
+  background: radial-gradient(
+    ellipse 115% 90% at 50% 105%,
+    rgba(93, 255, 180, 0.048),
+    transparent 55%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-home-atmosphere-grain {
+    opacity: 0.035;
+  }
+}
+
 @keyframes arc-dust-drift {
   from {
     transform: translateX(0);
