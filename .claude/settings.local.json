@@ -25,7 +25,24 @@
       "Read(//tmp/**)",
       "Bash(mkdir -p _smoke)",
       "Bash(sed '1{/^\"use client\";$/d;}' components/hero/missionTimeline.ts)",
-      "Read(//c/c/Users/Timothy Lin/Projects/ARC_2026/_smoke/**)"
+      "Read(//c/c/Users/Timothy Lin/Projects/ARC_2026/_smoke/**)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | %{size_download} bytes\\\\n\" http://127.0.0.1:8765/styles.css)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | %{size_download} bytes\\\\n\" http://127.0.0.1:8765/index.html)",
+      "Bash(curl -s http://127.0.0.1:8765/app.js -o /tmp/app.js.fetched)",
+      "Bash(node -e \"try { new Function\\(require\\('fs'\\).readFileSync\\('/tmp/app.js.fetched','utf8'\\)\\); console.log\\('parse OK'\\); } catch\\(e\\) { console.log\\('parse error:', e.message\\); }\")",
+      "Bash(curl -s http://127.0.0.1:8765/app.js -o /c/tmp_app.js)",
+      "Bash(node -e \"try { new Function\\(require\\('fs'\\).readFileSync\\('/c/tmp_app.js','utf8'\\)\\); console.log\\('parse OK'\\); } catch\\(e\\) { console.log\\('parse error:', e.message\\); }\")",
+      "Bash(node -e \"try { new Function\\(require\\('fs'\\).readFileSync\\('c:/Users/Timothy Lin/Projects/ARC_2026/app.js','utf8'\\)\\); console.log\\('parse OK'\\); } catch\\(e\\) { console.log\\('parse error:', e.message\\); }\")",
+      "Bash(curl -s -o /dev/null -w \"index.html: %{http_code} %{size_download}B\\\\n\" http://127.0.0.1:8765/index.html)",
+      "Bash(curl -s -o /dev/null -w \"app.js:     %{http_code} %{size_download}B\\\\n\" http://127.0.0.1:8765/app.js)",
+      "Bash(curl -s -o /dev/null -w \"styles.css: %{http_code} %{size_download}B\\\\n\" http://127.0.0.1:8765/styles.css)",
+      "Bash(curl -s -o /dev/null -w \"scenario:   %{http_code} %{size_download}B\\\\n\" http://127.0.0.1:8765/scenario_001.json)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"try { const src = require\\('fs'\\).readFileSync\\('c:/Users/Timothy Lin/Projects/ARC_2026/app.js','utf8'\\); new Function\\('THREE', src.replace\\('import * as THREE from \\\\\"three\\\\\";',''\\)\\); console.log\\('parse OK'\\); } catch\\(e\\) { console.log\\('parse error:', e.message\\); }\")",
+      "Bash(curl -s -o /dev/null -w \"three.module.js \\(CDN\\): %{http_code}\\\\n\" https://unpkg.com/three@0.170.0/build/three.module.js)",
+      "Bash(curl -s http://127.0.0.1:8765/index.html)",
+      "Bash(dir public\\\\models)",
+      "Bash(npm run *)"
     ]
   }
 }

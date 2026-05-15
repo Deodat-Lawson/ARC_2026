@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 /**
  * Mobile + low-core fallback. Plays a pre-rendered loop of the same scene.
  *
@@ -10,13 +8,16 @@ import { useState } from "react";
  *   /public/hero-fallback.webm  — VP9 alternative
  *   /public/hero-poster.webp    — frame 0, ~80 KB, doubles as LCP
  *
- * Until those exist, the `onError` handler swaps in a CSS-animated stand-in so
- * dev mode renders something rather than a black rectangle.
+ * Once those exist, flip VIDEO_AVAILABLE to true (and re-enable the preload
+ * link in [app/layout.tsx](../../app/layout.tsx)). Until then we render the
+ * CSS stand-in directly — the previous design tried the video first and let
+ * onError fall through, but that produced 404s in dev on every page load
+ * and on every Fast Refresh rebuild.
  */
-export function HeroFallback() {
-  const [videoOk, setVideoOk] = useState(true);
+const VIDEO_AVAILABLE = false;
 
-  if (!videoOk) return <CSSStandIn />;
+export function HeroFallback() {
+  if (!VIDEO_AVAILABLE) return <CSSStandIn />;
 
   return (
     <video
@@ -27,7 +28,6 @@ export function HeroFallback() {
       playsInline
       poster="/hero-poster.webp"
       preload="metadata"
-      onError={() => setVideoOk(false)}
     >
       <source src="/hero-fallback.webm" type="video/webm" />
       <source src="/hero-fallback.mp4" type="video/mp4" />

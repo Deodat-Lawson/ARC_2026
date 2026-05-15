@@ -15,7 +15,7 @@ import {
   ALL_ASSETS,
   ASSET_META,
   AssetId,
-  setPovTarget,
+  setPovTargetViaUrl,
   usePovTarget,
 } from "./missionStore";
 import { HeroNarration } from "./HeroNarration";
@@ -164,7 +164,7 @@ function AssetPanel({ id, t, active }: { id: AssetId; t: number; active: boolean
   return (
     <button
       type="button"
-      onClick={() => setPovTarget(id)}
+      onClick={() => setPovTargetViaUrl(id)}
       className={`group w-[210px] rounded-sm border p-2 text-left backdrop-blur-sm transition hover:border-arc-accent/60 hover:bg-arc-bg/80 ${
         active
           ? "border-arc-accent/80 bg-arc-bg/85 shadow-[0_0_0_1px_rgba(93,255,180,0.35),0_0_18px_-4px_rgba(93,255,180,0.45)]"

@@ -29,13 +29,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <head>
-        {/* Preload the hero poster so it's the LCP */}
-        <link
+        {/* Re-add this preload once /public/hero-poster.webp is produced —
+            preloading a missing asset 404s on every page load. */}
+        {/* <link
           rel="preload"
           as="image"
           href="/hero-poster.webp"
           fetchPriority="high"
-        />
+        /> */}
       </head>
       <body>{children}</body>
     </html>

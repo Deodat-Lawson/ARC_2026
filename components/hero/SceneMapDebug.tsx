@@ -56,21 +56,27 @@ const PATH_COLORS: Record<string, string> = {
 const HALF_HFOV = (32 * Math.PI) / 180;
 const FRUSTUM_LEN = 60; // world units — roughly how far the eye reads before fog dominates
 
-export function SceneMapDebug() {
-  const [visible, setVisible] = useState(false);
+type SceneMapDebugProps = {
+  variant?: "debug" | "hud";
+};
+
+export function SceneMapDebug({ variant = "debug" }: SceneMapDebugProps) {
+  const isHud = variant === "hud";
+  const [visible, setVisible] = useState(isHud);
   const [, force] = useState(0);
   const lastDraw = useRef(0);
 
   useEffect(() => {
+    if (isHud) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "m" || e.key === "M") setVisible((v) => !v);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [isHud]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible && !isHud) return;
     let raf = 0;
     const tick = (now: number) => {
       // 30Hz is plenty for a debug overlay; saves React work.
@@ -82,9 +88,9 @@ export function SceneMapDebug() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [visible]);
+  }, [isHud, visible]);
 
-  if (!visible) {
+  if (!visible && !isHud) {
     return (
       <div className="pointer-events-none absolute right-3 top-3 z-50 rounded-sm border border-arc-accent/30 bg-black/50 px-2 py-1 font-mono text-[10px] text-arc-muted">
         [M] map
@@ -92,8 +98,8 @@ export function SceneMapDebug() {
     );
   }
 
-  const W = 280;
-  const H = 280;
+  const W = isHud ? 220 : 280;
+  const H = isHud ? 220 : 280;
   const sx = (x: number) => ((x - SCENE_BOUNDS.xMin) / (SCENE_BOUNDS.xMax - SCENE_BOUNDS.xMin)) * W;
   // z grows toward camera (+) — flip so deep-Z sits at the top of the minimap.
   const sz = (z: number) => H - ((z - SCENE_BOUNDS.zMin) / (SCENE_BOUNDS.zMax - SCENE_BOUNDS.zMin)) * H;
@@ -129,12 +135,17 @@ export function SceneMapDebug() {
 
   return (
     <div
-      className="pointer-events-none absolute right-3 top-3 z-50 rounded-sm border border-arc-accent/40 bg-black/80 p-2 font-mono text-[10px] leading-tight text-arc-accent backdrop-blur-sm"
+      className={[
+        "pointer-events-none rounded-sm border border-arc-accent/40 p-2 font-mono text-[10px] leading-tight text-arc-accent backdrop-blur-sm",
+        isHud
+          ? "bg-arc-bg/80"
+          : "absolute right-3 top-3 z-50 bg-black/80",
+      ].join(" ")}
       style={{ width: W + 16 }}
     >
       <div className="mb-1 flex items-center justify-between text-arc-fg">
         <span>SCENE MAP · top-down</span>
-        <span className="text-arc-muted">[M] hide</span>
+        <span className="text-arc-muted">{isHud ? "LIVE" : "[M] hide"}</span>
       </div>
       <svg width={W} height={H} className="block rounded-sm bg-[#0a0807]">
         {/* World axes */}

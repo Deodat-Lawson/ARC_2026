@@ -9,7 +9,7 @@ import {
   ASSET_META,
   ASSET_POSITIONS,
   AssetId,
-  setPovTarget,
+  setPovTargetViaUrl,
   usePovTarget,
 } from "./missionStore";
 
@@ -57,7 +57,7 @@ export function AssetPicker() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setPovTarget(id);
+                  setPovTargetViaUrl(id);
                 }}
                 className="group flex items-center gap-1 rounded-sm border border-white/15 bg-arc-bg/75 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-arc-fg/85 backdrop-blur-sm transition hover:border-arc-accent/80 hover:text-arc-accent"
               >

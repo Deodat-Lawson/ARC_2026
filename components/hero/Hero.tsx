@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { HeroFallback } from "./HeroFallback";
@@ -8,7 +8,7 @@ import { HeroHUD } from "./HeroHUD";
 import { PovHUD } from "./PovHUD";
 import { CameraDebugOverlay } from "./CameraDebugOverlay";
 import { SceneMapDebug } from "./SceneMapDebug";
-import { usePovTarget } from "./missionStore";
+import { getPovFromUrl, setPovTarget, usePovTarget } from "./missionStore";
 import { HeroOverlay } from "@/components/ui/HeroOverlay";
 
 /**
@@ -22,10 +22,19 @@ const HeroCanvas = dynamic(
   { ssr: false, loading: () => <HeroFallback /> },
 );
 
+const showSceneMapDebug = process.env.NEXT_PUBLIC_SHOW_SCENE_MAP_DEBUG === "1";
+
 export function Hero() {
   const isMobile = useIsMobile();
   const povTarget = usePovTarget();
   const inFpv = povTarget !== "cinematic";
+
+  // Restore POV from the URL `?pov=` query param after a hard refresh.
+  // POV buttons hard-navigate (see setPovTargetViaUrl), so this is what
+  // makes the scene mount in the right POV state after reload.
+  useEffect(() => {
+    setPovTarget(getPovFromUrl());
+  }, []);
 
   return (
     <section className="relative h-screen w-full overflow-hidden bg-arc-bg">
@@ -43,7 +52,7 @@ export function Hero() {
           <HeroHUD />
           <PovHUD />
           <CameraDebugOverlay />
-          <SceneMapDebug />
+          {showSceneMapDebug && <SceneMapDebug />}
         </>
       )}
       {/* Hide marketing copy during FPV so it doesn't fight the reticle */}
