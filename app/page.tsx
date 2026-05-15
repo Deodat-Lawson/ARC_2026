@@ -6,7 +6,9 @@ import { TeamSection } from "@/components/team/TeamSection";
 
 export default function HomePage() {
   return (
-    <main>
+    <main className="arc-home">
+      <div className="arc-home-atmosphere" aria-hidden />
+      <div className="arc-home-atmosphere-grain" aria-hidden />
       <Hero />
       <MissionSection />
       <RescueFlowSection />

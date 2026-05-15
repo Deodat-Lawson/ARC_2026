@@ -17,7 +17,7 @@ import { M5Mesh } from "./visualizations/M5Mesh";
  */
 export function SystemDemo() {
   return (
-    <div id="system" className="relative bg-arc-bg">
+    <div id="system" className="arc-home-deck arc-home-deck--system relative">
       <SectionDivider label="How it works" />
 
       <ModuleSection
