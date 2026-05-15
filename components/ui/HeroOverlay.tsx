@@ -65,7 +65,7 @@ export function HeroOverlay() {
             <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
           </a>
           <a
-            href="#whitepaper"
+            href="/whitepaper"
             className="inline-flex h-11 items-center text-sm font-medium tracking-wide text-arc-fg underline decoration-arc-muted/60 underline-offset-4 hover:decoration-arc-fg"
           >
             Read the whitepaper

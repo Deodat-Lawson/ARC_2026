@@ -329,7 +329,7 @@ export default function BPPage() {
             Four addressable verticals.
           </h2>
           <p className="mt-4 max-w-2xl text-arc-muted">
-            ARC is not a "disaster drone" — it is a universal autonomous sensing and rescue
+            ARC is not a {'"'}disaster drone{'"'} — it is a universal autonomous sensing and rescue
             operating system covering all disaster types and high-risk environments.
           </p>
         </Reveal>

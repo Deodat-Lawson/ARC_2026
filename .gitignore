@@ -3,19 +3,8 @@ node_modules/
 .pnp
 .pnp.*
 
-# Prefer pnpm in this repo (pnpm-lock.yaml). Ignore alternate lockfiles if created by mistake.
-package-lock.json
-yarn.lock
-
-# pnpm store must not live inside the repo; use global store-dir or ~/Library/pnpm/store
-.pnpm-store/
-
-# Next.js / JS build
+# Next.js
 .next/
-.turbo/
-
-# ESLint 9 flat-config cache (if generated locally)
-.eslintcache
 out/
 build/
 dist/
@@ -23,15 +12,10 @@ dist/
 # Production / environments
 *.local
 .env*.local
-
-# Python environments
 venv/
 .venv/
 env/
 .env/
-
-# LiteRT checkpoints (~GB); optional default path repo/models/ (see LITERT_MODEL_PATH)
-models/*.litertlm
 
 # Python cache and build output
 __pycache__/
@@ -42,10 +26,8 @@ develop-eggs/
 downloads/
 eggs/
 .eggs/
-# Python setuptools / local env (repo root only; allow Next.js runtimes under lib/)
-/lib/*
-!/lib/lite-sim/
-!/lib/demo-player/
+# Note: do not ignore repo-root lib/ — Next.js uses it for shared TS modules.
+# Python setuptools output typically lives under build/lib/ instead.
 lib64/
 parts/
 sdist/
@@ -55,7 +37,7 @@ wheels/
 .installed.cfg
 *.egg
 
-# Debug logs (package managers + Python)
+# Debug logs
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
@@ -64,7 +46,7 @@ yarn-error.log*
 pip-log.txt
 pip-delete-this-directory.txt
 
-# TypeScript / Next toolchain
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
 
@@ -110,9 +92,15 @@ public/hdri/_raw/
 *.zip
 *.tar.gz
 .agent/
+*.md
+!whitepaper.md
+*.txt
+
+# Archives and private/internal notes
+*.zip
+*.tar.gz
+.agent/
 .claude/settings.local.json
-.claude/*.lock
-.tmp/
 
 # Accidental absolute-path mirror (local machine)
 D/
