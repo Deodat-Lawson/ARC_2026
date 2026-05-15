@@ -1,189 +1,101 @@
 "use client";
 
-import { useGLTF, useTexture } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  Box3,
-  Group,
-  Mesh,
-  MeshStandardMaterial,
-  Object3D,
-  Vector3,
-} from "three";
-import { createTriplanarMaterial } from "./triplanarMaterial";
+import { useMemo, useRef } from "react";
+import { Group, Mesh, MeshStandardMaterial } from "three";
 
 /**
- * Hero environment — layered post-disaster cityscape.
+ * High-quality disaster street set for the POV demo.
  *
- * Geometry comes from converted EAM165 GLBs (the OBJ pipeline lost the source
- * V-Ray texture references). To get production-quality surfaces without doing
- * manual UV work in Blender, we apply a *triplanar-projected* PBR material
- * built from the KBS105 KitBash kit's PBR maps (concrete A, damaged bricks,
- * rusted metal). Triplanar projection samples by world position, not UVs, so
- * the textures tile correctly across any geometry regardless of what the
- * source UVs were.
- *
- * Each building is assigned a material variant for visual heterogeneity.
- *
- * Depth layers (camera path: z=26 → z=-14 → back, ~12s loop):
- *   • Skyline ring   (z ≈ -150)  — dark silhouettes against fog
- *   • Far layer      (z ≈ -60..-80)
- *   • Mid layer      (z ≈ -30..-50)
- *   • Hero layer     (z ≈ -10..-25, camera passes between)
- *   • Clutter        (z ≈ 0..-22) — vehicles, signs, rubble
- *   • Smoke columns + emissive fire glow
+ * The recovered KBS105 pack is a large authoring payload (632 MB FBX plus
+ * source textures). Until selected pieces are exported into optimized GLBs,
+ * this scene keeps the demo production-looking with authored procedural
+ * geometry, dense foreground rubble, smoke, fire, signage, and a clear central
+ * alley for the existing drone/dog waypoints.
  */
-const USE_PRIMITIVES_FALLBACK = false;
-
 export function Scene() {
-  if (USE_PRIMITIVES_FALLBACK) return null;
-  return <BakedEnvironment />;
-}
-
-// ---- Preload GLBs ----
-useGLTF.preload("/models/building-apartment.glb");
-useGLTF.preload("/models/building-facade.glb");
-useGLTF.preload("/models/building-multistory.glb");
-useGLTF.preload("/models/building-mansion.glb");
-useGLTF.preload("/models/vehicle-taxi.glb");
-useGLTF.preload("/models/rubble-large.glb");
-useGLTF.preload("/models/street-signs.glb");
-
-type MaterialVariant = "concrete" | "bricks" | "rustMetal";
-
-type Placement = {
-  src: string;
-  position: [number, number, number];
-  rotation?: [number, number, number];
-  /** Desired height of the asset in scene units */
-  targetHeight: number;
-  /** Which triplanar material variant to use */
-  variant: MaterialVariant;
-  /** Subtle tint multiplier (per-instance variation on top of base PBR) */
-  tint?: string;
-};
-
-// ---- Placements ----
-const BUILDINGS: Placement[] = [
-  // HERO LAYER
-  { src: "/models/building-apartment.glb", position: [-12, 0, -16], rotation: [0, 0.2, 0], targetHeight: 14, variant: "bricks", tint: "#a89888" },
-  { src: "/models/building-mansion.glb", position: [13, 0, -20], rotation: [0, -0.55, 0], targetHeight: 13, variant: "concrete", tint: "#9a8e80" },
-
-  // MID LAYER
-  { src: "/models/building-multistory.glb", position: [-22, 0, -36], rotation: [0, 0.3, 0], targetHeight: 17, variant: "concrete", tint: "#8a8278" },
-  { src: "/models/building-mansion.glb", position: [22, 0, -38], rotation: [0, -0.4, 0], targetHeight: 15, variant: "bricks", tint: "#9c8a78" },
-  { src: "/models/building-apartment.glb", position: [4, 0, -42], rotation: [0, 1.5, 0], targetHeight: 13, variant: "concrete", tint: "#8c8478" },
-  // Moved off the central alley axis (was at -4,-32 which blocked the deep
-  // rescue zone). Now at -16,-34 — flanks the alley from the west, leaves
-  // x∈[-2,3] clear all the way back to z=-32.
-  { src: "/models/building-multistory.glb", position: [-16, 0, -34], rotation: [0, -0.8, 0], targetHeight: 12, variant: "bricks", tint: "#a08a78" },
-
-  // FAR LAYER
-  { src: "/models/building-facade.glb", position: [-8, 0, -68], rotation: [0, 0.05, 0], targetHeight: 22, variant: "concrete", tint: "#706a60" },
-  { src: "/models/building-multistory.glb", position: [28, 0, -64], rotation: [0, -0.6, 0], targetHeight: 20, variant: "concrete", tint: "#605a52" },
-  { src: "/models/building-mansion.glb", position: [-32, 0, -72], rotation: [0, 0.6, 0], targetHeight: 19, variant: "bricks", tint: "#766859" },
-  { src: "/models/building-apartment.glb", position: [40, 0, -78], rotation: [0, -1.2, 0], targetHeight: 18, variant: "concrete", tint: "#5a544a" },
-];
-
-const CLUTTER: Placement[] = [
-  // Vehicles — rusted metal
-  { src: "/models/vehicle-taxi.glb", position: [9, 0, 1], rotation: [0, -0.7, 0], targetHeight: 1.6, variant: "rustMetal", tint: "#a08070" },
-  { src: "/models/vehicle-taxi.glb", position: [-6, 0, -8], rotation: [0, 2.2, 0.15], targetHeight: 1.5, variant: "rustMetal", tint: "#8c7060" },
-
-  // Signs — concrete posts + metal plates
-  { src: "/models/street-signs.glb", position: [5, 0, -10], rotation: [0, 0.3, 0], targetHeight: 2.8, variant: "rustMetal", tint: "#9a8478" },
-  { src: "/models/street-signs.glb", position: [-9, 0, 0], rotation: [0, 1.8, 0], targetHeight: 2.4, variant: "rustMetal", tint: "#806c5c" },
-
-  // Rubble — concrete
-  { src: "/models/rubble-large.glb", position: [-2, 0, -4], rotation: [0, 1.2, 0], targetHeight: 1.4, variant: "concrete", tint: "#8c8478" },
-  { src: "/models/rubble-large.glb", position: [3, 0, -16], rotation: [0, -0.4, 0], targetHeight: 1.8, variant: "concrete", tint: "#928678" },
-  { src: "/models/rubble-large.glb", position: [-7, 0, -22], rotation: [0, 2.1, 0], targetHeight: 1.6, variant: "concrete", tint: "#827a6c" },
-  { src: "/models/rubble-large.glb", position: [14, 0, -10], rotation: [0, 0.9, 0], targetHeight: 1.3, variant: "concrete", tint: "#8e8270" },
-];
-
-function BakedEnvironment() {
-  // Load all PBR texture sets once and build shared materials per variant.
-  const concrete = useTexture({
-    map: "/textures/concrete-a_basecolor.jpg",
-    normalMap: "/textures/concrete-a_normal.jpg",
-    roughnessMap: "/textures/concrete-a_roughness.jpg",
-  });
-  const bricks = useTexture({
-    map: "/textures/bricks-damage_basecolor.jpg",
-    normalMap: "/textures/bricks-damage_normal.jpg",
-    roughnessMap: "/textures/bricks-damage_roughness.jpg",
-  });
-  const rustMetal = useTexture({
-    map: "/textures/metal-rust_basecolor.jpg",
-    normalMap: "/textures/metal-rust_normal.jpg",
-    roughnessMap: "/textures/metal-rust_roughness.jpg",
-  });
-
-  const materials = useMemo(
-    () => ({
-      concrete: createTriplanarMaterial({
-        basecolor: concrete.map,
-        normalMap: concrete.normalMap,
-        roughnessMap: concrete.roughnessMap,
-        scale: 0.16,
-        roughness: 1.0,
-        metalness: 0.0,
-        name: "concrete",
-      }),
-      bricks: createTriplanarMaterial({
-        basecolor: bricks.map,
-        normalMap: bricks.normalMap,
-        roughnessMap: bricks.roughnessMap,
-        scale: 0.22,
-        roughness: 0.95,
-        metalness: 0.0,
-        name: "bricks",
-      }),
-      rustMetal: createTriplanarMaterial({
-        basecolor: rustMetal.map,
-        normalMap: rustMetal.normalMap,
-        roughnessMap: rustMetal.roughnessMap,
-        scale: 0.65,
-        roughness: 0.7,
-        metalness: 0.55,
-        name: "rustMetal",
-      }),
-    }),
-    [concrete, bricks, rustMetal],
-  );
+  const materials = useSceneMaterials();
 
   return (
     <group>
-      <Ground />
+      <Ground materials={materials} />
       <SkylineRing />
-      {BUILDINGS.map((p, i) => (
-        <RuinAsset key={`b${i}`} {...p} baseMaterial={materials[p.variant]} />
-      ))}
-      {CLUTTER.map((p, i) => (
-        <RuinAsset key={`c${i}`} {...p} baseMaterial={materials[p.variant]} />
-      ))}
-      <ProceduralDebris baseMaterial={materials.concrete} />
+      <RuinedBuildings materials={materials} />
+      <StreetSetDressing materials={materials} />
+      <RubbleField material={materials.concrete} />
       <SmokeColumns />
       <BurningGlow />
     </group>
   );
 }
 
-// ---- Ground ----
-function Ground() {
+type Materials = {
+  concrete: MeshStandardMaterial;
+  concreteDark: MeshStandardMaterial;
+  brick: MeshStandardMaterial;
+  metal: MeshStandardMaterial;
+  asphalt: MeshStandardMaterial;
+  glass: MeshStandardMaterial;
+  warning: MeshStandardMaterial;
+};
+
+function useSceneMaterials(): Materials {
+  return useMemo(
+    () => ({
+      concrete: new MeshStandardMaterial({
+        color: "#746d63",
+        roughness: 0.96,
+        metalness: 0.02,
+      }),
+      concreteDark: new MeshStandardMaterial({
+        color: "#3c3934",
+        roughness: 1,
+        metalness: 0,
+      }),
+      brick: new MeshStandardMaterial({
+        color: "#8a6554",
+        roughness: 0.92,
+        metalness: 0.01,
+      }),
+      metal: new MeshStandardMaterial({
+        color: "#5b554d",
+        roughness: 0.68,
+        metalness: 0.55,
+      }),
+      asphalt: new MeshStandardMaterial({
+        color: "#171512",
+        roughness: 1,
+        metalness: 0,
+      }),
+      glass: new MeshStandardMaterial({
+        color: "#1b2f36",
+        roughness: 0.28,
+        metalness: 0.08,
+        emissive: "#071115",
+        emissiveIntensity: 0.25,
+      }),
+      warning: new MeshStandardMaterial({
+        color: "#d6a23a",
+        roughness: 0.72,
+        metalness: 0.25,
+        emissive: "#3a2108",
+        emissiveIntensity: 0.18,
+      }),
+    }),
+    [],
+  );
+}
+
+function Ground({ materials }: { materials: Materials }) {
   const patches = useMemo(() => {
-    const out: { pos: [number, number, number]; r: number; rot: number; shade: string }[] = [];
-    const seed = (i: number) => {
-      const v = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
-      return v - Math.floor(v);
-    };
-    for (let i = 0; i < 14; i++) {
+    const out: { pos: [number, number, number]; r: number; rot: number; color: string }[] = [];
+    for (let i = 0; i < 28; i++) {
+      const s = seed(i);
       out.push({
-        pos: [(seed(i) - 0.5) * 80, 0.005, -10 - seed(i + 20) * 60],
-        r: 3 + seed(i + 40) * 9,
-        rot: seed(i) * Math.PI,
-        shade: `rgb(${10 + Math.round(seed(i + 50) * 14)}, ${8 + Math.round(seed(i + 60) * 10)}, ${6 + Math.round(seed(i + 70) * 8)})`,
+        pos: [(s - 0.5) * 76, 0.006, 12 - seed(i + 9) * 82],
+        r: 2 + seed(i + 18) * 9,
+        rot: seed(i + 27) * Math.PI,
+        color: seed(i + 36) > 0.5 ? "#221d18" : "#0f1110",
       });
     }
     return out;
@@ -191,21 +103,304 @@ function Ground() {
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -30]}>
-        <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#13110d" roughness={1} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -32]}>
+        <planeGeometry args={[420, 420]} />
+        <primitive object={materials.asphalt} attach="material" />
       </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.011, -15]}>
+        <planeGeometry args={[7, 86]} />
+        <meshStandardMaterial color="#23211d" roughness={1} />
+      </mesh>
+
+      {[-2.75, 2.75].map((x) => (
+        <mesh key={x} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.014, -15]}>
+          <planeGeometry args={[0.06, 82]} />
+          <meshBasicMaterial color="#746a58" transparent opacity={0.35} />
+        </mesh>
+      ))}
+
       {patches.map((p, i) => (
-        <mesh key={`gp${i}`} rotation={[-Math.PI / 2, 0, p.rot]} position={p.pos}>
-          <circleGeometry args={[p.r, 8]} />
-          <meshStandardMaterial color={p.shade} roughness={1} />
+        <mesh key={`patch${i}`} rotation={[-Math.PI / 2, 0, p.rot]} position={p.pos}>
+          <circleGeometry args={[p.r, 10]} />
+          <meshStandardMaterial color={p.color} roughness={1} />
         </mesh>
       ))}
     </group>
   );
 }
 
-// ---- Skyline silhouettes ----
+function RuinedBuildings({ materials }: { materials: Materials }) {
+  const buildings: BuildingSpec[] = [
+    { pos: [-14, 5.5, -16], size: [10, 11, 9], rot: 0.18, mat: materials.brick, damage: "left" },
+    { pos: [13, 6, -20], size: [10, 12, 10], rot: -0.44, mat: materials.concrete, damage: "right" },
+    { pos: [-18, 7, -36], size: [12, 14, 10], rot: -0.28, mat: materials.concrete, damage: "top" },
+    { pos: [20, 7.5, -40], size: [12, 15, 9], rot: 0.34, mat: materials.brick, damage: "left" },
+    { pos: [-33, 10, -68], size: [16, 20, 11], rot: 0.18, mat: materials.concreteDark, damage: "top" },
+    { pos: [34, 11, -72], size: [18, 22, 12], rot: -0.22, mat: materials.concreteDark, damage: "right" },
+  ];
+
+  return (
+    <group>
+      {buildings.map((b, i) => (
+        <RuinedBuilding key={`building${i}`} spec={b} materials={materials} />
+      ))}
+    </group>
+  );
+}
+
+type BuildingSpec = {
+  pos: [number, number, number];
+  size: [number, number, number];
+  rot: number;
+  mat: MeshStandardMaterial;
+  damage: "left" | "right" | "top";
+};
+
+function RuinedBuilding({
+  spec,
+  materials,
+}: {
+  spec: BuildingSpec;
+  materials: Materials;
+}) {
+  const floors = Math.max(3, Math.floor(spec.size[1] / 2.2));
+  const cols = Math.max(3, Math.floor(spec.size[0] / 2.5));
+
+  return (
+    <group position={spec.pos} rotation={[0, spec.rot, 0]}>
+      <mesh>
+        <boxGeometry args={spec.size} />
+        <primitive object={spec.mat} attach="material" />
+      </mesh>
+
+      <mesh
+        position={[
+          spec.damage === "left" ? -spec.size[0] * 0.38 : spec.size[0] * 0.38,
+          spec.size[1] * 0.08,
+          spec.size[2] * 0.51,
+        ]}
+        rotation={[0, 0, spec.damage === "left" ? -0.28 : 0.28]}
+      >
+        <boxGeometry args={[spec.size[0] * 0.42, spec.size[1] * 0.75, 0.18]} />
+        <primitive object={materials.concreteDark} attach="material" />
+      </mesh>
+
+      {Array.from({ length: floors }).map((_, y) =>
+        Array.from({ length: cols }).map((_, x) => {
+          const edgeDamage =
+            (spec.damage === "left" && x === 0 && y > floors * 0.35) ||
+            (spec.damage === "right" && x === cols - 1 && y > floors * 0.35) ||
+            (spec.damage === "top" && y === floors - 1 && x % 2 === 0);
+          if (edgeDamage) return null;
+
+          return (
+            <mesh
+              key={`window${x}-${y}`}
+              position={[
+                -spec.size[0] * 0.36 + x * (spec.size[0] * 0.72) / (cols - 1),
+                -spec.size[1] * 0.35 + y * 2.05,
+                spec.size[2] * 0.515,
+              ]}
+            >
+              <boxGeometry args={[0.72, 0.9, 0.05]} />
+              <primitive object={materials.glass} attach="material" />
+            </mesh>
+          );
+        }),
+      )}
+
+      <mesh
+        position={[0, -spec.size[1] * 0.48, spec.size[2] * 0.57]}
+        rotation={[0.08, 0, spec.damage === "left" ? -0.16 : 0.16]}
+      >
+        <boxGeometry args={[spec.size[0] * 0.9, 0.26, 0.34]} />
+        <primitive object={materials.metal} attach="material" />
+      </mesh>
+    </group>
+  );
+}
+
+function StreetSetDressing({ materials }: { materials: Materials }) {
+  return (
+    <group>
+      <BurnedVehicle position={[8.5, 0.45, 0]} rotation={-0.7} materials={materials} />
+      <BurnedVehicle position={[-7.5, 0.45, -8]} rotation={2.15} materials={materials} />
+      <CheckpointSign position={[4.8, 1.35, -10]} rotation={0.25} materials={materials} />
+      <CheckpointSign position={[-8.8, 1.2, 1]} rotation={1.8} materials={materials} />
+      <CollapsedBeams materials={materials} />
+      <SurvivorRubbleCradles materials={materials} />
+    </group>
+  );
+}
+
+function BurnedVehicle({
+  position,
+  rotation,
+  materials,
+}: {
+  position: [number, number, number];
+  rotation: number;
+  materials: Materials;
+}) {
+  return (
+    <group position={position} rotation={[0, rotation, 0]}>
+      <mesh>
+        <boxGeometry args={[2.9, 0.75, 1.35]} />
+        <primitive object={materials.metal} attach="material" />
+      </mesh>
+      <mesh position={[0.1, 0.56, -0.06]}>
+        <boxGeometry args={[1.45, 0.56, 1.05]} />
+        <primitive object={materials.metal} attach="material" />
+      </mesh>
+      {[-0.95, 0.95].map((x) =>
+        [-0.62, 0.62].map((z) => (
+          <mesh key={`${x}-${z}`} position={[x, -0.36, z]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.32, 0.32, 0.18, 16]} />
+            <meshStandardMaterial color="#060606" roughness={0.9} />
+          </mesh>
+        )),
+      )}
+      <mesh position={[-1.48, 0.2, 0.03]} rotation={[0.2, 0, 0.05]}>
+        <boxGeometry args={[0.08, 0.65, 1.2]} />
+        <primitive object={materials.concreteDark} attach="material" />
+      </mesh>
+    </group>
+  );
+}
+
+function CheckpointSign({
+  position,
+  rotation,
+  materials,
+}: {
+  position: [number, number, number];
+  rotation: number;
+  materials: Materials;
+}) {
+  return (
+    <group position={position} rotation={[0, rotation, 0]}>
+      <mesh position={[-0.45, -0.55, 0]}>
+        <cylinderGeometry args={[0.04, 0.04, 2.5, 8]} />
+        <primitive object={materials.metal} attach="material" />
+      </mesh>
+      <mesh position={[0.45, -0.55, 0]}>
+        <cylinderGeometry args={[0.04, 0.04, 2.5, 8]} />
+        <primitive object={materials.metal} attach="material" />
+      </mesh>
+      <mesh position={[0, 0.2, 0]}>
+        <boxGeometry args={[1.35, 0.55, 0.05]} />
+        <primitive object={materials.warning} attach="material" />
+      </mesh>
+      <mesh position={[0, -0.18, 0.035]}>
+        <boxGeometry args={[1.1, 0.08, 0.035]} />
+        <meshBasicMaterial color="#17110a" />
+      </mesh>
+    </group>
+  );
+}
+
+function CollapsedBeams({ materials }: { materials: Materials }) {
+  const beams: { pos: [number, number, number]; rot: [number, number, number]; len: number }[] = [
+    { pos: [-4.8, 0.55, -17], rot: [0.05, 0.8, -0.12], len: 6.5 },
+    { pos: [5.3, 0.7, -22], rot: [-0.1, -0.55, 0.18], len: 7.5 },
+    { pos: [-8, 0.6, -28], rot: [0.18, 0.35, -0.08], len: 5.5 },
+    { pos: [8.5, 0.62, -30], rot: [-0.12, 0.95, 0.1], len: 6.2 },
+  ];
+
+  return (
+    <group>
+      {beams.map((b, i) => (
+        <mesh key={`beam${i}`} position={b.pos} rotation={b.rot}>
+          <boxGeometry args={[b.len, 0.28, 0.34]} />
+          <primitive object={materials.metal} attach="material" />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function SurvivorRubbleCradles({ materials }: { materials: Materials }) {
+  const clusters = [
+    { center: [-1, 0.1, -24] as [number, number, number], phase: 10 },
+    { center: [2, 0.1, -28] as [number, number, number], phase: 31 },
+  ];
+
+  return (
+    <group>
+      {clusters.flatMap((cluster, ci) =>
+        Array.from({ length: 12 }).map((_, i) => {
+          const a = seed(i + cluster.phase) * Math.PI * 2;
+          const r = 0.75 + seed(i + cluster.phase + 5) * 1.2;
+          return (
+            <mesh
+              key={`cradle${ci}-${i}`}
+              position={[
+                cluster.center[0] + Math.cos(a) * r,
+                cluster.center[1] + seed(i + 3) * 0.35,
+                cluster.center[2] + Math.sin(a) * r,
+              ]}
+              rotation={[
+                seed(i + 8) * 1.1,
+                seed(i + 9) * Math.PI * 2,
+                seed(i + 10) * 1.1,
+              ]}
+              scale={0.25 + seed(i + 11) * 0.5}
+            >
+              <dodecahedronGeometry args={[1, 0]} />
+              <primitive object={materials.concrete} attach="material" />
+            </mesh>
+          );
+        }),
+      )}
+    </group>
+  );
+}
+
+function RubbleField({ material }: { material: MeshStandardMaterial }) {
+  const items = useMemo(() => {
+    const out: {
+      pos: [number, number, number];
+      rot: [number, number, number];
+      scale: [number, number, number];
+    }[] = [];
+
+    for (let i = 0; i < 140; i++) {
+      const side = seed(i) > 0.5 ? -1 : 1;
+      const awayFromAlley = 4 + seed(i + 1) * 24;
+      out.push({
+        pos: [
+          side * awayFromAlley,
+          0.09 + seed(i + 4) * 0.45,
+          7 - seed(i + 2) * 66,
+        ],
+        rot: [
+          seed(i + 5) * 1.2,
+          seed(i + 6) * Math.PI * 2,
+          seed(i + 7) * 1.2,
+        ],
+        scale: [
+          0.22 + seed(i + 8) * 0.9,
+          0.16 + seed(i + 9) * 0.55,
+          0.22 + seed(i + 10) * 0.9,
+        ],
+      });
+    }
+    return out;
+  }, []);
+
+  return (
+    <group>
+      {items.map((it, i) => (
+        <mesh key={`debris${i}`} position={it.pos} rotation={it.rot} scale={it.scale}>
+          <dodecahedronGeometry args={[1, 0]} />
+          <primitive object={material} attach="material" />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function SkylineRing() {
   const buildings = useMemo(() => {
     const out: {
@@ -213,21 +408,12 @@ function SkylineRing() {
       size: [number, number, number];
       tilt: number;
     }[] = [];
-    const seed = (i: number) => {
-      const v = Math.sin(i * 41.9173 + 11.227) * 9182.21;
-      return v - Math.floor(v);
-    };
-    const count = 28;
-    for (let i = 0; i < count; i++) {
-      const t = i / count;
-      const x = (t - 0.5) * 200 + (seed(i) - 0.5) * 12;
-      const z = -130 - seed(i + 100) * 50;
-      const w = 6 + seed(i + 5) * 14;
-      const h = 12 + seed(i + 7) * 32;
-      const d = 5 + seed(i + 11) * 8;
+    for (let i = 0; i < 34; i++) {
+      const t = i / 33;
+      const h = 12 + seed(i + 7) * 34;
       out.push({
-        pos: [x, h / 2, z],
-        size: [w, h, d],
+        pos: [(t - 0.5) * 220 + (seed(i) - 0.5) * 14, h / 2, -130 - seed(i + 30) * 55],
+        size: [6 + seed(i + 5) * 14, h, 5 + seed(i + 11) * 8],
         tilt: (seed(i + 13) - 0.5) * 0.08,
       });
     }
@@ -237,23 +423,22 @@ function SkylineRing() {
   return (
     <group>
       {buildings.map((b, i) => (
-        <mesh key={`sk${i}`} position={b.pos} rotation={[0, b.tilt * 6, b.tilt]}>
+        <mesh key={`sky${i}`} position={b.pos} rotation={[0, b.tilt * 6, b.tilt]}>
           <boxGeometry args={b.size} />
-          <meshStandardMaterial color="#0a0907" roughness={1} />
+          <meshStandardMaterial color="#080706" roughness={1} />
         </mesh>
       ))}
     </group>
   );
 }
 
-// ---- Smoke columns ----
 function SmokeColumns() {
   const cols = useMemo(
     () => [
-      { pos: [-14, 12, -52], width: 10, height: 24, tint: "#1a1410" },
-      { pos: [18, 14, -68], width: 12, height: 30, tint: "#1c1612" },
-      { pos: [-26, 10, -78], width: 9, height: 22, tint: "#181410" },
-      { pos: [30, 16, -86], width: 14, height: 34, tint: "#1a1410" },
+      { pos: [-13, 10, -20], width: 8, height: 22, tint: "#1a1410" },
+      { pos: [13, 12, -28], width: 9, height: 26, tint: "#1d1713" },
+      { pos: [-22, 13, -52], width: 12, height: 30, tint: "#19140f" },
+      { pos: [27, 15, -72], width: 14, height: 34, tint: "#17130f" },
     ] as const,
     [],
   );
@@ -263,7 +448,8 @@ function SmokeColumns() {
     const t = s.clock.elapsedTime;
     groups.current.forEach((g, i) => {
       if (!g) return;
-      g.position.y = (cols[i].pos[1] as number) + Math.sin(t * 0.2 + i) * 0.3;
+      g.position.y = cols[i].pos[1] + Math.sin(t * 0.22 + i) * 0.35;
+      g.rotation.y = Math.sin(t * 0.07 + i) * 0.18;
     });
   });
 
@@ -271,19 +457,19 @@ function SmokeColumns() {
     <group>
       {cols.map((c, i) => (
         <group
-          key={`sm${i}`}
+          key={`smoke${i}`}
           ref={(el) => {
             groups.current[i] = el;
           }}
-          position={c.pos as unknown as [number, number, number]}
+          position={c.pos}
         >
           <mesh>
             <planeGeometry args={[c.width, c.height]} />
-            <meshBasicMaterial color={c.tint} transparent opacity={0.55} depthWrite={false} />
+            <meshBasicMaterial color={c.tint} transparent opacity={0.5} depthWrite={false} />
           </mesh>
           <mesh rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[c.width, c.height]} />
-            <meshBasicMaterial color={c.tint} transparent opacity={0.55} depthWrite={false} />
+            <meshBasicMaterial color={c.tint} transparent opacity={0.5} depthWrite={false} />
           </mesh>
         </group>
       ))}
@@ -291,14 +477,13 @@ function SmokeColumns() {
   );
 }
 
-// ---- Burning embers ----
 function BurningGlow() {
   const points = useMemo(
     () => [
-      { pos: [-12, 10, -54], color: "#ff6a30", base: 1.5, period: 1.7, phase: 0 },
-      { pos: [17, 6, -64], color: "#ff8a40", base: 1.2, period: 2.3, phase: 1.4 },
-      { pos: [-26, 8, -74], color: "#ff5a28", base: 1.8, period: 1.4, phase: 2.6 },
-      { pos: [9, 14, -82], color: "#ff7038", base: 1.4, period: 2.0, phase: 0.8 },
+      { pos: [-10, 0.6, -17], color: "#ff6a30", base: 1.3, period: 1.7, phase: 0 },
+      { pos: [9, 0.7, -25], color: "#ff8a40", base: 1.1, period: 2.3, phase: 1.4 },
+      { pos: [-20, 2.2, -50], color: "#ff5a28", base: 1.6, period: 1.4, phase: 2.6 },
+      { pos: [24, 3.5, -68], color: "#ff7038", base: 1.2, period: 2.0, phase: 0.8 },
     ],
     [],
   );
@@ -312,7 +497,7 @@ function BurningGlow() {
       const pulse = (Math.sin(t / p.period + p.phase) + 1) * 0.5;
       const mat = m.material as { emissiveIntensity?: number };
       if (typeof mat.emissiveIntensity === "number") {
-        mat.emissiveIntensity = p.base + pulse * 2.5;
+        mat.emissiveIntensity = p.base + pulse * 2.3;
       }
     });
   });
@@ -327,7 +512,7 @@ function BurningGlow() {
           }}
           position={p.pos as [number, number, number]}
         >
-          <sphereGeometry args={[0.6, 8, 8]} />
+          <sphereGeometry args={[0.65, 12, 8]} />
           <meshStandardMaterial
             color={p.color}
             emissive={p.color}
@@ -340,99 +525,7 @@ function BurningGlow() {
   );
 }
 
-// ---- Loaded asset with auto-sizing + triplanar PBR ----
-function RuinAsset({
-  src,
-  position,
-  rotation = [0, 0, 0],
-  targetHeight,
-  tint = "#ffffff",
-  baseMaterial,
-}: Placement & { baseMaterial: MeshStandardMaterial }) {
-  const { scene } = useGLTF(src);
-  const innerRef = useRef<Group>(null);
-  const [computedScale, setComputedScale] = useState(1);
-  const [computedOffset, setComputedOffset] = useState<[number, number, number]>([
-    0, 0, 0,
-  ]);
-
-  // Per-instance material: clone the variant + apply the tint multiplier.
-  // Cloning a material preserves the onBeforeCompile patch (shaders are
-  // shared by program cache key).
-  const instanceMaterial = useMemo(() => {
-    const m = baseMaterial.clone();
-    m.color.set(tint);
-    return m;
-  }, [baseMaterial, tint]);
-
-  const cloned = useMemo(() => {
-    const c = scene.clone(true);
-    c.traverse((o: Object3D) => {
-      if ((o as Mesh).isMesh) {
-        const m = o as Mesh;
-        m.material = instanceMaterial;
-        m.castShadow = false;
-        m.receiveShadow = false;
-      }
-    });
-    return c;
-  }, [scene, instanceMaterial]);
-
-  useLayoutEffect(() => {
-    if (!innerRef.current) return;
-    const bbox = new Box3().setFromObject(cloned);
-    if (!isFinite(bbox.min.y) || !isFinite(bbox.max.y)) return;
-    const size = new Vector3();
-    bbox.getSize(size);
-    if (size.y <= 0) return;
-
-    const s = targetHeight / size.y;
-    const center = new Vector3();
-    bbox.getCenter(center);
-    setComputedScale(s);
-    setComputedOffset([-center.x * s, -bbox.min.y * s, -center.z * s]);
-  }, [cloned, targetHeight]);
-
-  return (
-    <group position={position} rotation={rotation}>
-      <group ref={innerRef} scale={computedScale} position={computedOffset}>
-        <primitive object={cloned} />
-      </group>
-    </group>
-  );
-}
-
-// ---- Procedural debris ----
-function ProceduralDebris({ baseMaterial }: { baseMaterial: MeshStandardMaterial }) {
-  const items = useMemo(() => {
-    const out: {
-      pos: [number, number, number];
-      rot: [number, number, number];
-      scale: number;
-    }[] = [];
-    const seed = (i: number) => {
-      const v = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
-      return v - Math.floor(v);
-    };
-    for (let i = 0; i < 90; i++) {
-      const a = seed(i) * Math.PI * 2;
-      const r = 5 + seed(i + 1) * 25;
-      out.push({
-        pos: [Math.cos(a) * r, 0.12 + seed(i + 4) * 0.4, -4 - seed(i + 2) * 38],
-        rot: [seed(i + 5) * 1.2, seed(i + 6) * Math.PI * 2, seed(i + 7) * 1.2],
-        scale: 0.18 + seed(i + 8) * 0.6,
-      });
-    }
-    return out;
-  }, []);
-
-  return (
-    <group>
-      {items.map((it, i) => (
-        <mesh key={`d${i}`} position={it.pos} rotation={it.rot} scale={it.scale} material={baseMaterial}>
-          <dodecahedronGeometry args={[1, 0]} />
-        </mesh>
-      ))}
-    </group>
-  );
+function seed(i: number): number {
+  const v = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+  return v - Math.floor(v);
 }

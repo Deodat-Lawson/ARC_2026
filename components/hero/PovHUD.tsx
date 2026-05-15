@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  ALL_ASSETS,
   ASSET_META,
   AssetId,
   setPovTargetViaUrl,
@@ -30,6 +31,7 @@ import { SceneMapDebug } from "./SceneMapDebug";
 export function PovHUD() {
   const povTarget = usePovTarget();
   const [t, setT] = useState(0);
+  const [isPovMenuOpen, setIsPovMenuOpen] = useState(false);
 
   useEffect(() => {
     let raf = 0;
@@ -39,6 +41,15 @@ export function PovHUD() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+  }, []);
+
+  useEffect(() => {
+    const exitOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPovTargetViaUrl("cinematic");
+    };
+
+    window.addEventListener("keydown", exitOnEscape);
+    return () => window.removeEventListener("keydown", exitOnEscape);
   }, []);
 
   if (povTarget === "cinematic") return null;
@@ -82,8 +93,8 @@ export function PovHUD() {
         }}
       />
 
-      {/* Top bar — FPV identity + exit */}
-      <div className="pointer-events-auto absolute left-1/2 top-6 -translate-x-1/2">
+      {/* Top bar — FPV identity */}
+      <div className="pointer-events-auto absolute left-1/2 top-20 -translate-x-1/2 md:top-6">
         <div className="flex items-center gap-4 rounded-sm border border-arc-accent/40 bg-arc-bg/80 px-4 py-2 backdrop-blur-sm">
           <span className="flex items-center gap-2 text-arc-accent">
             <span
@@ -96,14 +107,17 @@ export function PovHUD() {
           <span className="text-arc-muted">{meta.role}</span>
           <span className="text-arc-muted">·</span>
           <span className="text-arc-fg">{phaseName}</span>
-          <button
-            type="button"
-            onClick={() => setPovTargetViaUrl("cinematic")}
-            className="ml-2 rounded-sm border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-arc-fg/80 transition hover:border-arc-accent/60 hover:text-arc-accent"
-          >
-            EXIT
-          </button>
         </div>
+      </div>
+
+      {/* Dedicated POV controls: high layer, large target, and keyboard reachable. */}
+      <div className="pointer-events-auto absolute right-6 top-6 z-50 md:right-10">
+        <PovSwitcher
+          currentAssetId={assetId}
+          isOpen={isPovMenuOpen}
+          onOpenChange={setIsPovMenuOpen}
+          onSelect={(target) => setPovTargetViaUrl(target)}
+        />
       </div>
 
       {/* Corner brackets (FPV frame) */}
@@ -198,6 +212,86 @@ function Row({
     <div className="flex items-center justify-between gap-2 text-[10px]">
       <span className="text-arc-muted">{label}</span>
       <span className={tint}>{value}</span>
+    </div>
+  );
+}
+
+function PovSwitcher({
+  currentAssetId,
+  isOpen,
+  onOpenChange,
+  onSelect,
+}: {
+  currentAssetId: AssetId;
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  onSelect: (target: "cinematic" | AssetId) => void;
+}) {
+  const current = ASSET_META[currentAssetId];
+
+  const chooseTarget = (target: "cinematic" | AssetId) => {
+    onOpenChange(false);
+    onSelect(target);
+  };
+
+  return (
+    <div className="relative flex justify-end">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-label={`Switch POV or exit. Current POV ${current.label}`}
+        title="Switch POV or exit (Esc)"
+        onClick={() => onOpenChange(!isOpen)}
+        className="flex min-h-[44px] items-center rounded-sm border border-arc-accent/60 bg-arc-bg/95 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-arc-accent shadow-[0_0_24px_rgba(93,255,180,0.18)] backdrop-blur-sm transition hover:border-arc-accent hover:bg-arc-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arc-accent focus-visible:ring-offset-2 focus-visible:ring-offset-arc-bg"
+      >
+        <span>{current.label}</span>
+        <span className="ml-2 text-arc-fg/70">POV</span>
+        <span aria-hidden className="ml-3 text-arc-accent">
+          {isOpen ? "▲" : "▼"}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-2 w-64 overflow-hidden rounded-sm border border-arc-accent/50 bg-arc-bg/95 text-[10px] shadow-[0_18px_42px_rgba(0,0,0,0.45)] backdrop-blur-md"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => chooseTarget("cinematic")}
+            className="flex min-h-[44px] w-full items-center justify-between border-b border-white/10 px-3 py-2 text-left text-arc-accent transition hover:bg-arc-accent/10 focus-visible:bg-arc-accent/10 focus-visible:outline-none"
+          >
+            <span>Exit POV</span>
+            <span className="text-[9px] text-arc-fg/60">Esc</span>
+          </button>
+
+          {ALL_ASSETS.map((id) => {
+            const asset = ASSET_META[id];
+            const isCurrent = id === currentAssetId;
+
+            return (
+              <button
+                key={id}
+                type="button"
+                role="menuitem"
+                aria-current={isCurrent ? "true" : undefined}
+                onClick={() => chooseTarget(id)}
+                className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:cursor-default disabled:bg-arc-accent/10"
+                disabled={isCurrent}
+              >
+                <span className={isCurrent ? "text-arc-accent" : "text-arc-fg"}>
+                  {asset.label}
+                </span>
+                <span className="truncate text-right text-[9px] text-arc-muted">
+                  {isCurrent ? "Current" : asset.role}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

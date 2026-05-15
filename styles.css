@@ -55,7 +55,7 @@ body::after {
 .topbar,
 .workspace,
 .briefing-grid {
-  width: min(1440px, 100%);
+  width: min(1800px, 100%);
   margin: 0 auto;
 }
 
@@ -321,6 +321,12 @@ pre::-webkit-scrollbar-thumb {
   background: var(--blue);
 }
 
+@media (max-width: 1280px) {
+  .map-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 980px) {
   .workspace,
   .briefing-grid {
@@ -409,13 +415,228 @@ pre::-webkit-scrollbar-thumb {
   100% { transform: scale(1); }
 }
 
-/* ── 3D POV viewport ───────────────────────────────────────────────────── */
-.pov-head {
-  margin-top: 20px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(0, 191, 255, 0.15);
+/* ── Map panel split: 2D + POV side by side ────────────────────────────── */
+.map-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
 }
 
+.map-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pov-sub-meta {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── Agent selector (HCI: visibility, recognition, accessible labels) ──── */
+.agent-selector {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+
+.agent-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 4px;
+  padding: 10px 10px 8px;
+  background: rgba(0, 20, 45, 0.55);
+  border: 1px solid rgba(0, 120, 200, 0.25);
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  letter-spacing: 0;
+  text-transform: none;
+  min-width: 0;
+  transition: transform 0.12s ease, border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.agent-card:hover {
+  border-color: rgba(0, 191, 255, 0.55);
+  background: rgba(0, 30, 60, 0.7);
+  transform: translateY(-1px);
+}
+
+.agent-card:focus-visible {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(0, 191, 255, 0.35);
+}
+
+.agent-card[aria-selected="true"] {
+  border-color: var(--blue);
+  background: rgba(0, 40, 80, 0.85);
+  box-shadow: 0 0 18px rgba(0, 191, 255, 0.35), inset 0 0 12px rgba(0, 191, 255, 0.15);
+}
+
+.agent-card[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--blue), transparent);
+  box-shadow: 0 0 8px var(--blue);
+  border-radius: 5px 5px 0 0;
+}
+
+.agent-card[aria-selected="true"] .agent-id::after {
+  content: " ✓";
+  color: var(--blue);
+}
+
+.agent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-icon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--blue);
+  flex-shrink: 0;
+}
+
+.agent-card[data-kind="ground"] .agent-icon {
+  color: var(--green);
+}
+
+.agent-icon svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.agent-id {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+
+.agent-card[aria-selected="true"] .agent-id {
+  color: var(--blue);
+  text-shadow: 0 0 6px rgba(0, 191, 255, 0.6);
+}
+
+.agent-card[data-kind="ground"][aria-selected="true"] .agent-id {
+  color: var(--green);
+  text-shadow: 0 0 6px rgba(57, 255, 20, 0.6);
+}
+
+.agent-role {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.agent-card-body {
+  display: grid;
+  gap: 5px;
+  font-size: 10px;
+}
+
+.agent-task {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 12px;
+}
+
+.agent-task.has-task {
+  color: var(--warn);
+}
+
+.agent-battery {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-battery .bar {
+  flex: 1;
+  height: 4px;
+}
+
+.agent-battery-pct {
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 26px;
+  text-align: right;
+}
+
+.agent-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.agent-card kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid rgba(0, 191, 255, 0.35);
+  border-radius: 3px;
+  background: rgba(0, 14, 32, 0.9);
+  font-family: "Courier New", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--blue);
+  box-shadow: 0 1px 0 rgba(0, 191, 255, 0.2);
+}
+
+.agent-selector-hint {
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 2px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.agent-selector-hint kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid rgba(0, 191, 255, 0.35);
+  border-radius: 3px;
+  background: rgba(0, 14, 32, 0.7);
+  font-family: "Courier New", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--blue);
+}
+
+/* ── 3D POV viewport ───────────────────────────────────────────────────── */
 .pov-frame {
   position: relative;
   width: 100%;
@@ -461,13 +682,14 @@ pre::-webkit-scrollbar-thumb {
 }
 
 .reticle-ring {
-  width: 80px;
-  height: 80px;
+  width: 70px;
+  height: 70px;
   border: 1px solid rgba(0, 191, 255, 0.55);
   border-radius: 50%;
   box-shadow: 0 0 12px rgba(0, 191, 255, 0.35), inset 0 0 12px rgba(0, 191, 255, 0.2);
   position: absolute;
 }
+
 
 .reticle-ring::before,
 .reticle-ring::after {

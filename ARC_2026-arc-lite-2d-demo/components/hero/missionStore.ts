@@ -94,13 +94,13 @@ export const POV_OFFSETS: Record<AssetId, PovOffset> = {
   // "looking around the world" rather than "telephoto on the target."
   //
   // Drones — gimbal-cam under the nose.
-  lead: { eye: [0, -0.05, 0.5], lookAhead: 6, tilt: -0.22, fov: 70, bobAmp: 0.02, bobHz: 3.0 },
-  perception: { eye: [0, -0.05, 0.5], lookAhead: 6, tilt: -0.18, fov: 70, bobAmp: 0.02, bobHz: 3.0 },
+  lead: { eye: [0, -0.1, 0.68], lookAhead: 7, tilt: -0.2, fov: 74, bobAmp: 0.018, bobHz: 3.2 },
+  perception: { eye: [0, -0.08, 0.62], lookAhead: 6.5, tilt: -0.15, fov: 78, bobAmp: 0.022, bobHz: 3.5 },
   // Overseer — wide overview lens.
-  relay: { eye: [0, -0.05, 0.4], lookAhead: 14, tilt: -0.4, fov: 90, bobAmp: 0.02, bobHz: 2.5 },
+  relay: { eye: [0, -0.05, 0.42], lookAhead: 16, tilt: -0.42, fov: 92, bobAmp: 0.015, bobHz: 2.2 },
   // Dogs — head-cam, raised above the dog's head height so we clear debris.
-  dog1: { eye: [0, 0.95, 0.55], lookAhead: 6, tilt: -0.05, fov: 85, bobAmp: 0.04, bobHz: 5.0 },
-  dog2: { eye: [0, 0.95, 0.55], lookAhead: 6, tilt: -0.05, fov: 85, bobAmp: 0.04, bobHz: 5.0 },
+  dog1: { eye: [0, 0.72, 0.5], lookAhead: 5.5, tilt: -0.03, fov: 88, bobAmp: 0.055, bobHz: 5.4 },
+  dog2: { eye: [0, 0.72, 0.5], lookAhead: 5.5, tilt: -0.03, fov: 88, bobAmp: 0.052, bobHz: 5.1 },
 };
 
 /**
@@ -146,3 +146,61 @@ export const ASSET_META: Record<
 };
 
 export const ALL_ASSETS: AssetId[] = ["lead", "perception", "relay", "dog1", "dog2"];
+
+export type SensorProfile = {
+  feed: string;
+  primary: string;
+  target: "T-01" | "T-02" | "BOTH";
+  thermal: number;
+  acoustic: number;
+  vibration: number;
+  link: string;
+};
+
+export const SENSOR_PROFILES: Record<AssetId, SensorProfile> = {
+  lead: {
+    feed: "EO/IR gimbal",
+    primary: "thermal contour",
+    target: "T-01",
+    thermal: 0.86,
+    acoustic: 0.42,
+    vibration: 0.2,
+    link: "MESH 5/5",
+  },
+  perception: {
+    feed: "stereo + audio",
+    primary: "audio triangulation",
+    target: "T-02",
+    thermal: 0.62,
+    acoustic: 0.78,
+    vibration: 0.48,
+    link: "MESH 4/5",
+  },
+  relay: {
+    feed: "wide relay cam",
+    primary: "mesh coverage",
+    target: "BOTH",
+    thermal: 0.54,
+    acoustic: 0.38,
+    vibration: 0.22,
+    link: "UPLINK 98%",
+  },
+  dog1: {
+    feed: "head stereo",
+    primary: "near-field vibration",
+    target: "T-01",
+    thermal: 0.46,
+    acoustic: 0.63,
+    vibration: 0.84,
+    link: "MESH 4/5",
+  },
+  dog2: {
+    feed: "head stereo",
+    primary: "void audio",
+    target: "T-02",
+    thermal: 0.52,
+    acoustic: 0.73,
+    vibration: 0.76,
+    link: "MESH 4/5",
+  },
+};

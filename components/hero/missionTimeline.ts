@@ -271,7 +271,10 @@ export const SURVIVORS: Survivor[] = [
     id: "T-01",
     position: [-1, 0.5, -24],
     probability: 87,
-    identifyAtT: 9.6, // mid-IDENTIFY (phase 7–14, ~37% in)
+    // A-03 floodlight sweeps over T-01 around t=11.4 (see relay waypoint
+    // notes in ASSET_WAYPOINTS) — detection fires the moment the cone
+    // passes overhead.
+    identifyAtT: 11.4,
     rescuedAtT: 30.1, // mid-RESCUE (phase 28–35, ~30% in)
     assignedDog: "dog1",
   },
@@ -279,7 +282,8 @@ export const SURVIVORS: Survivor[] = [
     id: "T-02",
     position: [2, 0.5, -28],
     probability: 71,
-    identifyAtT: 13.0, // late IDENTIFY (~86% in)
+    // A-03 floodlight sweeps over T-02 around t=12.0, ~0.6s after T-01.
+    identifyAtT: 12.0,
     rescuedAtT: 32.8, // later in RESCUE (~69% in)
     assignedDog: "dog2",
   },
@@ -333,12 +337,22 @@ export const ASSET_WAYPOINTS: Record<
   ],
 
   // A-03 OVERSEER — high altitude, always above building heights, doesn't
-  // conflict with buildings regardless of (x,z).
+  // conflict with buildings regardless of (x,z). During IDENTIFY this drone
+  // is the SWEEPER: it streaks south from over the alley entrance, passing
+  // directly over T-01 (z=-24) and T-02 (z=-28) with its huge searchlight
+  // cone (see ScanBeam.tsx) projecting down onto the rooftops. DETERMINE
+  // pulls it back north to its overseer station above the plaza.
+  //
+  // Timing — with smootherstep across IDENTIFY (t=7..14, span z: 16 → -36):
+  //   t≈11.4: drone z≈-22 → directly over T-01 (z=-24) → SURVIVOR identifyAtT
+  //   t≈12.0: drone z≈-28 → directly over T-02 (z=-28) → SURVIVOR identifyAtT
+  // Keep SURVIVORS.identifyAtT and COMM_EVENTS aligned with these if the
+  // sweep ever changes.
   relay: [
-    [-10, 18, 20], //  NAVIGATE
-    [-8, 18, 8], //    IDENTIFY
-    [-6, 18, 0], //    DETERMINE
-    [-4, 18, -6], //   DISPATCH
+    [-4, 20, 22], //   NAVIGATE — high entry from NE
+    [0, 22, 16], //    IDENTIFY START — over the alley mouth, lifted clear of all rooftops
+    [0, 22, -36], //   IDENTIFY END / DETERMINE START — south past both survivors and the deepest building
+    [-2, 19, -6], //   DISPATCH — back over the plaza
     [-2, 18, -10], //  RESCUE
     [-4, 19, -4], //   REPORT — closer to NAVIGATE so wrap is short
   ],
@@ -432,10 +446,11 @@ export const COMM_EVENTS: CommEvent[] = [
   { t: 4.7,  duration: 1.0, link: "dog1-dog2",        kind: "telemetry", log: "D-01 ↔ D-02   ground mesh online" },
   { t: 6.1,  duration: 0.9, link: "perception-relay", kind: "telemetry", log: "A-02 → A-03   telemetry · MESH 5/5" },
 
-  // IDENTIFY (7-14) — both targets detected
-  { t: 7.9,  duration: 1.0, link: "lead-perception",  kind: "telemetry", log: "A-01 → A-02   sweep · sector 14-D" },
-  { t: 9.6,  duration: 1.2, link: "lead-relay",       kind: "alert",     log: "A-01 → A-03   ALERT · T-01 detected · 4.2σ" },
-  { t: 13.0, duration: 1.2, link: "perception-relay", kind: "alert",     log: "A-02 → A-03   ALERT · T-02 detected · 3.1σ" },
+  // IDENTIFY (7-14) — A-03 streaks over the buildings with its floodlight,
+  // detecting both targets as the cone passes overhead.
+  { t: 7.9,  duration: 1.0, link: "relay-command",    kind: "telemetry", log: "A-03 → CMD    floodlight sweep · sector 14-D" },
+  { t: 11.4, duration: 1.2, link: "relay-command",    kind: "alert",     log: "A-03 → CMD    ALERT · T-01 detected · 4.2σ" },
+  { t: 12.0, duration: 1.2, link: "relay-command",    kind: "alert",     log: "A-03 → CMD    ALERT · T-02 detected · 3.1σ" },
 
   // DETERMINE (14-21) — priority calculation + dispatch plan
   { t: 15.4, duration: 1.2, link: "lead-relay",       kind: "telemetry", log: "A-01 → A-03   priority calc · T-01 > T-02" },
@@ -528,24 +543,24 @@ export const NARRATION_BEATS: NarrationBeat[] = [
   },
   {
     fromT: 7,
-    text: "Sweeping the rubble for life signs",
-    sub: "A-01 acoustic · A-02 thermal · ground mesh online",
+    text: "A-03 floodlight sweep over the rubble",
+    sub: "Overseer drone streaking south at altitude · multispectral sensor pod",
     tone: "neutral",
-    focus: ["lead", "perception"],
+    focus: ["relay"],
   },
   {
-    fromT: 9.6,
-    text: "T-01 detected · sub-acoustic signature",
-    sub: "Under foreground rubble · 4.2σ above baseline",
+    fromT: 11.4,
+    text: "T-01 detected · floodlight pass",
+    sub: "A-03 multispectral lock · under foreground rubble · 4.2σ",
     tone: "alert",
-    focus: ["lead", "T-01"],
+    focus: ["relay", "T-01"],
   },
   {
-    fromT: 13.0,
-    text: "T-02 detected · thermal signature",
-    sub: "Further inside the rubble · 3.1σ",
+    fromT: 12.0,
+    text: "T-02 detected · floodlight pass",
+    sub: "A-03 multispectral lock · further inside the rubble · 3.1σ",
     tone: "alert",
-    focus: ["perception", "T-02"],
+    focus: ["relay", "T-02"],
   },
   {
     fromT: 15.2,

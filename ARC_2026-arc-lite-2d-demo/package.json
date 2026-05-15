@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "assets:inventory": "node scripts/inventory-kbs105.mjs",
+    "assets:prepare-pbr": "node scripts/prepare-pbr.mjs",
+    "assets:convert": "node scripts/convert-assets.mjs",
     "compress:gltf": "gltf-transform draco public/models/_raw/environment.glb public/models/environment.glb && gltf-transform uastc public/models/environment.glb public/models/environment.glb"
   },
   "dependencies": {

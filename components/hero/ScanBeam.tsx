@@ -12,36 +12,36 @@ import {
 } from "./missionTimeline";
 
 /**
- * Lead drone's ground scan effect. Active during IDENTIFY phase, brightens
- * as targets are detected, fades by DETERMINE.
+ * Overseer drone's ground scan effect — wide searchlight cone projected
+ * straight down from A-03 (the relay/third drone) during its IDENTIFY
+ * flyover above the buildings. Brightens through the phase, fades by
+ * DETERMINE.
  *
  * Components:
- *   • Vertical cone from the lead drone toward the ground
+ *   • Wide vertical cone from the relay drone to the ground (searchlight)
  *   • Ground pulse ring — locks onto whichever survivor is currently being
  *     identified (cycles between T-01 and T-02)
  */
 export function ScanBeam() {
   const cone = useRef<Mesh>(null);
   const ring = useRef<Mesh>(null);
-  const leadPos = useMemo(() => new Vector3(), []);
+  const relayPos = useMemo(() => new Vector3(), []);
 
   useFrame(() => {
     const t = getLoopTime();
     const phase = currentPhaseIndex(t);
 
-    // Visibility envelope tied to the 22s loop:
-    //   IDENTIFY (phase 1, t=3..7): build up to full intensity
-    //   DETERMINE (phase 2, t=7..10): fade out over first second
+    // Visibility envelope: fully lit through IDENTIFY (phase 1, t=7..14),
+    // then a 1s fade at the start of DETERMINE (phase 2).
     let envelope = 0;
     if (phase === 1) {
-      const segT = (t - 3) / 4.0; // 0 → 1 across IDENTIFY (4s)
-      envelope = Math.min(1, segT);
+      envelope = 1;
     } else if (phase === 2) {
-      const segT = (t - 7) / 1.0; // fade out in first second of DETERMINE
+      const segT = (t - 14) / 1.0;
       envelope = Math.max(0, 1 - segT);
     }
 
-    applyWaypointLerp(leadPos, ASSET_WAYPOINTS.lead, t);
+    applyWaypointLerp(relayPos, ASSET_WAYPOINTS.relay, t);
 
     // Find which survivor we're currently focused on — whichever was most
     // recently identified
@@ -52,20 +52,18 @@ export function ScanBeam() {
     })();
 
     if (cone.current) {
-      // Cone default orientation: tip at +Y, base at -Y. We want tip AT the
-      // drone (top) and base on the ground — that's exactly the default, no
-      // rotation needed. Earlier code flipped this with Math.PI which made it
-      // a "reverse cone" (base at drone, tip on ground).
+      // Cone default orientation: tip at +Y, base at -Y. Tip is anchored at
+      // the drone, base spreads across the ground directly underneath.
       cone.current.position.set(
-        leadPos.x,
-        leadPos.y * 0.5 + focusSurvivor.position[1] * 0.5,
-        leadPos.z,
+        relayPos.x,
+        relayPos.y * 0.5 + focusSurvivor.position[1] * 0.5,
+        relayPos.z,
       );
-      cone.current.scale.set(1, leadPos.y, 1);
+      cone.current.scale.set(1, relayPos.y, 1);
       cone.current.rotation.set(0, 0, 0);
       const pulse = 0.85 + Math.sin(t * 8) * 0.15;
       const m = cone.current.material as { opacity?: number };
-      m.opacity = envelope * 0.32 * pulse;
+      m.opacity = envelope * 0.38 * pulse;
     }
 
     if (ring.current) {
@@ -80,10 +78,13 @@ export function ScanBeam() {
 
   return (
     <group>
+      {/* Huge searchlight cone — base radius 7 (vs 2.6 for the old lead-drone
+          scan) so the floodlight reads as a wide swath across the rooftops
+          from A-03's overseer altitude (~y=22). */}
       <mesh ref={cone}>
-        <coneGeometry args={[2.6, 1, 24, 1, true]} />
+        <coneGeometry args={[7, 1, 32, 1, true]} />
         <meshBasicMaterial
-          color="#5dffb4"
+          color="#9bf5ff"
           transparent
           opacity={0}
           side={DoubleSide}
@@ -94,7 +95,7 @@ export function ScanBeam() {
       <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[1.6, 1.9, 48]} />
         <meshBasicMaterial
-          color="#5dffb4"
+          color="#9bf5ff"
           transparent
           opacity={0}
           side={DoubleSide}

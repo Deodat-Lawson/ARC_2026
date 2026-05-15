@@ -9,6 +9,7 @@ import {
   ASSET_META,
   ASSET_POSITIONS,
   AssetId,
+  SENSOR_PROFILES,
   setPovTarget,
   usePovTarget,
 } from "./missionStore";
@@ -59,14 +60,16 @@ export function AssetPicker() {
                   e.stopPropagation();
                   setPovTarget(id);
                 }}
-                className="group flex items-center gap-1 rounded-sm border border-white/15 bg-arc-bg/75 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-arc-fg/85 backdrop-blur-sm transition hover:border-arc-accent/80 hover:text-arc-accent"
+                className="group flex items-center gap-1 rounded-sm border border-white/15 bg-arc-bg/80 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-arc-fg/85 shadow-[0_0_18px_rgba(0,0,0,0.35)] backdrop-blur-sm transition hover:border-arc-accent/80 hover:text-arc-accent"
               >
                 <span
                   aria-hidden
                   className="inline-block size-1 rounded-full bg-arc-accent group-hover:shadow-[0_0_6px_2px_rgba(93,255,180,0.6)]"
                 />
                 {ASSET_META[id].label}
-                <span className="text-arc-muted group-hover:text-arc-accent">· FPV</span>
+                <span className="text-arc-muted group-hover:text-arc-accent">
+                  · {SENSOR_PROFILES[id].target}
+                </span>
               </button>
             </Html>
           )}

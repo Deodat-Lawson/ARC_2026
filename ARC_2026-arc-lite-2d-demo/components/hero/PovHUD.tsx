@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import {
+  ALL_ASSETS,
   ASSET_META,
   AssetId,
+  SENSOR_PROFILES,
   setPovTarget,
   usePovTarget,
 } from "./missionStore";
@@ -30,6 +32,7 @@ import { MiniMap } from "./MiniMap";
 export function PovHUD() {
   const povTarget = usePovTarget();
   const [t, setT] = useState(0);
+  const [isPovMenuOpen, setIsPovMenuOpen] = useState(false);
 
   useEffect(() => {
     let raf = 0;
@@ -41,6 +44,15 @@ export function PovHUD() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  useEffect(() => {
+    const exitOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPovTarget("cinematic");
+    };
+
+    window.addEventListener("keydown", exitOnEscape);
+    return () => window.removeEventListener("keydown", exitOnEscape);
+  }, []);
+
   if (povTarget === "cinematic") return null;
 
   const assetId = povTarget as AssetId;
@@ -49,6 +61,7 @@ export function PovHUD() {
   const phaseIdx = currentPhaseIndex(loopT);
   const phaseName = PHASES[phaseIdx].name;
   const isDrone = meta.kind === "drone";
+  const profile = SENSOR_PROFILES[assetId];
 
   // Seeded telemetry (per-asset, smooth wandering)
   const seed = assetId.charCodeAt(0) * 0.13;
@@ -58,7 +71,8 @@ export function PovHUD() {
     ? 7.4 + Math.sin(t * 0.6 + seed * 1.3) * 0.6
     : 1.6 + Math.sin(t * 0.6 + seed * 1.3) * 0.3;
   const battery = (isDrone ? 78 : 88) + Math.sin(t * 0.08 + seed) * 0.6;
-  const lock = loopT >= 8 && loopT < 11; // CONFIRM + early RELAY
+  const lock = loopT >= 4.5 && loopT < 18.5;
+  const confidence = sensorConfidence(assetId, loopT, t);
 
   return (
     <div className="pointer-events-none absolute inset-0 font-mono text-[10px] uppercase tracking-[0.2em] text-arc-fg/80">
@@ -82,9 +96,9 @@ export function PovHUD() {
         }}
       />
 
-      {/* Top bar — FPV identity + exit */}
-      <div className="pointer-events-auto absolute left-1/2 top-6 -translate-x-1/2">
-        <div className="flex items-center gap-4 rounded-sm border border-arc-accent/40 bg-arc-bg/80 px-4 py-2 backdrop-blur-sm">
+      {/* Top bar — FPV identity */}
+      <div className="pointer-events-auto absolute left-1/2 top-20 -translate-x-1/2 md:top-6">
+        <div className="flex items-center gap-4 rounded-sm border border-arc-accent/40 bg-arc-bg/80 px-4 py-2 shadow-[0_0_24px_rgba(93,255,180,0.08)] backdrop-blur-sm">
           <span className="flex items-center gap-2 text-arc-accent">
             <span
               aria-hidden
@@ -96,14 +110,21 @@ export function PovHUD() {
           <span className="text-arc-muted">{meta.role}</span>
           <span className="text-arc-muted">·</span>
           <span className="text-arc-fg">{phaseName}</span>
-          <button
-            type="button"
-            onClick={() => setPovTarget("cinematic")}
-            className="ml-2 rounded-sm border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-arc-fg/80 transition hover:border-arc-accent/60 hover:text-arc-accent"
-          >
-            EXIT
-          </button>
+          <span className="text-arc-muted">·</span>
+          <span className={confidence > 0.7 ? "text-arc-accent" : "text-arc-warning"}>
+            {Math.round(confidence * 100)}%
+          </span>
         </div>
+      </div>
+
+      {/* Dedicated POV controls: high layer, large target, and keyboard reachable. */}
+      <div className="pointer-events-auto absolute right-6 top-6 z-50 md:right-10">
+        <PovSwitcher
+          currentAssetId={assetId}
+          isOpen={isPovMenuOpen}
+          onOpenChange={setIsPovMenuOpen}
+          onSelect={(target) => setPovTarget(target)}
+        />
       </div>
 
       {/* Corner brackets (FPV frame) */}
@@ -121,7 +142,10 @@ export function PovHUD() {
       {/* Top-right: telemetry */}
       <div className="absolute right-6 top-24 md:right-10">
         <div className="min-w-[210px] rounded-sm border border-arc-accent/30 bg-arc-bg/75 p-3 backdrop-blur-sm">
-          <div className="mb-2 text-arc-muted">Self · {meta.label}</div>
+          <div className="mb-2 flex items-center justify-between text-arc-muted">
+            <span>Self · {meta.label}</span>
+            <span className="text-[9px] text-arc-fg/70">{profile.feed}</span>
+          </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
             <Row label="ALT" value={isDrone ? `${alt.toFixed(1)}m` : "GND"} />
             <Row label="HDG" value={`${hdg.toFixed(0).padStart(3, "0")}°`} />
@@ -130,7 +154,12 @@ export function PovHUD() {
           </div>
           <div className="mt-1.5 flex items-center justify-between text-[10px]">
             <span className="text-arc-muted">LINK</span>
-            <span className="text-arc-accent">MESH 5/5</span>
+            <span className="text-arc-accent">{profile.link}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-1 text-[9px]">
+            <SignalPip label="THM" value={profile.thermal} />
+            <SignalPip label="AUD" value={profile.acoustic} />
+            <SignalPip label="VIB" value={profile.vibration} />
           </div>
         </div>
       </div>
@@ -157,7 +186,13 @@ export function PovHUD() {
 
       {/* Bottom-right: asset-specific sensor readout */}
       <div className="absolute bottom-6 right-6 md:right-10">
-        <SensorReadout assetId={assetId} t={t} lock={lock} phaseName={phaseName} />
+        <SensorReadout
+          assetId={assetId}
+          confidence={confidence}
+          t={t}
+          lock={lock}
+          phaseName={phaseName}
+        />
       </div>
 
       {/* Top-left: minimap revealing this asset's location in the disaster zone.
@@ -165,7 +200,7 @@ export function PovHUD() {
       <div className="absolute left-6 top-24 flex flex-col gap-2 md:left-10">
         <MiniMap />
         <div className="text-[9px] text-arc-muted">
-          {isDrone ? "CAM · gimbal 1 · IR overlay" : "CAM · head · stereo"}
+          {`CAM · ${profile.feed} · ${profile.primary}`}
         </div>
       </div>
 
@@ -198,6 +233,105 @@ function Row({
     <div className="flex items-center justify-between gap-2 text-[10px]">
       <span className="text-arc-muted">{label}</span>
       <span className={tint}>{value}</span>
+    </div>
+  );
+}
+
+function SignalPip({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-sm border border-white/10 bg-white/[0.03] px-1.5 py-1">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-arc-muted">{label}</span>
+        <span className={value > 0.72 ? "text-arc-accent" : "text-arc-fg/70"}>
+          {Math.round(value * 100)}
+        </span>
+      </div>
+      <div className="h-0.5 bg-white/10">
+        <div
+          className="h-full bg-arc-accent"
+          style={{ width: `${Math.round(value * 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PovSwitcher({
+  currentAssetId,
+  isOpen,
+  onOpenChange,
+  onSelect,
+}: {
+  currentAssetId: AssetId;
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  onSelect: (target: "cinematic" | AssetId) => void;
+}) {
+  const current = ASSET_META[currentAssetId];
+
+  const chooseTarget = (target: "cinematic" | AssetId) => {
+    onOpenChange(false);
+    onSelect(target);
+  };
+
+  return (
+    <div className="relative flex justify-end">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-label={`Switch POV or exit. Current POV ${current.label}`}
+        title="Switch POV or exit (Esc)"
+        onClick={() => onOpenChange(!isOpen)}
+        className="flex min-h-[44px] items-center rounded-sm border border-arc-accent/60 bg-arc-bg/95 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-arc-accent shadow-[0_0_24px_rgba(93,255,180,0.18)] backdrop-blur-sm transition hover:border-arc-accent hover:bg-arc-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arc-accent focus-visible:ring-offset-2 focus-visible:ring-offset-arc-bg"
+      >
+        <span>{current.label}</span>
+        <span className="ml-2 text-arc-fg/70">POV</span>
+        <span aria-hidden className="ml-3 text-arc-accent">
+          {isOpen ? "▲" : "▼"}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-2 w-64 overflow-hidden rounded-sm border border-arc-accent/50 bg-arc-bg/95 text-[10px] shadow-[0_18px_42px_rgba(0,0,0,0.45)] backdrop-blur-md"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => chooseTarget("cinematic")}
+            className="flex min-h-[44px] w-full items-center justify-between border-b border-white/10 px-3 py-2 text-left text-arc-accent transition hover:bg-arc-accent/10 focus-visible:bg-arc-accent/10 focus-visible:outline-none"
+          >
+            <span>Exit POV</span>
+            <span className="text-[9px] text-arc-fg/60">Esc</span>
+          </button>
+
+          {ALL_ASSETS.map((id) => {
+            const asset = ASSET_META[id];
+            const isCurrent = id === currentAssetId;
+
+            return (
+              <button
+                key={id}
+                type="button"
+                role="menuitem"
+                aria-current={isCurrent ? "true" : undefined}
+                onClick={() => chooseTarget(id)}
+                className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:cursor-default disabled:bg-arc-accent/10"
+                disabled={isCurrent}
+              >
+                <span className={isCurrent ? "text-arc-accent" : "text-arc-fg"}>
+                  {asset.label}
+                </span>
+                <span className="truncate text-right text-[9px] text-arc-muted">
+                  {isCurrent ? "Current" : asset.role}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -286,36 +420,56 @@ function DogReticle({ locked }: { locked: boolean }) {
 
 function SensorReadout({
   assetId,
+  confidence,
   t,
   lock,
   phaseName,
 }: {
   assetId: AssetId;
+  confidence: number;
   t: number;
   lock: boolean;
   phaseName: string;
 }) {
   const meta = ASSET_META[assetId];
+  const profile = SENSOR_PROFILES[assetId];
   const wave = generateMiniWave(t, lock);
 
   return (
     <div className="w-[260px] rounded-sm border border-white/10 bg-arc-bg/70 p-2 backdrop-blur-sm">
       <div className="mb-1.5 flex items-center justify-between text-[9px]">
-        <span className="text-arc-muted">{meta.kind === "drone" ? "ACOUSTIC" : "GROUND SENSOR"}</span>
+        <span className="text-arc-muted">
+          {meta.kind === "drone" ? "FUSED SENSOR" : "GROUND SENSOR"}
+        </span>
         <span className={lock ? "text-arc-accent" : "text-arc-muted"}>
-          {lock ? "POSITIVE · 4.2σ" : phaseName === "DETECT" ? "RISING" : "baseline"}
+          {lock
+            ? `POSITIVE · ${(2.2 + confidence * 2.7).toFixed(1)}σ`
+            : phaseName === "IDENTIFY"
+              ? "RISING"
+              : "baseline"}
         </span>
       </div>
       <svg viewBox="0 0 260 36" className="h-9 w-full">
         <path d={wave} stroke={lock ? "#5dffb4" : "#5d9bff"} strokeWidth="1" fill="none" />
       </svg>
       <div className="mt-1 flex justify-between text-[9px] text-arc-muted">
-        <span>0.5–30 Hz</span>
+        <span>{profile.primary}</span>
         <span>·</span>
-        <span>{lock ? "T-01 confirmed" : "T-01 candidate"}</span>
+        <span>
+          {lock ? `${profile.target} confirmed` : `${profile.target} candidate`}
+        </span>
       </div>
     </div>
   );
+}
+
+function sensorConfidence(assetId: AssetId, loopT: number, t: number): number {
+  const base = SENSOR_PROFILES[assetId];
+  const weighted = base.thermal * 0.38 + base.acoustic * 0.34 + base.vibration * 0.28;
+  const phaseBoost =
+    loopT >= 13 ? 0.14 : loopT >= 7 ? 0.08 : loopT >= 4.5 ? 0.04 : -0.08;
+  const noise = Math.sin(t * 1.7 + assetId.length) * 0.025;
+  return Math.max(0.08, Math.min(0.98, weighted + phaseBoost + noise));
 }
 
 function generateMiniWave(t: number, lock: boolean): string {

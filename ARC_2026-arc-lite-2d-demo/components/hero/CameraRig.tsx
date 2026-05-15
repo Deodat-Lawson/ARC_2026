@@ -83,6 +83,7 @@ export function CameraRig() {
       const ez = cfg.eye[2];
       const cosY = Math.cos(yaw);
       const sinY = Math.sin(yaw);
+      const isDog = povTarget === "dog1" || povTarget === "dog2";
 
       // Rotate local eye offset by yaw (Y-axis only)
       let worldX = assetPos.x + ex * cosY + ez * sinY;
@@ -93,6 +94,15 @@ export function CameraRig() {
       const tt = state.clock.elapsedTime;
       const bob = Math.abs(Math.sin(tt * cfg.bobHz * Math.PI)) * cfg.bobAmp;
       worldY += bob;
+      if (isDog) {
+        const shoulder = Math.sin(tt * cfg.bobHz * Math.PI * 0.5) * 0.055;
+        worldX += cosY * shoulder;
+        worldZ += -sinY * shoulder;
+      } else {
+        const gimbalDrift = Math.sin(tt * 0.9 + noiseSeed.current) * 0.018;
+        worldX += cosY * gimbalDrift;
+        worldZ += -sinY * gimbalDrift;
+      }
 
       camera.position.set(worldX, worldY, worldZ);
 
@@ -112,8 +122,8 @@ export function CameraRig() {
       }
 
       // Subtle handheld noise on lookAt
-      lookOut.x += Math.sin(tt * 1.7 + noiseSeed.current) * 0.05;
-      lookOut.y += Math.cos(tt * 1.3 + noiseSeed.current) * 0.04;
+      lookOut.x += Math.sin(tt * 1.7 + noiseSeed.current) * (isDog ? 0.085 : 0.045);
+      lookOut.y += Math.cos(tt * 1.3 + noiseSeed.current) * (isDog ? 0.055 : 0.032);
 
       camera.lookAt(lookOut);
       return;

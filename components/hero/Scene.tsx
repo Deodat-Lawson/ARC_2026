@@ -163,6 +163,10 @@ function SkylineRing() {
     for (let i = 0; i < count; i++) {
       const t = i / count;
       const x = (t - 0.5) * 200 + (seed(i) - 0.5) * 12;
+      // Deep silhouette ring — far enough that the FAR LAYER placements
+      // (z ≈ -60..-80, see sceneMap PLACEMENTS) and the fog falloff combine
+      // to read these as a horizon city, not as objects. Don't pull these
+      // forward without also pushing the fog far in HeroCanvas.tsx.
       const z = -130 - seed(i + 100) * 50;
       const w = 6 + seed(i + 5) * 14;
       const h = 12 + seed(i + 7) * 32;
@@ -320,7 +324,17 @@ function RuinAsset({
 
   useLayoutEffect(() => {
     if (!innerRef.current) return;
-    const bbox = new Box3().setFromObject(cloned);
+    // Measure on the SOURCE scene, not `cloned`. setFromObject walks world
+    // matrices; `cloned` is parented inside the rotated outer group, so on
+    // any pass where the outer's matrixWorld is already up-to-date (HMR,
+    // Suspense replay, dep-driven re-run) the resulting bbox lives in world
+    // space *with the yaw applied*. Subtracting that as an inner-group offset
+    // re-rotates it through the outer group on render, displacing the model
+    // by `≈ 2·|entry.position|·sin(yaw/2)` — tens of units for back-layer
+    // placements like far-apt-SE (yaw=-1.20, |pos|≈89). The source scene
+    // sits unparented in drei's GLB cache; its matrixWorld stays identity,
+    // so the bbox is unambiguously in cloned-local space.
+    const bbox = new Box3().setFromObject(scene);
     if (!isFinite(bbox.min.y) || !isFinite(bbox.max.y)) return;
     const size = new Vector3();
     bbox.getSize(size);
@@ -331,7 +345,7 @@ function RuinAsset({
     bbox.getCenter(center);
     setComputedScale(s);
     setComputedOffset([-center.x * s, -bbox.min.y * s, -center.z * s]);
-  }, [cloned, entry.height]);
+  }, [scene, entry.height]);
 
   return (
     <group position={entry.position} rotation={entry.rotation} name={entry.id}>
