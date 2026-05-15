@@ -42,7 +42,10 @@ develop-eggs/
 downloads/
 eggs/
 .eggs/
-lib/
+# Python setuptools / local env (repo root only; allow Next.js runtimes under lib/)
+/lib/*
+!/lib/lite-sim/
+!/lib/demo-player/
 lib64/
 parts/
 sdist/

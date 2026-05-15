@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-14T18:58:51Z",
+  "timestamp": "2026-05-15T13:56:27Z",
   "system_state": "edge_only",
   "fleet_status": [
     {
@@ -13,7 +13,7 @@
         "y": 2100.0,
         "z": 0
       },
-      "in_hub": "hub-8b40f9",
+      "in_hub": "hub-881bf0",
       "gemma_model": "E4B"
     },
     {
@@ -27,7 +27,7 @@
         "y": 2100.0,
         "z": 0
       },
-      "in_hub": "hub-8b40f9",
+      "in_hub": "hub-881bf0",
       "gemma_model": "E4B"
     },
     {
@@ -41,7 +41,7 @@
         "y": 2100.0,
         "z": 0
       },
-      "in_hub": "hub-0d3bf0",
+      "in_hub": "hub-daa5bf",
       "gemma_model": "E4B"
     },
     {
@@ -55,7 +55,7 @@
         "y": 2500.0,
         "z": 0
       },
-      "in_hub": "hub-8b40f9",
+      "in_hub": "hub-881bf0",
       "gemma_model": "E4B"
     },
     {
@@ -69,7 +69,7 @@
         "y": 2500.0,
         "z": 0
       },
-      "in_hub": "hub-2d24e0",
+      "in_hub": "hub-d8c272",
       "gemma_model": "E4B"
     },
     {
@@ -83,7 +83,7 @@
         "y": 2500.0,
         "z": 0
       },
-      "in_hub": "hub-0d3bf0",
+      "in_hub": "hub-daa5bf",
       "gemma_model": "E4B"
     },
     {
@@ -97,7 +97,7 @@
         "y": 2900.0,
         "z": 0
       },
-      "in_hub": "hub-679f5e",
+      "in_hub": "hub-03ba6d",
       "gemma_model": "E4B"
     },
     {
@@ -111,7 +111,7 @@
         "y": 2900.0,
         "z": 0
       },
-      "in_hub": "hub-2d24e0",
+      "in_hub": "hub-d8c272",
       "gemma_model": "E4B"
     },
     {
@@ -125,7 +125,7 @@
         "y": 2300.0,
         "z": 50
       },
-      "in_hub": "hub-8b40f9",
+      "in_hub": "hub-881bf0",
       "gemma_model": "E2B"
     },
     {
@@ -139,7 +139,7 @@
         "y": 2200.0,
         "z": 50
       },
-      "in_hub": "hub-8b40f9",
+      "in_hub": "hub-881bf0",
       "gemma_model": "E2B"
     },
     {
@@ -153,7 +153,7 @@
         "y": 2300.0,
         "z": 50
       },
-      "in_hub": "hub-0d3bf0",
+      "in_hub": "hub-daa5bf",
       "gemma_model": "E2B"
     },
     {
@@ -167,7 +167,7 @@
         "y": 2600.0,
         "z": 50
       },
-      "in_hub": "hub-2d24e0",
+      "in_hub": "hub-d8c272",
       "gemma_model": "E2B"
     },
     {
@@ -181,7 +181,7 @@
         "y": 2600.0,
         "z": 50
       },
-      "in_hub": "hub-2d24e0",
+      "in_hub": "hub-d8c272",
       "gemma_model": "E2B"
     },
     {
@@ -195,7 +195,7 @@
         "y": 2800.0,
         "z": 50
       },
-      "in_hub": "hub-2d24e0",
+      "in_hub": "hub-d8c272",
       "gemma_model": "E2B"
     },
     {
@@ -209,7 +209,7 @@
         "y": 2800.0,
         "z": 50
       },
-      "in_hub": "hub-b7134d",
+      "in_hub": "hub-158bf9",
       "gemma_model": "E2B"
     },
     {
@@ -223,7 +223,7 @@
         "y": 2900.0,
         "z": 50
       },
-      "in_hub": "hub-679f5e",
+      "in_hub": "hub-03ba6d",
       "gemma_model": "E2B"
     },
     {
@@ -237,7 +237,7 @@
         "y": 2150.0,
         "z": 50
       },
-      "in_hub": "hub-b7134d",
+      "in_hub": "hub-158bf9",
       "gemma_model": "E2B"
     },
     {
@@ -251,7 +251,7 @@
         "y": 2150.0,
         "z": 50
       },
-      "in_hub": "hub-0d3bf0",
+      "in_hub": "hub-daa5bf",
       "gemma_model": "E2B"
     },
     {
@@ -265,7 +265,7 @@
         "y": 2850.0,
         "z": 50
       },
-      "in_hub": "hub-679f5e",
+      "in_hub": "hub-03ba6d",
       "gemma_model": "E2B"
     },
     {
@@ -279,7 +279,7 @@
         "y": 2850.0,
         "z": 50
       },
-      "in_hub": "hub-b7134d",
+      "in_hub": "hub-158bf9",
       "gemma_model": "E2B"
     },
     {
@@ -293,7 +293,7 @@
         "y": 2500.0,
         "z": 50
       },
-      "in_hub": "hub-679f5e",
+      "in_hub": "hub-03ba6d",
       "gemma_model": "E2B"
     },
     {
@@ -307,7 +307,7 @@
         "y": 2500.0,
         "z": 50
       },
-      "in_hub": "hub-0d3bf0",
+      "in_hub": "hub-daa5bf",
       "gemma_model": "E2B"
     },
     {
@@ -321,7 +321,7 @@
         "y": 2500.0,
         "z": 50
       },
-      "in_hub": "hub-b7134d",
+      "in_hub": "hub-158bf9",
       "gemma_model": "E2B"
     },
     {
@@ -335,7 +335,7 @@
         "y": 1900.0,
         "z": 200
       },
-      "in_hub": "hub-dfdcae",
+      "in_hub": "hub-02da2c",
       "gemma_model": "E2B"
     },
     {
@@ -349,7 +349,7 @@
         "y": 1900.0,
         "z": 200
       },
-      "in_hub": "hub-b7134d",
+      "in_hub": "hub-158bf9",
       "gemma_model": "E2B"
     },
     {
@@ -363,7 +363,7 @@
         "y": 1900.0,
         "z": 200
       },
-      "in_hub": "hub-dfdcae",
+      "in_hub": "hub-02da2c",
       "gemma_model": "E2B"
     },
     {
@@ -377,7 +377,7 @@
         "y": 1900.0,
         "z": 200
       },
-      "in_hub": "hub-dfdcae",
+      "in_hub": "hub-02da2c",
       "gemma_model": "E2B"
     },
     {
@@ -391,7 +391,7 @@
         "y": 1900.0,
         "z": 200
       },
-      "in_hub": "hub-dfdcae",
+      "in_hub": "hub-02da2c",
       "gemma_model": "E2B"
     },
     {
@@ -405,7 +405,7 @@
         "y": 2300.0,
         "z": 200
       },
-      "in_hub": "hub-dfdcae",
+      "in_hub": "hub-02da2c",
       "gemma_model": "E2B"
     },
     {
@@ -419,7 +419,7 @@
         "y": 2300.0,
         "z": 200
       },
-      "in_hub": "hub-307055",
+      "in_hub": "hub-b29ea3",
       "gemma_model": "E2B"
     },
     {
@@ -433,7 +433,7 @@
         "y": 2300.0,
         "z": 200
       },
-      "in_hub": "hub-307055",
+      "in_hub": "hub-b29ea3",
       "gemma_model": "E2B"
     },
     {
@@ -447,7 +447,7 @@
         "y": 2300.0,
         "z": 200
       },
-      "in_hub": "hub-307055",
+      "in_hub": "hub-b29ea3",
       "gemma_model": "E2B"
     },
     {
@@ -461,7 +461,7 @@
         "y": 2300.0,
         "z": 200
       },
-      "in_hub": "hub-307055",
+      "in_hub": "hub-b29ea3",
       "gemma_model": "E2B"
     },
     {
@@ -475,7 +475,7 @@
         "y": 2700.0,
         "z": 200
       },
-      "in_hub": "hub-679f5e",
+      "in_hub": "hub-03ba6d",
       "gemma_model": "E2B"
     },
     {
@@ -489,7 +489,7 @@
         "y": 2700.0,
         "z": 200
       },
-      "in_hub": "hub-307055",
+      "in_hub": "hub-b29ea3",
       "gemma_model": "E2B"
     },
     {
@@ -503,7 +503,7 @@
         "y": 2700.0,
         "z": 200
       },
-      "in_hub": "hub-d4129c",
+      "in_hub": "hub-142851",
       "gemma_model": "E2B"
     },
     {
@@ -517,7 +517,7 @@
         "y": 2700.0,
         "z": 200
       },
-      "in_hub": "hub-d4129c",
+      "in_hub": "hub-142851",
       "gemma_model": "E2B"
     },
     {
@@ -531,7 +531,7 @@
         "y": 2700.0,
         "z": 200
       },
-      "in_hub": "hub-d4129c",
+      "in_hub": "hub-142851",
       "gemma_model": "E2B"
     },
     {
@@ -545,7 +545,7 @@
         "y": 3100.0,
         "z": 200
       },
-      "in_hub": "hub-d4129c",
+      "in_hub": "hub-142851",
       "gemma_model": "E2B"
     },
     {
@@ -559,7 +559,7 @@
         "y": 3100.0,
         "z": 200
       },
-      "in_hub": "hub-d4129c",
+      "in_hub": "hub-142851",
       "gemma_model": "E2B"
     },
     {
@@ -573,7 +573,7 @@
         "y": 3100.0,
         "z": 200
       },
-      "in_hub": "hub-c86713",
+      "in_hub": "hub-6eb7e5",
       "gemma_model": "E2B"
     },
     {
@@ -587,7 +587,7 @@
         "y": 3100.0,
         "z": 200
       },
-      "in_hub": "hub-c86713",
+      "in_hub": "hub-6eb7e5",
       "gemma_model": "E2B"
     },
     {
@@ -601,7 +601,7 @@
         "y": 3100.0,
         "z": 200
       },
-      "in_hub": "hub-c86713",
+      "in_hub": "hub-6eb7e5",
       "gemma_model": "E2B"
     }
   ],
@@ -639,7 +639,7 @@
   ],
   "decision_hubs": [
     {
-      "hub_id": "hub-8b40f9",
+      "hub_id": "hub-881bf0",
       "leader": "UGV-1",
       "members": [
         "UGV-1",
@@ -657,19 +657,19 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-0d3bf0",
-        "hub-2d24e0",
-        "hub-679f5e",
-        "hub-b7134d",
-        "hub-dfdcae",
-        "hub-307055",
-        "hub-d4129c",
-        "hub-c86713"
+        "hub-daa5bf",
+        "hub-d8c272",
+        "hub-03ba6d",
+        "hub-158bf9",
+        "hub-02da2c",
+        "hub-b29ea3",
+        "hub-142851",
+        "hub-6eb7e5"
       ],
       "rescue_log_count": 8
     },
     {
-      "hub_id": "hub-0d3bf0",
+      "hub_id": "hub-daa5bf",
       "leader": "UGV-3",
       "members": [
         "UGV-3",
@@ -687,19 +687,19 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-8b40f9",
-        "hub-2d24e0",
-        "hub-679f5e",
-        "hub-b7134d",
-        "hub-dfdcae",
-        "hub-307055",
-        "hub-d4129c",
-        "hub-c86713"
+        "hub-881bf0",
+        "hub-d8c272",
+        "hub-03ba6d",
+        "hub-158bf9",
+        "hub-02da2c",
+        "hub-b29ea3",
+        "hub-142851",
+        "hub-6eb7e5"
       ],
       "rescue_log_count": 9
     },
     {
-      "hub_id": "hub-2d24e0",
+      "hub_id": "hub-d8c272",
       "leader": "UGV-5",
       "members": [
         "UGV-5",
@@ -717,19 +717,19 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-8b40f9",
-        "hub-0d3bf0",
-        "hub-679f5e",
-        "hub-b7134d",
-        "hub-dfdcae",
-        "hub-307055",
-        "hub-d4129c",
-        "hub-c86713"
+        "hub-881bf0",
+        "hub-daa5bf",
+        "hub-03ba6d",
+        "hub-158bf9",
+        "hub-02da2c",
+        "hub-b29ea3",
+        "hub-142851",
+        "hub-6eb7e5"
       ],
       "rescue_log_count": 9
     },
     {
-      "hub_id": "hub-679f5e",
+      "hub_id": "hub-03ba6d",
       "leader": "UGV-7",
       "members": [
         "UGV-7",
@@ -747,19 +747,19 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-8b40f9",
-        "hub-0d3bf0",
-        "hub-2d24e0",
-        "hub-b7134d",
-        "hub-dfdcae",
-        "hub-307055",
-        "hub-d4129c",
-        "hub-c86713"
+        "hub-881bf0",
+        "hub-daa5bf",
+        "hub-d8c272",
+        "hub-158bf9",
+        "hub-02da2c",
+        "hub-b29ea3",
+        "hub-142851",
+        "hub-6eb7e5"
       ],
       "rescue_log_count": 9
     },
     {
-      "hub_id": "hub-b7134d",
+      "hub_id": "hub-158bf9",
       "leader": "BAL-2",
       "members": [
         "UAV-7",
@@ -777,19 +777,19 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-8b40f9",
-        "hub-0d3bf0",
-        "hub-2d24e0",
-        "hub-679f5e",
-        "hub-dfdcae",
-        "hub-307055",
-        "hub-d4129c",
-        "hub-c86713"
+        "hub-881bf0",
+        "hub-daa5bf",
+        "hub-d8c272",
+        "hub-03ba6d",
+        "hub-02da2c",
+        "hub-b29ea3",
+        "hub-142851",
+        "hub-6eb7e5"
       ],
       "rescue_log_count": 6
     },
     {
-      "hub_id": "hub-dfdcae",
+      "hub_id": "hub-02da2c",
       "leader": "BAL-1",
       "members": [
         "BAL-1",
@@ -807,19 +807,19 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-8b40f9",
-        "hub-0d3bf0",
-        "hub-2d24e0",
-        "hub-679f5e",
-        "hub-b7134d",
-        "hub-307055",
-        "hub-d4129c",
-        "hub-c86713"
+        "hub-881bf0",
+        "hub-daa5bf",
+        "hub-d8c272",
+        "hub-03ba6d",
+        "hub-158bf9",
+        "hub-b29ea3",
+        "hub-142851",
+        "hub-6eb7e5"
       ],
       "rescue_log_count": 6
     },
     {
-      "hub_id": "hub-307055",
+      "hub_id": "hub-b29ea3",
       "leader": "BAL-7",
       "members": [
         "BAL-7",
@@ -837,19 +837,19 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-8b40f9",
-        "hub-0d3bf0",
-        "hub-2d24e0",
-        "hub-679f5e",
-        "hub-b7134d",
-        "hub-dfdcae",
-        "hub-d4129c",
-        "hub-c86713"
+        "hub-881bf0",
+        "hub-daa5bf",
+        "hub-d8c272",
+        "hub-03ba6d",
+        "hub-158bf9",
+        "hub-02da2c",
+        "hub-142851",
+        "hub-6eb7e5"
       ],
       "rescue_log_count": 6
     },
     {
-      "hub_id": "hub-d4129c",
+      "hub_id": "hub-142851",
       "leader": "BAL-13",
       "members": [
         "BAL-13",
@@ -867,19 +867,19 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-8b40f9",
-        "hub-0d3bf0",
-        "hub-2d24e0",
-        "hub-679f5e",
-        "hub-b7134d",
-        "hub-dfdcae",
-        "hub-307055",
-        "hub-c86713"
+        "hub-881bf0",
+        "hub-daa5bf",
+        "hub-d8c272",
+        "hub-03ba6d",
+        "hub-158bf9",
+        "hub-02da2c",
+        "hub-b29ea3",
+        "hub-6eb7e5"
       ],
       "rescue_log_count": 6
     },
     {
-      "hub_id": "hub-c86713",
+      "hub_id": "hub-6eb7e5",
       "leader": "BAL-18",
       "members": [
         "BAL-18",
@@ -895,85 +895,85 @@
       },
       "active_plan": "rescue_5_survivors",
       "peer_hubs": [
-        "hub-8b40f9",
-        "hub-0d3bf0",
-        "hub-2d24e0",
-        "hub-679f5e",
-        "hub-b7134d",
-        "hub-dfdcae",
-        "hub-307055",
-        "hub-d4129c"
+        "hub-881bf0",
+        "hub-daa5bf",
+        "hub-d8c272",
+        "hub-03ba6d",
+        "hub-158bf9",
+        "hub-02da2c",
+        "hub-b29ea3",
+        "hub-142851"
       ],
       "rescue_log_count": 4
     }
   ],
   "rescue_log": [
     {
-      "time": 1778784683.9879816,
-      "hub_id": "hub-8b40f9",
+      "time": 1778853387.75231,
+      "hub_id": "hub-881bf0",
       "event": "Hub formed",
       "action": "Members: ['UGV-1', 'UGV-2', 'UGV-4', 'UAV-1', 'UAV-2']",
       "details": {}
     },
     {
-      "time": 1778784684.3644757,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.75399,
+      "hub_id": "hub-daa5bf",
       "event": "Hub formed",
       "action": "Members: ['UGV-3', 'UGV-6', 'UAV-3', 'UAV-10', 'UAV-14']",
       "details": {}
     },
     {
-      "time": 1778784684.7430773,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.754696,
+      "hub_id": "hub-d8c272",
       "event": "Hub formed",
       "action": "Members: ['UGV-5', 'UGV-8', 'UAV-4', 'UAV-5', 'UAV-6']",
       "details": {}
     },
     {
-      "time": 1778784685.1232193,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.755239,
+      "hub_id": "hub-03ba6d",
       "event": "Hub formed",
       "action": "Members: ['UGV-7', 'UAV-8', 'UAV-11', 'UAV-13', 'BAL-11']",
       "details": {}
     },
     {
-      "time": 1778784685.5185974,
-      "hub_id": "hub-b7134d",
+      "time": 1778853387.755797,
+      "hub_id": "hub-158bf9",
       "event": "Hub formed",
       "action": "Members: ['UAV-7', 'UAV-9', 'UAV-12', 'UAV-15', 'BAL-2']",
       "details": {}
     },
     {
-      "time": 1778784685.885227,
-      "hub_id": "hub-dfdcae",
+      "time": 1778853387.756393,
+      "hub_id": "hub-02da2c",
       "event": "Hub formed",
       "action": "Members: ['BAL-1', 'BAL-3', 'BAL-4', 'BAL-5', 'BAL-6']",
       "details": {}
     },
     {
-      "time": 1778784686.8144171,
-      "hub_id": "hub-307055",
+      "time": 1778853387.756951,
+      "hub_id": "hub-b29ea3",
       "event": "Hub formed",
       "action": "Members: ['BAL-7', 'BAL-8', 'BAL-9', 'BAL-10', 'BAL-12']",
       "details": {}
     },
     {
-      "time": 1778784688.0287414,
-      "hub_id": "hub-d4129c",
+      "time": 1778853387.757526,
+      "hub_id": "hub-142851",
       "event": "Hub formed",
       "action": "Members: ['BAL-13', 'BAL-14', 'BAL-15', 'BAL-16', 'BAL-17']",
       "details": {}
     },
     {
-      "time": 1778784689.1307673,
-      "hub_id": "hub-c86713",
+      "time": 1778853387.758283,
+      "hub_id": "hub-6eb7e5",
       "event": "Hub formed",
       "action": "Members: ['BAL-18', 'BAL-19', 'BAL-20']",
       "details": {}
     },
     {
-      "time": 1778784743.3244424,
-      "hub_id": "hub-8b40f9",
+      "time": 1778853387.7585049,
+      "hub_id": "hub-881bf0",
       "event": "Task assigned to UAV-1",
       "action": "search",
       "details": {
@@ -983,8 +983,8 @@
       }
     },
     {
-      "time": 1778784743.3244488,
-      "hub_id": "hub-8b40f9",
+      "time": 1778853387.758507,
+      "hub_id": "hub-881bf0",
       "event": "Task assigned to UGV-4",
       "action": "rescue",
       "details": {
@@ -994,8 +994,8 @@
       }
     },
     {
-      "time": 1778784743.3244507,
-      "hub_id": "hub-8b40f9",
+      "time": 1778853387.7585092,
+      "hub_id": "hub-881bf0",
       "event": "Task assigned to UAV-2",
       "action": "search",
       "details": {
@@ -1005,8 +1005,8 @@
       }
     },
     {
-      "time": 1778784743.3244522,
-      "hub_id": "hub-8b40f9",
+      "time": 1778853387.758511,
+      "hub_id": "hub-881bf0",
       "event": "Task assigned to UGV-2",
       "action": "rescue",
       "details": {
@@ -1016,8 +1016,8 @@
       }
     },
     {
-      "time": 1778784743.3244529,
-      "hub_id": "hub-8b40f9",
+      "time": 1778853387.758513,
+      "hub_id": "hub-881bf0",
       "event": "Task assigned to UGV-1",
       "action": "rescue",
       "details": {
@@ -1027,8 +1027,8 @@
       }
     },
     {
-      "time": 1778784806.5632806,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.758618,
+      "hub_id": "hub-daa5bf",
       "event": "Task assigned to UAV-14",
       "action": "search",
       "details": {
@@ -1038,8 +1038,8 @@
       }
     },
     {
-      "time": 1778784806.5632846,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.7586198,
+      "hub_id": "hub-daa5bf",
       "event": "Task assigned to UGV-6",
       "action": "rescue",
       "details": {
@@ -1049,8 +1049,8 @@
       }
     },
     {
-      "time": 1778784806.563286,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.758622,
+      "hub_id": "hub-daa5bf",
       "event": "Task assigned to UAV-3",
       "action": "search",
       "details": {
@@ -1060,8 +1060,8 @@
       }
     },
     {
-      "time": 1778784806.5632868,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.758624,
+      "hub_id": "hub-daa5bf",
       "event": "Task assigned to UGV-3",
       "action": "rescue",
       "details": {
@@ -1071,8 +1071,8 @@
       }
     },
     {
-      "time": 1778784806.563288,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.758625,
+      "hub_id": "hub-daa5bf",
       "event": "Task assigned to UAV-10",
       "action": "search",
       "details": {
@@ -1082,8 +1082,8 @@
       }
     },
     {
-      "time": 1778784878.007743,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.758723,
+      "hub_id": "hub-d8c272",
       "event": "Task assigned to UAV-6",
       "action": "search",
       "details": {
@@ -1093,8 +1093,8 @@
       }
     },
     {
-      "time": 1778784878.007747,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.7587252,
+      "hub_id": "hub-d8c272",
       "event": "Task assigned to UGV-8",
       "action": "rescue",
       "details": {
@@ -1104,8 +1104,8 @@
       }
     },
     {
-      "time": 1778784878.007748,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.7587268,
+      "hub_id": "hub-d8c272",
       "event": "Task assigned to UAV-5",
       "action": "search",
       "details": {
@@ -1115,8 +1115,8 @@
       }
     },
     {
-      "time": 1778784878.0077488,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.758728,
+      "hub_id": "hub-d8c272",
       "event": "Task assigned to UGV-5",
       "action": "rescue",
       "details": {
@@ -1126,8 +1126,8 @@
       }
     },
     {
-      "time": 1778784878.0077498,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.75873,
+      "hub_id": "hub-d8c272",
       "event": "Task assigned to UAV-4",
       "action": "search",
       "details": {
@@ -1137,8 +1137,8 @@
       }
     },
     {
-      "time": 1778784938.1839285,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.758829,
+      "hub_id": "hub-03ba6d",
       "event": "Task assigned to BAL-11",
       "action": "relay",
       "details": {
@@ -1146,8 +1146,8 @@
       }
     },
     {
-      "time": 1778784938.1839323,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.758831,
+      "hub_id": "hub-03ba6d",
       "event": "Task assigned to UAV-8",
       "action": "search",
       "details": {
@@ -1157,8 +1157,8 @@
       }
     },
     {
-      "time": 1778784938.1839342,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.758833,
+      "hub_id": "hub-03ba6d",
       "event": "Task assigned to UGV-7",
       "action": "rescue",
       "details": {
@@ -1168,8 +1168,8 @@
       }
     },
     {
-      "time": 1778784938.183935,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.7588348,
+      "hub_id": "hub-03ba6d",
       "event": "Task assigned to UAV-13",
       "action": "search",
       "details": {
@@ -1179,8 +1179,8 @@
       }
     },
     {
-      "time": 1778784938.1839356,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.758836,
+      "hub_id": "hub-03ba6d",
       "event": "Task assigned to UAV-11",
       "action": "search",
       "details": {
@@ -1190,8 +1190,8 @@
       }
     },
     {
-      "time": 1778784982.187395,
-      "hub_id": "hub-b7134d",
+      "time": 1778853387.758927,
+      "hub_id": "hub-158bf9",
       "event": "Task assigned to BAL-2",
       "action": "relay",
       "details": {
@@ -1199,8 +1199,8 @@
       }
     },
     {
-      "time": 1778784982.1873987,
-      "hub_id": "hub-b7134d",
+      "time": 1778853387.758929,
+      "hub_id": "hub-158bf9",
       "event": "Task assigned to UAV-12",
       "action": "search",
       "details": {
@@ -1210,8 +1210,8 @@
       }
     },
     {
-      "time": 1778784982.1873999,
-      "hub_id": "hub-b7134d",
+      "time": 1778853387.758931,
+      "hub_id": "hub-158bf9",
       "event": "Task assigned to UAV-7",
       "action": "search",
       "details": {
@@ -1221,8 +1221,8 @@
       }
     },
     {
-      "time": 1778784982.1874013,
-      "hub_id": "hub-b7134d",
+      "time": 1778853387.758933,
+      "hub_id": "hub-158bf9",
       "event": "Task assigned to UAV-15",
       "action": "search",
       "details": {
@@ -1232,8 +1232,8 @@
       }
     },
     {
-      "time": 1778784982.187402,
-      "hub_id": "hub-b7134d",
+      "time": 1778853387.758935,
+      "hub_id": "hub-158bf9",
       "event": "Task assigned to UAV-9",
       "action": "search",
       "details": {
@@ -1243,8 +1243,8 @@
       }
     },
     {
-      "time": 1778785017.622866,
-      "hub_id": "hub-dfdcae",
+      "time": 1778853387.759011,
+      "hub_id": "hub-02da2c",
       "event": "Task assigned to BAL-1",
       "action": "relay",
       "details": {
@@ -1252,8 +1252,8 @@
       }
     },
     {
-      "time": 1778785017.6228714,
-      "hub_id": "hub-dfdcae",
+      "time": 1778853387.759012,
+      "hub_id": "hub-02da2c",
       "event": "Task assigned to BAL-3",
       "action": "relay",
       "details": {
@@ -1261,8 +1261,8 @@
       }
     },
     {
-      "time": 1778785017.6228726,
-      "hub_id": "hub-dfdcae",
+      "time": 1778853387.759014,
+      "hub_id": "hub-02da2c",
       "event": "Task assigned to BAL-4",
       "action": "relay",
       "details": {
@@ -1270,8 +1270,8 @@
       }
     },
     {
-      "time": 1778785017.6228738,
-      "hub_id": "hub-dfdcae",
+      "time": 1778853387.759016,
+      "hub_id": "hub-02da2c",
       "event": "Task assigned to BAL-5",
       "action": "relay",
       "details": {
@@ -1279,8 +1279,8 @@
       }
     },
     {
-      "time": 1778785017.622876,
-      "hub_id": "hub-dfdcae",
+      "time": 1778853387.759017,
+      "hub_id": "hub-02da2c",
       "event": "Task assigned to BAL-6",
       "action": "relay",
       "details": {
@@ -1288,8 +1288,8 @@
       }
     },
     {
-      "time": 1778785059.2100914,
-      "hub_id": "hub-307055",
+      "time": 1778853387.7591,
+      "hub_id": "hub-b29ea3",
       "event": "Task assigned to BAL-7",
       "action": "relay",
       "details": {
@@ -1297,8 +1297,8 @@
       }
     },
     {
-      "time": 1778785059.210095,
-      "hub_id": "hub-307055",
+      "time": 1778853387.7591019,
+      "hub_id": "hub-b29ea3",
       "event": "Task assigned to BAL-8",
       "action": "relay",
       "details": {
@@ -1306,8 +1306,8 @@
       }
     },
     {
-      "time": 1778785059.2100961,
-      "hub_id": "hub-307055",
+      "time": 1778853387.759103,
+      "hub_id": "hub-b29ea3",
       "event": "Task assigned to BAL-9",
       "action": "relay",
       "details": {
@@ -1315,8 +1315,8 @@
       }
     },
     {
-      "time": 1778785059.2100968,
-      "hub_id": "hub-307055",
+      "time": 1778853387.759105,
+      "hub_id": "hub-b29ea3",
       "event": "Task assigned to BAL-10",
       "action": "relay",
       "details": {
@@ -1324,8 +1324,8 @@
       }
     },
     {
-      "time": 1778785059.210098,
-      "hub_id": "hub-307055",
+      "time": 1778853387.7591062,
+      "hub_id": "hub-b29ea3",
       "event": "Task assigned to BAL-12",
       "action": "relay",
       "details": {
@@ -1333,8 +1333,8 @@
       }
     },
     {
-      "time": 1778785093.38445,
-      "hub_id": "hub-d4129c",
+      "time": 1778853387.75918,
+      "hub_id": "hub-142851",
       "event": "Task assigned to BAL-13",
       "action": "relay",
       "details": {
@@ -1342,8 +1342,8 @@
       }
     },
     {
-      "time": 1778785093.384455,
-      "hub_id": "hub-d4129c",
+      "time": 1778853387.759182,
+      "hub_id": "hub-142851",
       "event": "Task assigned to BAL-14",
       "action": "relay",
       "details": {
@@ -1351,8 +1351,8 @@
       }
     },
     {
-      "time": 1778785093.3844562,
-      "hub_id": "hub-d4129c",
+      "time": 1778853387.759184,
+      "hub_id": "hub-142851",
       "event": "Task assigned to BAL-15",
       "action": "relay",
       "details": {
@@ -1360,8 +1360,8 @@
       }
     },
     {
-      "time": 1778785093.3844638,
-      "hub_id": "hub-d4129c",
+      "time": 1778853387.7591848,
+      "hub_id": "hub-142851",
       "event": "Task assigned to BAL-16",
       "action": "relay",
       "details": {
@@ -1369,8 +1369,8 @@
       }
     },
     {
-      "time": 1778785093.384465,
-      "hub_id": "hub-d4129c",
+      "time": 1778853387.759187,
+      "hub_id": "hub-142851",
       "event": "Task assigned to BAL-17",
       "action": "relay",
       "details": {
@@ -1378,8 +1378,8 @@
       }
     },
     {
-      "time": 1778785131.1367085,
-      "hub_id": "hub-c86713",
+      "time": 1778853387.759257,
+      "hub_id": "hub-6eb7e5",
       "event": "Task assigned to BAL-18",
       "action": "relay",
       "details": {
@@ -1387,8 +1387,8 @@
       }
     },
     {
-      "time": 1778785131.136712,
-      "hub_id": "hub-c86713",
+      "time": 1778853387.759259,
+      "hub_id": "hub-6eb7e5",
       "event": "Task assigned to BAL-19",
       "action": "relay",
       "details": {
@@ -1396,8 +1396,8 @@
       }
     },
     {
-      "time": 1778785131.1367135,
-      "hub_id": "hub-c86713",
+      "time": 1778853387.759261,
+      "hub_id": "hub-6eb7e5",
       "event": "Task assigned to BAL-20",
       "action": "relay",
       "details": {
@@ -1405,78 +1405,78 @@
       }
     },
     {
-      "time": 1778785131.1367521,
-      "hub_id": "hub-8b40f9",
+      "time": 1778853387.759289,
+      "hub_id": "hub-881bf0",
       "event": "Energy transfer: UGV-1 → UAV-1",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.136759,
-      "hub_id": "hub-8b40f9",
+      "time": 1778853387.7592971,
+      "hub_id": "hub-881bf0",
       "event": "Energy transfer: UGV-2 → UAV-2",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.1367698,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.759308,
+      "hub_id": "hub-daa5bf",
       "event": "Energy transfer: UGV-3 → UAV-3",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.1367755,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.759315,
+      "hub_id": "hub-daa5bf",
       "event": "Energy transfer: UGV-3 → UAV-10",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.136779,
-      "hub_id": "hub-0d3bf0",
+      "time": 1778853387.759321,
+      "hub_id": "hub-daa5bf",
       "event": "Energy transfer: UGV-6 → UAV-14",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.1367872,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.759341,
+      "hub_id": "hub-d8c272",
       "event": "Energy transfer: UGV-5 → UAV-4",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.1367962,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.759347,
+      "hub_id": "hub-d8c272",
       "event": "Energy transfer: UGV-5 → UAV-5",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.1368008,
-      "hub_id": "hub-2d24e0",
+      "time": 1778853387.7593532,
+      "hub_id": "hub-d8c272",
       "event": "Energy transfer: UGV-8 → UAV-6",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.1368082,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.759365,
+      "hub_id": "hub-03ba6d",
       "event": "Energy transfer: UGV-7 → UAV-8",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.136811,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.75937,
+      "hub_id": "hub-03ba6d",
       "event": "Energy transfer: UGV-7 → UAV-11",
       "action": "Transferred 20.0% battery",
       "details": {}
     },
     {
-      "time": 1778785131.1368134,
-      "hub_id": "hub-679f5e",
+      "time": 1778853387.759375,
+      "hub_id": "hub-03ba6d",
       "event": "Energy transfer: UGV-7 → UAV-13",
       "action": "Transferred 20.0% battery",
       "details": {}

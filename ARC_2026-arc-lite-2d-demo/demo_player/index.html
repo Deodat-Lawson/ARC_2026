@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A.R.C. — Autonomous Rescue Cluster | Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="player.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Header ── -->
+  <header id="hud-header">
+    <span class="logo">A · R · C</span>
+    <span id="step-counter">Step 0 / —</span>
+    <span id="geo-badge">300M GEO GRID</span>
+    <span id="mode-badge">EDGE_ONLY</span>
+  </header>
+
+  <!-- ── Map ── -->
+  <div id="map-container">
+    <div id="basemap" aria-hidden="true"></div>
+    <canvas id="map-canvas"></canvas>
+    <div id="toast-layer"></div>
+  </div>
+
+  <!-- ── Side Panel ── -->
+  <aside id="side-panel">
+    <div id="thinking-panel">
+      <div class="panel-title">🧠 Decision Hub</div>
+      <div id="thinking-text">等待仿真数据…</div>
+    </div>
+    <div id="agent-legend">
+      <div class="panel-title">Fleet</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#00bfff;box-shadow:0 0 6px #00bfff"></div><span style="color:#00bfff">UAV — 空中侦察</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#39ff14;box-shadow:0 0 6px #39ff14"></div><span style="color:#39ff14">UGV — 地面救援</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#c8b4ff;box-shadow:0 0 6px #c8b4ff"></div><span style="color:#c8b4ff">Balloon — 通信中继</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#ff6666"></div><span style="color:#ff6666">幸存者</span></div>
+    </div>
+    <div id="event-log"></div>
+  </aside>
+
+  <!-- ── Dashboard ── -->
+  <footer id="dashboard">
+    <div class="dash-cell">
+      <div class="dash-title">生存概率</div>
+      <canvas id="chart-canvas" height="90"></canvas>
+    </div>
+    <div class="dash-cell">
+      <div class="dash-title">指挥简报</div>
+      <div id="briefing-text"></div>
+    </div>
+    <div class="dash-cell" id="stats-box">
+      <div class="stat-row">
+        <span class="stat-label">RESCUED</span>
+        <span class="stat-val" id="stat-rescued" style="color:#39ff14">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">SACRIFICED</span>
+        <span class="stat-val" id="stat-sacrificed" style="color:#ff8c00">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">COMM COV.</span>
+        <span class="stat-val" id="stat-coverage" style="color:#c8b4ff;font-size:16px">—</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ── Controls ── -->
+  <nav id="controls">
+    <button id="btn-first" title="跳至开头">|◁</button>
+    <button id="btn-back"  title="后退一步">◁</button>
+    <button id="btn-play"  title="播放/暂停">▶</button>
+    <button id="btn-fwd"   title="前进一步">▷</button>
+    <button id="btn-last"  title="跳至结尾">▷|</button>
+    <input  id="scrubber"  type="range" min="0" value="0" step="1">
+    <span id="ctrl-label">速度</span>
+    <button class="speed-btn" data-speed="0.5">0.5×</button>
+    <button class="speed-btn active" data-speed="1">1×</button>
+    <button class="speed-btn" data-speed="2">2×</button>
+    <button class="speed-btn" data-speed="4">4×</button>
+  </nav>
+
+</div>
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
+<script src="player.js?v=tactical-basemap-20260514-briefing-log"></script>
+</body>
+</html>
