@@ -1,20 +1,9 @@
-// @ts-nocheck
-// Ported from main app.js; gradual typing would be a large follow-up.
-
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 
-export function initLiteSim(): () => void {
-
 const canvas = document.querySelector("#simCanvas");
-if (!canvas) {
-  return () => {};
-}
 const ctx = canvas.getContext("2d");
-if (!ctx) {
-  return () => {};
-}
 const tickLabel = document.querySelector("#tickLabel");
 const rescuedCount = document.querySelector("#rescuedCount");
 const priorityList = document.querySelector("#priorityList");
@@ -24,9 +13,6 @@ const missionJson = document.querySelector("#missionJson");
 const stepBtn = document.querySelector("#stepBtn");
 const autoBtn = document.querySelector("#autoBtn");
 const resetBtn = document.querySelector("#resetBtn");
-if (!stepBtn || !autoBtn || !resetBtn) {
-  return () => {};
-}
 const survivalChart = document.querySelector("#survivalChart");
 const chartCtx = survivalChart ? survivalChart.getContext("2d") : null;
 const survivalHistory = [];
@@ -64,15 +50,15 @@ const MS_PER_TICK = 900;
 const MAX_EVENT_LOG = 20;
 let typewriterTimer = null;
 const TOAST_STYLES = {
-  rescued:          { color: "#39ff14", bg: "rgba(0,60,0,0.92)" },
-  victim_dead:      { color: "#ff4444", bg: "rgba(60,0,0,0.92)" },
-  blockade_cleared: { color: "#ffe44d", bg: "rgba(60,50,0,0.92)" },
-  relay_deployed:   { color: "#c8b4ff", bg: "rgba(40,20,80,0.92)" },
-  default:          { color: "#00bfff", bg: "rgba(0,20,50,0.92)" }
+  rescued:          { color: "#5dffb4", bg: "rgba(14,16,20,0.92)" },
+  victim_dead:      { color: "#ff5d6c", bg: "rgba(14,16,20,0.92)" },
+  blockade_cleared: { color: "#ffd95d", bg: "rgba(14,16,20,0.92)" },
+  relay_deployed:   { color: "#c8b4ff", bg: "rgba(14,16,20,0.92)" },
+  default:          { color: "#82c8ff", bg: "rgba(14,16,20,0.92)" }
 };
 function lerp(a, b, t) { return a + (b - a) * Math.min(1, Math.max(0, t)); }
 
-fetch("/lite/scenario_canvas_lite.json")
+fetch("/demo/scenario_001.json")
   .then((response) => response.json())
   .then((scenario) => {
     initialScenario = scenario;
@@ -393,9 +379,9 @@ function drawMap(t) {
 }
 
 function drawGrid(cols, rows, cell) {
-  ctx.fillStyle = "#020812";
+  ctx.fillStyle = "#04060a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "rgba(0, 120, 200, 0.12)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
     ctx.beginPath();
@@ -409,7 +395,7 @@ function drawGrid(cols, rows, cell) {
     ctx.lineTo(canvas.width, i * cell);
     ctx.stroke();
   }
-  ctx.fillStyle = "rgba(30, 58, 85, 0.55)";
+  ctx.fillStyle = "rgba(60, 80, 110, 0.32)";
   for (let y = 2; y < rows; y += 5) ctx.fillRect(0, y * cell + cell * 0.28, canvas.width, cell * 0.44);
   for (let x = 2; x < cols; x += 6) ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, canvas.height);
 }
@@ -488,7 +474,7 @@ function drawRiskZones(cell, t) {
     ctx.stroke();
 
     ctx.fillStyle = `rgba(${isFire ? "255,80,0" : "200,170,255"},0.8)`;
-    ctx.font = "9px 'Courier New', monospace";
+    ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
     const label = zone.type.toUpperCase();
     ctx.fillText(label, px - label.length * 2.7, py + 3);
   }
@@ -498,7 +484,7 @@ function drawBlockades(cell) {
   for (const blockade of state.map.blocked_cells) {
     const [x, y] = blockade.location;
     if (blockade.status === "cleared") {
-      ctx.fillStyle = "rgba(57,255,20,0.08)";
+      ctx.fillStyle = "rgba(93,255,180,0.08)";
       ctx.fillRect(x * cell, y * cell, cell, cell);
       continue;
     }
@@ -508,10 +494,10 @@ function drawBlockades(cell) {
     ctx.lineWidth = 1;
     ctx.strokeRect(x * cell + 0.5, y * cell + 0.5, cell - 1, cell - 1);
     ctx.fillStyle = "#a0522d";
-    ctx.font = "9px 'Courier New', monospace";
+    ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
     ctx.fillText("BLK", x * cell + 2, y * cell + cell / 2 + 3);
     const progress = blockade.clear_progress / blockade.repair_cost;
-    ctx.fillStyle = "#ffe44d";
+    ctx.fillStyle = "#ffd95d";
     ctx.fillRect(x * cell + 3, y * cell + cell - 5, (cell - 6) * progress, 2);
   }
 }
@@ -522,10 +508,10 @@ function drawVictims(cell, t) {
     const px = (x + 0.5) * cell;
     const py = (y + 0.5) * cell;
     const color = victim.status === "rescued"
-      ? "#39ff14"
+      ? "#5dffb4"
       : victim.status === "dead"
-        ? "#555555"
-        : "#ff6666";
+        ? "#4a4d54"
+        : "#ff8a8a";
 
     if (victim.status === "trapped") {
       const halo = 0.5 + 0.5 * (Math.sin(t * 3) * 0.5 + 0.5);
@@ -550,7 +536,7 @@ function drawVictims(cell, t) {
     ctx.restore();
 
     ctx.fillStyle = color;
-    ctx.font = "9px 'Courier New', monospace";
+    ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
     ctx.fillText(victim.id, px - 8, py - cell * 0.42);
 
     if (victim.status === "trapped" || victim.status === "unknown") {
@@ -573,14 +559,14 @@ function drawVictims(cell, t) {
 function drawBase(cell) {
   const [x, y] = state.map.base;
   ctx.save();
-  ctx.strokeStyle = "#ffe44d";
+  ctx.strokeStyle = "#ffd95d";
   ctx.lineWidth = 1.5;
   ctx.shadowBlur = 8;
-  ctx.shadowColor = "#ffe44d";
+  ctx.shadowColor = "#ffd95d";
   ctx.strokeRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4);
   ctx.shadowBlur = 0;
-  ctx.fillStyle = "#ffe44d";
-  ctx.font = "bold 9px 'Courier New', monospace";
+  ctx.fillStyle = "#ffd95d";
+  ctx.font = "bold 9px 'JetBrains Mono', 'Courier New', monospace";
   ctx.fillText("BASE", x * cell + 1, y * cell + cell / 2 + 3);
   ctx.restore();
 }
@@ -601,7 +587,7 @@ function drawAgents(cell, t) {
     } else {
       drawUGV(px, py, cell, battery, t, trail);
     }
-    drawAgentLabel(agent.id, px, py, agent.type === "drone" ? "#00bfff" : "#39ff14");
+    drawAgentLabel(agent.id, px, py, agent.type === "drone" ? "#82c8ff" : "#5dffb4");
   }
 }
 
@@ -621,29 +607,29 @@ function drawTrail(trail, cell, color) {
 }
 
 function drawUAV(px, py, cell, battery, scanRange, t, trail) {
-  const color = "rgb(0,191,255)";
+  const color = "rgb(130,200,255)";
   drawTrail(trail, cell, color);
 
   ctx.save();
   ctx.beginPath();
   ctx.arc(px, py, scanRange * cell, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(0,191,255,0.25)";
+  ctx.strokeStyle = "rgba(130,200,255,0.25)";
   ctx.setLineDash([4, 4]);
   ctx.lineDashOffset = -t * 10;
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = "rgba(0,191,255,0.04)";
+  ctx.fillStyle = "rgba(130,200,255,0.04)";
   ctx.fill();
   ctx.restore();
 
   ctx.save();
   ctx.translate(px, py);
   ctx.rotate(t * 8);
-  ctx.strokeStyle = "#00bfff";
+  ctx.strokeStyle = "#82c8ff";
   ctx.lineWidth = 1.5;
   ctx.shadowBlur = 10;
-  ctx.shadowColor = "#00bfff";
+  ctx.shadowColor = "#82c8ff";
   const arm = Math.min(8, cell * 0.4);
   const rotor = Math.max(2, cell * 0.13);
   for (let i = 0; i < 4; i += 1) {
@@ -659,17 +645,17 @@ function drawUAV(px, py, cell, battery, scanRange, t, trail) {
   ctx.shadowBlur = 0;
   ctx.beginPath();
   ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = "#00bfff";
+  ctx.fillStyle = "#82c8ff";
   ctx.fill();
   ctx.restore();
 
-  ctx.fillStyle = battery < 0.15 ? "#ff4444" : battery < 0.3 ? "#ff8c00" : "#00bfff";
-  ctx.font = "9px 'Courier New', monospace";
+  ctx.fillStyle = battery < 0.15 ? "#ff5d6c" : battery < 0.3 ? "#ffd95d" : "#82c8ff";
+  ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
   ctx.fillText(`${Math.round(battery * 100)}%`, px + 10, py - 10);
 }
 
 function drawUGV(px, py, cell, battery, t, trail) {
-  const color = "rgb(57,255,20)";
+  const color = "rgb(93,255,180)";
 
   if (trail && trail.length > 1) {
     ctx.save();
@@ -694,12 +680,12 @@ function drawUGV(px, py, cell, battery, t, trail) {
   ctx.shadowColor = color;
   const body = cell * 0.5;
   const half = body / 2;
-  ctx.strokeStyle = "#39ff14";
+  ctx.strokeStyle = "#5dffb4";
   ctx.lineWidth = 1.2;
   ctx.strokeRect(px - half, py - half, body, body);
-  ctx.fillStyle = "rgba(57,255,20,0.18)";
+  ctx.fillStyle = "rgba(93,255,180,0.18)";
   ctx.fillRect(px - half, py - half, body, body);
-  ctx.fillStyle = "#39ff14";
+  ctx.fillStyle = "#5dffb4";
   const trackW = Math.max(2, body * 0.18);
   ctx.fillRect(px - half - trackW - 1, py - half + 1, trackW, body - 2);
   ctx.fillRect(px + half + 1, py - half + 1, trackW, body - 2);
@@ -708,14 +694,14 @@ function drawUGV(px, py, cell, battery, t, trail) {
   ctx.fill();
   ctx.restore();
 
-  ctx.fillStyle = battery < 0.15 ? "#ff4444" : battery < 0.3 ? "#ff8c00" : "#39ff14";
-  ctx.font = "9px 'Courier New', monospace";
+  ctx.fillStyle = battery < 0.15 ? "#ff5d6c" : battery < 0.3 ? "#ffd95d" : "#5dffb4";
+  ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
   ctx.fillText(`${Math.round(battery * 100)}%`, px + 10, py - 10);
 }
 
 function drawAgentLabel(id, px, py, color) {
   ctx.fillStyle = color;
-  ctx.font = "9px 'Courier New', monospace";
+  ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
   ctx.shadowBlur = 4;
   ctx.shadowColor = color;
   ctx.fillText(id, px - 14, py + 18);
@@ -840,7 +826,7 @@ function drawSurvivalChart() {
   const H = cssH;
   chartCtx.clearRect(0, 0, W, H);
 
-  chartCtx.strokeStyle = "rgba(0,191,255,0.12)";
+  chartCtx.strokeStyle = "rgba(130,200,255,0.12)";
   chartCtx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i += 1) {
     const y = (H - 20) * (i / 4) + 4;
@@ -849,8 +835,8 @@ function drawSurvivalChart() {
     chartCtx.lineTo(W - 8, y);
     chartCtx.stroke();
   }
-  chartCtx.fillStyle = "rgba(0,191,255,0.55)";
-  chartCtx.font = "9px 'Courier New', monospace";
+  chartCtx.fillStyle = "rgba(130,200,255,0.55)";
+  chartCtx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
   chartCtx.fillText("100%", 2, 9);
   chartCtx.fillText("50%", 4, (H - 20) / 2 + 7);
   chartCtx.fillText("0%", 8, H - 20 + 4);
@@ -865,7 +851,7 @@ function drawSurvivalChart() {
   for (let i = 0; i < n; i += 1) chartCtx.lineTo(xAt(i), yAt(survivalHistory[i].alive));
   chartCtx.lineTo(xAt(n - 1), H - 16);
   chartCtx.closePath();
-  chartCtx.fillStyle = "rgba(57,255,20,0.18)";
+  chartCtx.fillStyle = "rgba(93,255,180,0.18)";
   chartCtx.fill();
 
   chartCtx.beginPath();
@@ -875,10 +861,10 @@ function drawSurvivalChart() {
     if (i === 0) chartCtx.moveTo(x, y);
     else chartCtx.lineTo(x, y);
   }
-  chartCtx.strokeStyle = "#39ff14";
+  chartCtx.strokeStyle = "#5dffb4";
   chartCtx.lineWidth = 1.5;
   chartCtx.shadowBlur = 6;
-  chartCtx.shadowColor = "#39ff14";
+  chartCtx.shadowColor = "#5dffb4";
   chartCtx.stroke();
   chartCtx.shadowBlur = 0;
 
@@ -889,15 +875,15 @@ function drawSurvivalChart() {
     if (i === 0) chartCtx.moveTo(x, y);
     else chartCtx.lineTo(x, y);
   }
-  chartCtx.strokeStyle = "#00bfff";
+  chartCtx.strokeStyle = "#82c8ff";
   chartCtx.lineWidth = 1.2;
   chartCtx.setLineDash([4, 3]);
   chartCtx.stroke();
   chartCtx.setLineDash([]);
 
-  chartCtx.fillStyle = "#39ff14";
+  chartCtx.fillStyle = "#5dffb4";
   chartCtx.fillText("alive", W - 78, H - 4);
-  chartCtx.fillStyle = "#00bfff";
+  chartCtx.fillStyle = "#82c8ff";
   chartCtx.fillText("rescued", W - 42, H - 4);
 }
 
@@ -923,18 +909,16 @@ function stopAuto() {
   autoBtn.textContent = "Run";
 }
 
-function onAutoToggle() {
+stepBtn.addEventListener("click", step);
+resetBtn.addEventListener("click", reset);
+autoBtn.addEventListener("click", () => {
   if (timer) {
     stopAuto();
     return;
   }
   autoBtn.textContent = "Pause";
   timer = setInterval(step, 900);
-}
-
-stepBtn.addEventListener("click", step);
-resetBtn.addEventListener("click", reset);
-autoBtn.addEventListener("click", onAutoToggle);
+});
 
 /* ──────────────────────────────────────────────────────────────────────────
    3D first-person view
@@ -1104,7 +1088,7 @@ function init3D(scenario) {
     } catch (err) {
       console.warn(`WebGL unavailable for POV ${i}`, err);
       canvas.replaceWith(Object.assign(document.createElement("div"), {
-        style: "padding: 16px; color: #ff8c00; font-size: 10px; text-align: center;",
+        style: "padding: 16px; color: #ffd95d; font-size: 10px; text-align: center;",
         textContent: "WebGL unavailable"
       }));
       return;
@@ -1145,7 +1129,6 @@ function init3D(scenario) {
 
     const ro = new ResizeObserver(() => resizePov(entry));
     ro.observe(canvas.parentElement);
-    entry.ro = ro;
 
     povs.push(entry);
     resizePov(entry);
@@ -1580,8 +1563,8 @@ async function upgradeToAssets(scenario) {
   loader.setDRACOLoader(draco);
   const texLoader = new THREE.TextureLoader();
 
-  const M = "public/models/";
-  const T = "public/textures/";
+  const M = "/models/";
+  const T = "/textures/";
 
   const [
     aptGlb, facadeGlb, mansionGlb, multiGlb,
@@ -1825,9 +1808,9 @@ function makeGridTexture(size, cols, rows) {
   const c = document.createElement("canvas");
   c.width = c.height = size;
   const g = c.getContext("2d");
-  g.fillStyle = "#02060f";
+  g.fillStyle = "#04060a";
   g.fillRect(0, 0, size, size);
-  g.strokeStyle = "rgba(0, 180, 255, 0.45)";
+  g.strokeStyle = "rgba(93, 255, 180, 0.32)";
   g.lineWidth = 1.2;
   for (let i = 0; i <= cols; i += 1) {
     const x = (i / cols) * size;
@@ -1844,7 +1827,7 @@ function makeGridTexture(size, cols, rows) {
     g.stroke();
   }
   // Sparse "tile" highlights
-  g.fillStyle = "rgba(0, 191, 255, 0.06)";
+  g.fillStyle = "rgba(130, 200, 255, 0.06)";
   for (let i = 0; i < 40; i += 1) {
     const cx = Math.floor(Math.random() * cols);
     const cy = Math.floor(Math.random() * rows);
@@ -2062,29 +2045,3 @@ function currentTargetIdFor(agent) {
   return action ? action.target : null;
 }
 
-
-  return () => {
-    stepBtn.removeEventListener("click", step);
-    resetBtn.removeEventListener("click", reset);
-    autoBtn.removeEventListener("click", onAutoToggle);
-    document.removeEventListener("keydown", handleGlobalSelectorKey);
-    stopAuto();
-    if (typewriterTimer !== null) {
-      clearInterval(typewriterTimer);
-      typewriterTimer = null;
-    }
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-    for (const entry of povs) {
-      entry.ro?.disconnect();
-      if (entry.renderer) {
-        entry.renderer.dispose();
-        entry.renderer = null;
-      }
-    }
-    povs.length = 0;
-    world.initialized = false;
-  };
-}

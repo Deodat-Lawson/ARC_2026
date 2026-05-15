@@ -49,10 +49,11 @@ export function HeroOverlay() {
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-4">
           <a
-            href="#system"
-            className="inline-flex h-11 items-center rounded-sm bg-arc-accent px-5 text-sm font-medium tracking-wide text-arc-bg transition-opacity hover:opacity-90"
+            href="/demo"
+            className="group inline-flex h-11 items-center gap-2 rounded-sm bg-arc-accent px-5 text-sm font-medium tracking-wide text-arc-bg transition-[opacity,gap] hover:opacity-90 hover:gap-3"
           >
             Explore the system
+            <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
           </a>
           <a
             href="#whitepaper"

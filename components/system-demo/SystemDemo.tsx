@@ -86,7 +86,39 @@ export function SystemDemo() {
         ]}
         visualization={<M5Mesh />}
       />
+
+      <DemoCta />
     </div>
+  );
+}
+
+function DemoCta() {
+  return (
+    <section className="border-t border-white/5 px-6 py-24 md:px-10 md:py-32">
+      <div className="mx-auto flex max-w-7xl flex-col items-start gap-10 md:flex-row md:items-end md:justify-between">
+        <div className="max-w-2xl">
+          <div className="mb-6 flex items-center gap-3 font-mono text-xs uppercase tracking-[0.28em] text-arc-accent">
+            <span className="inline-block size-1.5 rounded-full bg-arc-accent shadow-[0_0_6px_2px_rgba(93,255,180,0.5)]" />
+            Live replay
+          </div>
+          <h2 className="text-3xl font-medium leading-[1.1] tracking-tight text-arc-fg md:text-5xl">
+            Watch the cluster run a real mission.
+          </h2>
+          <p className="mt-6 text-base text-arc-muted md:text-lg">
+            A scripted post-quake scenario, played frame-by-frame. Every
+            timestep the planner re-prioritises victims, agents pick new
+            tasks, and Gemma 4 reports back to the operator.
+          </p>
+        </div>
+        <a
+          href="/demo"
+          className="group inline-flex h-12 items-center gap-3 rounded-sm bg-arc-accent px-6 text-sm font-medium tracking-wide text-arc-bg transition-[opacity,gap] hover:opacity-90 hover:gap-4"
+        >
+          Open the live simulation
+          <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+        </a>
+      </div>
+    </section>
   );
 }
 

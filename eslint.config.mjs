@@ -20,6 +20,8 @@ const eslintConfig = [
     files: ["lib/lite-sim/liteSimRuntime.ts"],
     rules: {
       "@typescript-eslint/ban-ts-comment": "off",
+      "prefer-const": "off",
+      "@typescript-eslint/no-unused-vars": "off",
     },
   },
   {

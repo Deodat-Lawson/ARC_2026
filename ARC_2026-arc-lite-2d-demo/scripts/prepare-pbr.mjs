@@ -8,15 +8,17 @@
  * the source mesh's UVs, so they work on the EAM165 buildings (whose source
  * UVs were never connected to web-friendly textures).
  */
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
-const SRC =
-  "C:/Users/Timothy Lin/Downloads/KBS105-倒塌废墟战后街道楼房建筑/Textures/Textures";
+const DEFAULT_PACK =
+  "C:/Users/Timothy Lin/Downloads/KBS105-倒塌废墟战后街道楼房建筑";
+const PACK_ROOT = process.env.KBS105_SRC || DEFAULT_PACK;
+const SRC = process.env.KBS105_TEXTURES || findTexturesDir(PACK_ROOT);
 const OUT = join(ROOT, "public", "textures");
 
 const SETS = [
@@ -44,11 +46,36 @@ function fmtSize(p) {
     : `${(b / 1024).toFixed(1)} KB`;
 }
 
+function findTexturesDir(root) {
+  const preferred = join(root, "Textures", "Textures");
+  if (existsSync(preferred)) return preferred;
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop();
+    if (!dir || !existsSync(dir)) continue;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.toLowerCase().includes("texture")) return full;
+        stack.push(full);
+      }
+    }
+  }
+  return preferred;
+}
+
 async function resize(src, dst, opts) {
   await sharp(src)
     .resize(1024, 1024, { fit: "fill" })
     .jpeg({ quality: opts.quality ?? 80, progressive: true, mozjpeg: true })
     .toFile(dst);
+}
+
+if (!existsSync(SRC)) {
+  console.warn(`KBS105 texture folder not found: ${SRC}`);
+  console.warn("Run `pnpm assets:inventory` and recover the real KBS105 payload before preparing PBR maps.");
+  process.exitCode = 1;
+  process.exit();
 }
 
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });

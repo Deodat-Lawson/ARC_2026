@@ -111,6 +111,8 @@ public/hdri/_raw/
 *.tar.gz
 .agent/
 .claude/settings.local.json
+.claude/*.lock
+.tmp/
 
 # Accidental absolute-path mirror (local machine)
 D/

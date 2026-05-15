@@ -203,14 +203,18 @@ export const REGIONS: Region[] = [
     bounds: { xMin: -32, xMax: 32, zMin: -52, zMax: -30 },
     purpose: "Backdrop, mid-distance",
   },
+  {
+    id: "farLayer",
+    kind: "layer",
+    bounds: { xMin: -45, xMax: 52, zMin: -92, zMax: -55 },
+    purpose: "Distant backdrop — visible-but-hazy, sits between mid layer and the deep silhouette ring",
+  },
 ];
 
-// Tightened to the actual extent of placements + camera path (after the
-// far-layer was removed). Keeps the minimap zoomed in on real content.
 export const SCENE_BOUNDS = {
-  xMin: -32,
-  xMax: 32,
-  zMin: -55,
+  xMin: -50,
+  xMax: 52,
+  zMin: -95,
   zMax: 30,
 } as const;
 
@@ -251,6 +255,16 @@ export const PLACEMENTS: Placement[] = [
   { id: "mid-mansion-R",     asset: "mansion",    at: [ 22, 0, -38], yaw: -0.40, height: 15, material: "bricks",        tint: "#9c8a78", region: "midLayer" },
   { id: "mid-apt-center",    asset: "apartment",  at: [  4, 0, -42], yaw:  1.50,             material: "concrete",      tint: "#8c8478", region: "midLayer" }, // LOCKED
   { id: "mid-mansion-deep-W",asset: "mansion",    at: [-30, 0, -28], yaw:  0.70, height: 16,                            tint: "#8c8278", region: "midLayer" },
+
+  // === FAR LAYER — visible-but-hazy backdrop (z ≈ -60..-85) =================
+  // Sits between mid layer and the deep silhouette ring. Without these, the
+  // gap from z=-42 to the skyline at z=-130 reads as empty fog and the back
+  // of the scene looks unfinished. All x positions are well outside the
+  // alley column; heights tuned tall enough to register past the mid layer.
+  { id: "far-facade-W",     asset: "facade",     at: [ -8, 0, -68], yaw:  0.05, height: 22, material: "concrete", tint: "#706a60", region: "farLayer" },
+  { id: "far-multistory-E", asset: "multistory", at: [ 28, 0, -64], yaw: -0.60, height: 20,                       tint: "#605a52", region: "farLayer" },
+  { id: "far-mansion-NW",   asset: "mansion",    at: [-32, 0, -72], yaw:  0.60, height: 19, material: "bricks",   tint: "#766859", region: "farLayer" },
+  { id: "far-apt-SE",       asset: "apartment",  at: [ 40, 0, -78], yaw: -1.20, height: 18, material: "concrete", tint: "#5a544a", region: "farLayer" },
 
   // === VEHICLES — three in the plaza, one in the apartment ruin =============
   { id: "veh-taxi-E",        asset: "taxi", at: [  9, 0,   1], yaw: -0.7,                          tint: "#a08070" },

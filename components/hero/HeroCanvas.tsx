@@ -52,8 +52,15 @@ export function HeroCanvas() {
         flipflops={2}
       />
 
-      {/* Sky sphere supplies the background — no flat color attach */}
-      <fog attach="fog" args={["#3a2a1c", 22, 160]} />
+      {/* Sky sphere supplies the background — no flat color attach.
+          Fog tuned for the 4-layer depth read:
+            hero  z ≈ -16..-20  (d ≈ 40-50)   ~10% haze — sharp
+            mid   z ≈ -28..-42  (d ≈ 55-70)   ~17-25% — slight haze
+            far   z ≈ -60..-85  (d ≈ 85-115)  ~32-47% — clear atmospheric
+            sky   z ≈ -130..-180 (d ≈ 150-210) ~65-100% — silhouettes fading
+          Pushing far past 220 starts to wash out the mid-layer haze that
+          separates hero from background. */}
+      <fog attach="fog" args={["#3a2a1c", 22, 220]} />
 
       {/* KEY — warm, camera-right, high */}
       <directionalLight

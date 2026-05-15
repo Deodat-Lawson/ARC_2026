@@ -5,7 +5,8 @@ import {
   ALL_ASSETS,
   ASSET_META,
   AssetId,
-  setPovTargetViaUrl,
+  SENSOR_PROFILES,
+  setPovTarget,
   usePovTarget,
 } from "./missionStore";
 import {
@@ -15,7 +16,7 @@ import {
   PHASES,
 } from "./missionTimeline";
 import { HeroNarration } from "./HeroNarration";
-import { SceneMapDebug } from "./SceneMapDebug";
+import { MiniMap } from "./MiniMap";
 
 /**
  * FPV operator console — shown only when in POV mode. Replaces the cinematic
@@ -45,7 +46,7 @@ export function PovHUD() {
 
   useEffect(() => {
     const exitOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPovTargetViaUrl("cinematic");
+      if (event.key === "Escape") setPovTarget("cinematic");
     };
 
     window.addEventListener("keydown", exitOnEscape);
@@ -60,6 +61,7 @@ export function PovHUD() {
   const phaseIdx = currentPhaseIndex(loopT);
   const phaseName = PHASES[phaseIdx].name;
   const isDrone = meta.kind === "drone";
+  const profile = SENSOR_PROFILES[assetId];
 
   // Seeded telemetry (per-asset, smooth wandering)
   const seed = assetId.charCodeAt(0) * 0.13;
@@ -69,7 +71,8 @@ export function PovHUD() {
     ? 7.4 + Math.sin(t * 0.6 + seed * 1.3) * 0.6
     : 1.6 + Math.sin(t * 0.6 + seed * 1.3) * 0.3;
   const battery = (isDrone ? 78 : 88) + Math.sin(t * 0.08 + seed) * 0.6;
-  const lock = loopT >= 8 && loopT < 11; // CONFIRM + early RELAY
+  const lock = loopT >= 4.5 && loopT < 18.5;
+  const confidence = sensorConfidence(assetId, loopT, t);
 
   return (
     <div className="pointer-events-none absolute inset-0 font-mono text-[10px] uppercase tracking-[0.2em] text-arc-fg/80">
@@ -95,7 +98,7 @@ export function PovHUD() {
 
       {/* Top bar — FPV identity */}
       <div className="pointer-events-auto absolute left-1/2 top-20 -translate-x-1/2 md:top-6">
-        <div className="flex items-center gap-4 rounded-sm border border-arc-accent/40 bg-arc-bg/80 px-4 py-2 backdrop-blur-sm">
+        <div className="flex items-center gap-4 rounded-sm border border-arc-accent/40 bg-arc-bg/80 px-4 py-2 shadow-[0_0_24px_rgba(93,255,180,0.08)] backdrop-blur-sm">
           <span className="flex items-center gap-2 text-arc-accent">
             <span
               aria-hidden
@@ -107,6 +110,10 @@ export function PovHUD() {
           <span className="text-arc-muted">{meta.role}</span>
           <span className="text-arc-muted">·</span>
           <span className="text-arc-fg">{phaseName}</span>
+          <span className="text-arc-muted">·</span>
+          <span className={confidence > 0.7 ? "text-arc-accent" : "text-arc-warning"}>
+            {Math.round(confidence * 100)}%
+          </span>
         </div>
       </div>
 
@@ -116,7 +123,7 @@ export function PovHUD() {
           currentAssetId={assetId}
           isOpen={isPovMenuOpen}
           onOpenChange={setIsPovMenuOpen}
-          onSelect={(target) => setPovTargetViaUrl(target)}
+          onSelect={(target) => setPovTarget(target)}
         />
       </div>
 
@@ -135,7 +142,10 @@ export function PovHUD() {
       {/* Top-right: telemetry */}
       <div className="absolute right-6 top-24 md:right-10">
         <div className="min-w-[210px] rounded-sm border border-arc-accent/30 bg-arc-bg/75 p-3 backdrop-blur-sm">
-          <div className="mb-2 text-arc-muted">Self · {meta.label}</div>
+          <div className="mb-2 flex items-center justify-between text-arc-muted">
+            <span>Self · {meta.label}</span>
+            <span className="text-[9px] text-arc-fg/70">{profile.feed}</span>
+          </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
             <Row label="ALT" value={isDrone ? `${alt.toFixed(1)}m` : "GND"} />
             <Row label="HDG" value={`${hdg.toFixed(0).padStart(3, "0")}°`} />
@@ -144,7 +154,12 @@ export function PovHUD() {
           </div>
           <div className="mt-1.5 flex items-center justify-between text-[10px]">
             <span className="text-arc-muted">LINK</span>
-            <span className="text-arc-accent">MESH 5/5</span>
+            <span className="text-arc-accent">{profile.link}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-1 text-[9px]">
+            <SignalPip label="THM" value={profile.thermal} />
+            <SignalPip label="AUD" value={profile.acoustic} />
+            <SignalPip label="VIB" value={profile.vibration} />
           </div>
         </div>
       </div>
@@ -171,15 +186,21 @@ export function PovHUD() {
 
       {/* Bottom-right: asset-specific sensor readout */}
       <div className="absolute bottom-6 right-6 md:right-10">
-        <SensorReadout assetId={assetId} t={t} lock={lock} phaseName={phaseName} />
+        <SensorReadout
+          assetId={assetId}
+          confidence={confidence}
+          t={t}
+          lock={lock}
+          phaseName={phaseName}
+        />
       </div>
 
       {/* Top-left: minimap revealing this asset's location in the disaster zone.
           The tiny CAM label is folded into the minimap panel header. */}
       <div className="absolute left-6 top-24 flex flex-col gap-2 md:left-10">
-        <SceneMapDebug variant="hud" />
+        <MiniMap />
         <div className="text-[9px] text-arc-muted">
-          {isDrone ? "MAP · scene overlay · gimbal" : "MAP · scene overlay · stereo"}
+          {`CAM · ${profile.feed} · ${profile.primary}`}
         </div>
       </div>
 
@@ -212,6 +233,25 @@ function Row({
     <div className="flex items-center justify-between gap-2 text-[10px]">
       <span className="text-arc-muted">{label}</span>
       <span className={tint}>{value}</span>
+    </div>
+  );
+}
+
+function SignalPip({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-sm border border-white/10 bg-white/[0.03] px-1.5 py-1">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-arc-muted">{label}</span>
+        <span className={value > 0.72 ? "text-arc-accent" : "text-arc-fg/70"}>
+          {Math.round(value * 100)}
+        </span>
+      </div>
+      <div className="h-0.5 bg-white/10">
+        <div
+          className="h-full bg-arc-accent"
+          style={{ width: `${Math.round(value * 100)}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -380,36 +420,56 @@ function DogReticle({ locked }: { locked: boolean }) {
 
 function SensorReadout({
   assetId,
+  confidence,
   t,
   lock,
   phaseName,
 }: {
   assetId: AssetId;
+  confidence: number;
   t: number;
   lock: boolean;
   phaseName: string;
 }) {
   const meta = ASSET_META[assetId];
+  const profile = SENSOR_PROFILES[assetId];
   const wave = generateMiniWave(t, lock);
 
   return (
     <div className="w-[260px] rounded-sm border border-white/10 bg-arc-bg/70 p-2 backdrop-blur-sm">
       <div className="mb-1.5 flex items-center justify-between text-[9px]">
-        <span className="text-arc-muted">{meta.kind === "drone" ? "ACOUSTIC" : "GROUND SENSOR"}</span>
+        <span className="text-arc-muted">
+          {meta.kind === "drone" ? "FUSED SENSOR" : "GROUND SENSOR"}
+        </span>
         <span className={lock ? "text-arc-accent" : "text-arc-muted"}>
-          {lock ? "POSITIVE · 4.2σ" : phaseName === "DETECT" ? "RISING" : "baseline"}
+          {lock
+            ? `POSITIVE · ${(2.2 + confidence * 2.7).toFixed(1)}σ`
+            : phaseName === "IDENTIFY"
+              ? "RISING"
+              : "baseline"}
         </span>
       </div>
       <svg viewBox="0 0 260 36" className="h-9 w-full">
         <path d={wave} stroke={lock ? "#5dffb4" : "#5d9bff"} strokeWidth="1" fill="none" />
       </svg>
       <div className="mt-1 flex justify-between text-[9px] text-arc-muted">
-        <span>0.5–30 Hz</span>
+        <span>{profile.primary}</span>
         <span>·</span>
-        <span>{lock ? "T-01 confirmed" : "T-01 candidate"}</span>
+        <span>
+          {lock ? `${profile.target} confirmed` : `${profile.target} candidate`}
+        </span>
       </div>
     </div>
   );
+}
+
+function sensorConfidence(assetId: AssetId, loopT: number, t: number): number {
+  const base = SENSOR_PROFILES[assetId];
+  const weighted = base.thermal * 0.38 + base.acoustic * 0.34 + base.vibration * 0.28;
+  const phaseBoost =
+    loopT >= 13 ? 0.14 : loopT >= 7 ? 0.08 : loopT >= 4.5 ? 0.04 : -0.08;
+  const noise = Math.sin(t * 1.7 + assetId.length) * 0.025;
+  return Math.max(0.08, Math.min(0.98, weighted + phaseBoost + noise));
 }
 
 function generateMiniWave(t: number, lock: boolean): string {
