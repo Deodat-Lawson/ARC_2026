@@ -20,6 +20,15 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Lenis adds these classes to <html>; avoid stacking with CSS scroll-behavior */
+html.lenis {
+  height: auto;
+}
+
+html.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
 html,
 body {
   background: var(--color-arc-bg);
