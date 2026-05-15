@@ -1,12 +1,74 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { initLiteSim } from "@/lib/lite-sim/liteSimRuntime";
 
 export function LiteSimClient() {
+  const minimapRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const dispose = initLiteSim();
     return dispose;
+  }, []);
+
+  useEffect(() => {
+    const el = minimapRef.current;
+    const handle = el?.querySelector<HTMLElement>(".panel-head");
+    if (!el || !handle) return;
+
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let originX = 0;
+    let originY = 0;
+
+    const onDown = (e: PointerEvent) => {
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const parent = el.parentElement;
+      if (!parent) return;
+      const rect = el.getBoundingClientRect();
+      const parentRect = parent.getBoundingClientRect();
+      originX = rect.left - parentRect.left;
+      originY = rect.top - parentRect.top;
+      el.style.left = `${originX}px`;
+      el.style.top = `${originY}px`;
+      el.style.right = "auto";
+      el.classList.add("dragging");
+      handle.setPointerCapture(e.pointerId);
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      const parent = el.parentElement;
+      if (!parent) return;
+      const parentRect = parent.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      const maxX = parentRect.width - rect.width;
+      const maxY = parentRect.height - rect.height;
+      const nextX = Math.max(0, Math.min(maxX, originX + e.clientX - startX));
+      const nextY = Math.max(0, Math.min(maxY, originY + e.clientY - startY));
+      el.style.left = `${nextX}px`;
+      el.style.top = `${nextY}px`;
+    };
+
+    const onUp = (e: PointerEvent) => {
+      dragging = false;
+      el.classList.remove("dragging");
+      try { handle.releasePointerCapture(e.pointerId); } catch {}
+    };
+
+    handle.addEventListener("pointerdown", onDown);
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+    return () => {
+      handle.removeEventListener("pointerdown", onDown);
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+    };
   }, []);
 
   return (
@@ -32,8 +94,8 @@ export function LiteSimClient() {
       <section className="workspace">
         <div className="map-panel">
           <div className="map-grid">
-            <div className="map-col map-2d-col">
-              <div className="panel-head">
+            <div className="map-col map-2d-col" ref={minimapRef} aria-label="2D mini-map (drag to move)">
+              <div className="panel-head" title="Drag to reposition">
                 <div>
                   <h2>2D Disaster Map</h2>
                   <p id="tickLabel">Timestep 0</p>

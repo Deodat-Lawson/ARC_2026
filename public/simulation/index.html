@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#04060a">
+    <title>A.R.C. — Mission Command</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="/simulation/styles.css?v=pov-focus">
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <main class="cc">
+      <!-- ───── TOP COMMAND BAR ───── -->
+      <header class="cc-top">
+        <div class="cc-top-l">
+          <a class="brand" href="/" aria-label="Back to ARC home">
+            <span class="brand-dot" aria-hidden="true"></span>
+            <span class="brand-mark">A · R · C</span>
+            <span class="brand-sub">MISSION COMMAND</span>
+          </a>
+          <span class="cc-divider"></span>
+          <span class="msn-id" id="msnId">MSN-001 · URBAN-QUAKE</span>
+          <span class="msn-state">
+            <span class="pulse" aria-hidden="true"></span>
+            <span id="msnPhase">CLOSED LOOP · GEMMA-4</span>
+          </span>
+        </div>
+
+        <div class="cc-top-c">
+          <div class="cc-clock">
+            <span class="cc-clock-label">T+</span>
+            <b id="tickLabel" class="cc-clock-value">000</b>
+          </div>
+          <div class="cc-kpi">
+            <span class="cc-kpi-label">RESCUED</span>
+            <b class="cc-kpi-value accent"><span id="rescuedCount">0</span><span class="cc-kpi-of"> / <i id="rescuedOf">5</i></span></b>
+          </div>
+          <div class="cc-kpi">
+            <span class="cc-kpi-label">ACTIVE</span>
+            <b id="activeAgents" class="cc-kpi-value">4</b>
+          </div>
+          <div class="cc-kpi">
+            <span class="cc-kpi-label">SURVIVAL</span>
+            <b id="survivalPct" class="cc-kpi-value warn">—</b>
+          </div>
+        </div>
+
+        <div class="cc-top-r">
+          <div class="cc-controls" role="group" aria-label="simulation transport">
+            <button id="resetBtn" type="button" title="Reset scenario (R)" class="ico" aria-label="Reset">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+            </button>
+            <button id="stepBtn" type="button" title="Advance one timestep (.)" class="ico" aria-label="Step">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6 4l10 8-10 8z"/><rect x="17" y="4" width="2" height="16"/></svg>
+            </button>
+            <button id="autoBtn" type="button" title="Run / pause (space)" class="primary">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8L6 20z"/></svg>
+              <span data-run-label>RUN</span>
+            </button>
+          </div>
+          <div class="cc-speed" role="group" aria-label="speed">
+            <span class="cc-speed-label">SPD</span>
+            <button class="speed-btn" data-speed="0.5">·5</button>
+            <button class="speed-btn active" data-speed="1">1×</button>
+            <button class="speed-btn" data-speed="2">2×</button>
+            <button class="speed-btn" data-speed="4">4×</button>
+          </div>
+          <button id="cfgToggle" type="button" class="ico" title="Toggle config rail" aria-label="Toggle config">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M3 12h12"/><path d="M3 18h18"/></svg>
+          </button>
+          <a class="ico back" href="/" title="Back to homepage" aria-label="Back to homepage">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>
+          </a>
+        </div>
+      </header>
+
+      <!-- ───── COMMAND CENTER GRID ───── -->
+      <section class="cc-grid" id="ccGrid">
+        <!-- ──── LEFT RAIL · SCENARIO CONFIG ──── -->
+        <aside class="cc-rail cc-rail-l" id="cfgRail" aria-label="Scenario configuration">
+          <header class="rail-head">
+            <span class="kicker">Scenario · Configurator</span>
+            <h2>Mission Inputs</h2>
+            <p class="rail-sub">Tune the disaster, fleet, and comms; press <b>Apply</b> to rebuild.</p>
+          </header>
+
+          <details class="cfg-section" open>
+            <summary>
+              <span class="sum-label">PRESET</span>
+              <span class="sum-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="cfg-body">
+              <div class="preset-grid">
+                <button class="preset" data-preset="urban_quake" type="button" aria-pressed="true">
+                  <span class="preset-icon">⚡</span>
+                  <span class="preset-name">Urban Quake</span>
+                  <span class="preset-meta">M6.8 · dense block</span>
+                </button>
+                <button class="preset" data-preset="wildfire" type="button">
+                  <span class="preset-icon">🔥</span>
+                  <span class="preset-name">Wildfire</span>
+                  <span class="preset-meta">3 fronts · WUI</span>
+                </button>
+                <button class="preset" data-preset="industrial" type="button">
+                  <span class="preset-icon">⚠</span>
+                  <span class="preset-name">Industrial</span>
+                  <span class="preset-meta">collapse · plant</span>
+                </button>
+              </div>
+              <label class="cfg-row inline">
+                <span>Mission ID</span>
+                <input type="text" id="cfgMissionId" value="MSN-001" maxlength="12">
+              </label>
+            </div>
+          </details>
+
+          <details class="cfg-section" open>
+            <summary>
+              <span class="sum-label">MAP</span>
+              <span class="sum-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="cfg-body">
+              <label class="cfg-row">
+                <span>Grid size <b id="cfgGridLabel">30 × 30</b></span>
+                <input type="range" id="cfgGrid" min="20" max="40" step="2" value="30">
+              </label>
+              <label class="cfg-row">
+                <span>Cell scale (m) <b id="cfgCellLabel">10</b></span>
+                <input type="range" id="cfgCell" min="5" max="20" step="1" value="10">
+              </label>
+              <label class="cfg-row">
+                <span>Random seed <b id="cfgSeedLabel">42</b></span>
+                <input type="range" id="cfgSeed" min="1" max="999" step="1" value="42">
+              </label>
+            </div>
+          </details>
+
+          <details class="cfg-section" open>
+            <summary>
+              <span class="sum-label">FLEET</span>
+              <span class="sum-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="cfg-body">
+              <label class="cfg-row">
+                <span><i class="dot info"></i>Scout drones <b id="cfgScoutLabel">1</b></span>
+                <input type="range" id="cfgScout" min="0" max="3" step="1" value="1">
+              </label>
+              <label class="cfg-row">
+                <span><i class="dot violet"></i>Relay drones <b id="cfgRelayLabel">1</b></span>
+                <input type="range" id="cfgRelay" min="0" max="2" step="1" value="1">
+              </label>
+              <label class="cfg-row">
+                <span><i class="dot accent"></i>Rescue UGVs <b id="cfgRescueLabel">1</b></span>
+                <input type="range" id="cfgRescue" min="0" max="3" step="1" value="1">
+              </label>
+              <label class="cfg-row">
+                <span><i class="dot warn"></i>Clearer UGVs <b id="cfgClearLabel">1</b></span>
+                <input type="range" id="cfgClear" min="0" max="2" step="1" value="1">
+              </label>
+              <label class="cfg-row">
+                <span>Start battery <b id="cfgBatLabel">75%</b></span>
+                <input type="range" id="cfgBat" min="20" max="100" step="5" value="75">
+              </label>
+            </div>
+          </details>
+
+          <details class="cfg-section">
+            <summary>
+              <span class="sum-label">VICTIMS</span>
+              <span class="sum-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="cfg-body">
+              <label class="cfg-row">
+                <span>Victim count <b id="cfgVictimLabel">5</b></span>
+                <input type="range" id="cfgVictim" min="1" max="12" step="1" value="5">
+              </label>
+              <label class="cfg-row">
+                <span>Severity bias <b id="cfgSeverityLabel">0.50</b></span>
+                <input type="range" id="cfgSeverity" min="0" max="100" step="5" value="50">
+              </label>
+              <label class="cfg-row">
+                <span>Avg survival window <b id="cfgWindowLabel">160s</b></span>
+                <input type="range" id="cfgWindow" min="60" max="300" step="10" value="160">
+              </label>
+            </div>
+          </details>
+
+          <details class="cfg-section">
+            <summary>
+              <span class="sum-label">HAZARDS</span>
+              <span class="sum-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="cfg-body">
+              <label class="cfg-row">
+                <span>Blockades <b id="cfgBlockLabel">2</b></span>
+                <input type="range" id="cfgBlock" min="0" max="6" step="1" value="2">
+              </label>
+              <label class="cfg-row">
+                <span>Fire zones <b id="cfgFireLabel">1</b></span>
+                <input type="range" id="cfgFire" min="0" max="3" step="1" value="1">
+              </label>
+              <label class="cfg-row">
+                <span>Collapse zones <b id="cfgCollapseLabel">1</b></span>
+                <input type="range" id="cfgCollapse" min="0" max="3" step="1" value="1">
+              </label>
+              <label class="cfg-row">
+                <span>Hazard intensity <b id="cfgIntensityLabel">0.70</b></span>
+                <input type="range" id="cfgIntensity" min="20" max="100" step="5" value="70">
+              </label>
+            </div>
+          </details>
+
+          <details class="cfg-section">
+            <summary>
+              <span class="sum-label">COMMS</span>
+              <span class="sum-chev" aria-hidden="true">▾</span>
+            </summary>
+            <div class="cfg-body">
+              <label class="cfg-row">
+                <span>Base range (cells) <b id="cfgBaseRangeLabel">12</b></span>
+                <input type="range" id="cfgBaseRange" min="6" max="20" step="1" value="12">
+              </label>
+              <label class="cfg-row">
+                <span>Relay range (cells) <b id="cfgRelayRangeLabel">8</b></span>
+                <input type="range" id="cfgRelayRange" min="4" max="16" step="1" value="8">
+              </label>
+              <label class="cfg-row">
+                <span>Dead-zone radius <b id="cfgDeadLabel">4</b></span>
+                <input type="range" id="cfgDead" min="0" max="10" step="1" value="4">
+              </label>
+              <label class="cfg-row">
+                <span>Dropout floor <b id="cfgDropoutLabel">0.15</b></span>
+                <input type="range" id="cfgDropout" min="0" max="60" step="5" value="15">
+              </label>
+            </div>
+          </details>
+
+          <footer class="rail-foot">
+            <button type="button" id="cfgRandom" class="cfg-btn">⟳ Randomize</button>
+            <button type="button" id="cfgApply" class="cfg-btn primary">Apply &amp; Reset</button>
+          </footer>
+        </aside>
+
+        <!-- ──── CENTER · TACTICAL VIEWPORTS ──── -->
+        <section class="cc-center">
+          <article class="vp vp-2d panel">
+            <header class="vp-head">
+              <div>
+                <span class="kicker">M03 · Multi-sensor perception</span>
+                <h2>Tactical Map · Top-Down</h2>
+              </div>
+              <div class="vp-tags">
+                <span class="panel-tag">REPLAY · LIVE</span>
+                <span class="panel-tag accent" id="gridBadge">30 × 30</span>
+              </div>
+            </header>
+            <div id="toastLayer" class="toast-layer"></div>
+            <div class="canvas-frame">
+              <canvas id="simCanvas" width="720" height="720" aria-label="2D rescue simulation map"></canvas>
+              <div class="canvas-scanlines" aria-hidden="true"></div>
+              <div class="canvas-corners" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+            <div class="legend" aria-label="map legend">
+              <span><i class="road"></i>road</span>
+              <span><i class="blockade"></i>blockade</span>
+              <span><i class="fire"></i>fire</span>
+              <span><i class="collapse"></i>collapse</span>
+              <span><i class="victim"></i>victim</span>
+              <span><i class="drone"></i>drone</span>
+              <span><i class="ugv"></i>UGV</span>
+            </div>
+          </article>
+
+          <article class="vp vp-3d panel map-pov-col" data-pov-index="0">
+            <header class="vp-head">
+              <div>
+                <span class="kicker">M01 · FPV uplink · ENCRYPTED</span>
+                <h2 data-pov-heading>FPV · Drone-1</h2>
+                <p data-pov-sub class="pov-sub-meta">scout · battery —</p>
+              </div>
+              <span class="panel-tag warn">FEED · LIVE</span>
+            </header>
+
+            <div class="agent-selector" id="agentSelector" role="tablist" aria-label="Switch first-person feed"></div>
+            <p class="agent-selector-hint">
+              <kbd>1</kbd>–<kbd>4</kbd> select <span>·</span> <kbd>←</kbd> <kbd>→</kbd> cycle
+            </p>
+
+            <div class="pov-frame">
+              <canvas class="pov-canvas" data-pov-canvas aria-label="FPV feed"></canvas>
+              <div class="pov-reticle">
+                <div class="reticle-ring"></div>
+                <div class="reticle-cross h"></div>
+                <div class="reticle-cross v"></div>
+              </div>
+              <div class="pov-telemetry">
+                <div><span>ALT</span><b data-hud="alt">1.5</b></div>
+                <div><span>HDG</span><b data-hud="hdg">000</b></div>
+                <div><span>VEL</span><b data-hud="vel">0.0</b></div>
+                <div><span>PWR</span><b data-hud="pwr">--</b></div>
+              </div>
+              <div class="pov-corner tl">REC ●</div>
+              <div class="pov-corner tr" data-hud="target">TGT —</div>
+            </div>
+          </article>
+
+          <article class="vp vp-brief panel">
+            <header class="vp-head compact">
+              <div>
+                <span class="kicker">Gemma 4 · Mission Synthesis</span>
+                <h2>Commander Brief</h2>
+              </div>
+              <span class="panel-tag">AUTO</span>
+            </header>
+            <p id="briefText" class="brief-body"></p>
+          </article>
+
+          <article class="vp vp-trend panel">
+            <header class="vp-head compact">
+              <div>
+                <span class="kicker">Trend · 60s window</span>
+                <h2>Survival Curve</h2>
+              </div>
+            </header>
+            <canvas id="survivalChart" width="380" height="160"></canvas>
+          </article>
+
+          <article class="vp vp-mission panel">
+            <header class="vp-head compact">
+              <div>
+                <span class="kicker">Output · Plan stream</span>
+                <h2>Mission Plan · JSON</h2>
+              </div>
+              <button type="button" id="copyJson" class="ico" title="Copy to clipboard" aria-label="Copy JSON">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              </button>
+            </header>
+            <pre id="missionJson"></pre>
+          </article>
+        </section>
+
+        <!-- ──── RIGHT RAIL · OPS BOARD ──── -->
+        <aside class="cc-rail cc-rail-r" aria-label="Operations board">
+          <section class="rail-section">
+            <header class="rail-section-head">
+              <div>
+                <span class="kicker">M03 · Survival ranking</span>
+                <h2>Threat Board</h2>
+              </div>
+              <span class="count-pill" id="threatCount">0</span>
+            </header>
+            <div id="priorityList" class="priority-list"></div>
+          </section>
+
+          <section class="rail-section">
+            <header class="rail-section-head">
+              <div>
+                <span class="kicker">M02 · Distributed task allocation</span>
+                <h2>Fleet Status</h2>
+              </div>
+              <span class="count-pill" id="fleetCount">0</span>
+            </header>
+            <div id="agentList" class="agent-list"></div>
+          </section>
+
+          <section class="rail-section grow">
+            <header class="rail-section-head">
+              <div>
+                <span class="kicker">M05 · Mesh · Relay</span>
+                <h2>Event Log</h2>
+              </div>
+              <button type="button" id="clearLog" class="ico tiny" title="Clear event log" aria-label="Clear log">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14"/></svg>
+              </button>
+            </header>
+            <div id="eventLog" class="event-log"></div>
+          </section>
+        </aside>
+      </section>
+
+      <!-- ───── BOTTOM STATUS BAR ───── -->
+      <footer class="cc-status">
+        <div class="cc-status-l">
+          <span class="status-dot ok"></span>
+          <span>Cluster nominal</span>
+          <span class="cc-divider tall"></span>
+          <span class="status-meta"><i>MESH</i> 4 nodes</span>
+          <span class="status-meta"><i>UPLINK</i> 24 ms</span>
+          <span class="status-meta"><i>PLAN</i> Gemma-4 · 0.7Hz</span>
+        </div>
+        <div class="cc-status-c">
+          <span class="status-meta"><i>BANDWIDTH</i> <span id="bwBar" class="bw"><i></i><i></i><i></i><i></i><i></i></span></span>
+        </div>
+        <div class="cc-status-r">
+          <span class="status-meta">A.R.C. · Autonomous Rescue Cluster</span>
+          <span class="status-meta build">v0.3.1 · MISSION-BUILD</span>
+        </div>
+      </footer>
+    </main>
+
+    <script type="module" src="/simulation/app.js"></script>
+  </body>
+</html>

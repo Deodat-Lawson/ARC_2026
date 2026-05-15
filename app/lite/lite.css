@@ -146,16 +146,70 @@
 }
 
 .lite-page .map-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: start;
+  position: relative;
+  display: block;
 }
 
 .lite-page .map-col {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.lite-page .map-pov-col {
+  width: 100%;
+}
+
+.lite-page .map-2d-col {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 260px;
+  z-index: 20;
+  padding: 8px 10px 10px;
+  background: rgba(8, 16, 28, 0.86);
+  border: 1px solid rgba(0, 191, 255, 0.45);
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 18px rgba(0, 100, 220, 0.2);
+  backdrop-filter: blur(6px);
+  touch-action: none;
+}
+
+.lite-page .map-2d-col .panel-head {
+  cursor: grab;
+  user-select: none;
+  padding-bottom: 6px;
+}
+
+.lite-page .map-2d-col.dragging {
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.7), 0 0 28px rgba(0, 191, 255, 0.35);
+}
+
+.lite-page .map-2d-col.dragging .panel-head {
+  cursor: grabbing;
+}
+
+.lite-page .map-2d-col h2 {
+  font-size: 12px;
+}
+
+.lite-page .map-2d-col .score {
+  font-size: 11px;
+}
+
+.lite-page .map-2d-col #tickLabel {
+  font-size: 10px;
+}
+
+.lite-page .map-2d-col .legend {
+  font-size: 10px;
+  gap: 4px 8px;
+  padding-top: 6px;
+}
+
+.lite-page .map-2d-col .legend i {
+  width: 8px;
+  height: 8px;
 }
 
 .lite-page .pov-sub-meta {

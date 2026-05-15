@@ -58,7 +58,7 @@ export function HeroOverlay() {
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-4">
           <a
-            href="/demo"
+            href="/simulation"
             className="group inline-flex h-11 items-center gap-2 rounded-sm bg-arc-accent px-5 text-sm font-medium tracking-wide text-arc-bg transition-[opacity,gap] hover:opacity-90 hover:gap-3"
           >
             Explore the system

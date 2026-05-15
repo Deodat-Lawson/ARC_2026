@@ -5,10 +5,16 @@ const nextConfig: NextConfig = {
   transpilePackages: ["three"],
   async rewrites() {
     return [
-      // Standalone 2D simulation demo (static HTML + module JS) served from /public/demo.
+      // Mission-command simulation (static HTML + module JS) served from /public/simulation.
       // Next.js does not auto-resolve directory index files in /public, so we rewrite
-      // the bare /demo URL to the actual file.
-      { source: "/demo", destination: "/demo/index.html" },
+      // the bare /simulation URL to the actual file.
+      { source: "/simulation", destination: "/simulation/index.html" },
+    ];
+  },
+  async redirects() {
+    return [
+      // Legacy /demo URL — keep external links working after the rename.
+      { source: "/demo", destination: "/simulation", permanent: false },
     ];
   },
   webpack: (config) => {

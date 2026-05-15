@@ -58,12 +58,16 @@ const TOAST_STYLES = {
 };
 function lerp(a, b, t) { return a + (b - a) * Math.min(1, Math.max(0, t)); }
 
-fetch("/demo/scenario_001.json")
+let defaultScenario;
+
+fetch("/simulation/scenario_001.json")
   .then((response) => response.json())
   .then((scenario) => {
-    initialScenario = scenario;
-    init3D(scenario);
+    defaultScenario = scenario;
+    initialScenario = synthesizeScenario(scenario, readConfig());
+    init3D(initialScenario);
     reset();
+    setupCommandCenter();
   });
 
 function clone(value) {
@@ -223,38 +227,46 @@ function sameCell(a, b) {
 function generatePlan() {
   const candidates = rankVictims();
   const top = candidates[0];
-  const v2 = candidates.find((candidate) => candidate.id === "V2") || candidates[1];
+  const v2 = candidates[1] || candidates.find((candidate) => candidate.id === "V2");
   const criticalBlockade = state.map.blocked_cells.find((blockade) => blockade.status === "blocked");
   const needsRelay = top && top.communication_status !== "available" && top.score > 0.62;
 
+  const firstByRole = (role) => state.agents.find((a) => a.role === role);
+  const firstByType = (type) => state.agents.find((a) => a.type === type);
+
+  const scout = firstByRole("scout") || firstByType("drone");
+  const relay = firstByRole("relay") || state.agents.filter((a) => a.type === "drone")[1] || scout;
+  const rescue = firstByRole("rescue") || firstByType("ground_rescue") || firstByType("ground_clear");
+  const clearer = firstByRole("clear_blockade") || firstByType("ground_clear");
+
   const missionPlan = [];
-  if (top) {
+  if (top && scout) {
     missionPlan.push({
-      agent: "Drone-1",
+      agent: scout.id,
       task: "aerial_confirmation",
       target: top.id,
       safety_note: "Keep flight path above blocked roads and avoid prolonged hover over collapse-risk cells."
     });
   }
-  if (needsRelay) {
+  if (needsRelay && relay && relay.id !== scout?.id) {
     missionPlan.push({
-      agent: "Drone-2",
+      agent: relay.id,
       task: "deploy_relay",
       target: "Relay-R1",
       safety_note: "Hold relay coverage between base and the weak communication zone."
     });
   }
-  if (v2) {
+  if (v2 && rescue) {
     missionPlan.push({
-      agent: "UGV-1",
+      agent: rescue.id,
       task: "vibration_audio_verification",
       target: v2.id,
       safety_note: "Use the safer corridor and do not enter blocked or extreme collapse-risk cells."
     });
   }
-  if (criticalBlockade) {
+  if (criticalBlockade && clearer) {
     missionPlan.push({
-      agent: "UGV-2",
+      agent: clearer.id,
       task: "clear_blockade",
       target: criticalBlockade.id,
       safety_note: "Clear one blockade at a time; parallel clearing is not counted as extra benefit."
@@ -307,14 +319,23 @@ function rankVictims() {
 }
 
 function chooseBestAgent(victim) {
-  const options = state.agents
+  let options = state.agents
     .filter((agent) => agent.role !== "relay" && agent.role !== "clear_blockade")
     .map((agent) => ({
       agent,
       pathRisk: locationRisk(victim.location, agent.type),
       blocked: agent.type !== "drone" && isBlockedNear(victim.location)
     }));
-
+  if (!options.length && state.agents.length) {
+    options = state.agents.map((agent) => ({
+      agent,
+      pathRisk: locationRisk(victim.location, agent.type),
+      blocked: agent.type !== "drone" && isBlockedNear(victim.location)
+    }));
+  }
+  if (!options.length) {
+    return { agent: { id: "—", battery: 0, type: "drone" }, pathRisk: 1, blocked: false };
+  }
   return options.sort((a, b) => a.pathRisk - b.pathRisk)[0];
 }
 
@@ -778,7 +799,7 @@ function typewriter(el, text, speed = 18) {
 }
 
 function renderPanels() {
-  tickLabel.textContent = `Timestep ${state.timestep}`;
+  tickLabel.textContent = String(state.timestep).padStart(3, "0");
   if (rescuedCount.textContent !== String(state.rescued)) {
     rescuedCount.textContent = state.rescued;
   }
@@ -789,7 +810,7 @@ function renderPanels() {
       <strong>${candidate.id}</strong>
       <div>
         <div class="bar" style="--value: ${candidate.score * 100}%"><i></i></div>
-        <span>HP ${candidate.hp} / survival ${candidate.survival_steps} / ${candidate.communication_status}</span>
+        <span>HP ${candidate.hp} / surv ${candidate.survival_steps} / ${candidate.communication_status}</span>
       </div>
       <b class="tag">${candidate.score.toFixed(2)}</b>
     </div>
@@ -800,7 +821,7 @@ function renderPanels() {
       <strong>${agent.id}</strong>
       <div>
         <div class="bar" style="--value: ${agent.battery}%"><i></i></div>
-        <span>${agent.role} / ${agent.location.map((item) => Math.round(item)).join(", ")}</span>
+        <span>${agent.role} · ${agent.location.map((item) => Math.round(item)).join(", ")}</span>
       </div>
       <b class="tag">${Math.round(agent.battery)}%</b>
     </div>
@@ -808,6 +829,7 @@ function renderPanels() {
 
   typewriter(briefText, plan.commander_briefing);
   missionJson.textContent = JSON.stringify(plan, null, 2);
+  updateCommandKpis(candidates);
   drawSurvivalChart();
   updateAgentCards();
 }
@@ -903,21 +925,45 @@ function round(value) {
   return Math.round(value * 100) / 100;
 }
 
+let speedMultiplier = 1;
+const RUN_LABEL_ATTR = "data-run-label";
+
+function getRunLabel() {
+  return autoBtn.querySelector(`[${RUN_LABEL_ATTR}]`);
+}
+
+function setRunLabel(text) {
+  const lab = getRunLabel();
+  if (lab) lab.textContent = text;
+  else autoBtn.textContent = text;
+}
+
 function stopAuto() {
   clearInterval(timer);
   timer = null;
-  autoBtn.textContent = "Run";
+  setRunLabel("RUN");
 }
 
-stepBtn.addEventListener("click", step);
-resetBtn.addEventListener("click", reset);
+function startAuto() {
+  clearInterval(timer);
+  timer = setInterval(step, Math.max(80, MS_PER_TICK / speedMultiplier));
+  setRunLabel("PAUSE");
+}
+
+stepBtn.addEventListener("click", () => { if (state) step(); });
+resetBtn.addEventListener("click", () => { if (state) reset(); });
 autoBtn.addEventListener("click", () => {
-  if (timer) {
-    stopAuto();
-    return;
-  }
-  autoBtn.textContent = "Pause";
-  timer = setInterval(step, 900);
+  if (timer) { stopAuto(); return; }
+  startAuto();
+});
+
+document.addEventListener("keydown", (e) => {
+  const tag = (e.target && e.target.tagName) || "";
+  if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.code === "Space") { e.preventDefault(); autoBtn.click(); }
+  else if (e.key === ".") { e.preventDefault(); stepBtn.click(); }
+  else if (e.key === "r" || e.key === "R") { e.preventDefault(); resetBtn.click(); }
 });
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -2045,3 +2091,478 @@ function currentTargetIdFor(agent) {
   return action ? action.target : null;
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Command-center extensions
+   - Scenario synthesizer (preset + sliders → scenario JSON)
+   - KPI counters, status bandwidth indicator
+   - Speed buttons, config rail toggle, copy JSON, clear log
+   - 3D world teardown so Apply & Reset can rebuild with new dimensions
+   ────────────────────────────────────────────────────────────────────────── */
+
+const PRESET_DEFAULTS = {
+  urban_quake: {
+    label: "MSN-001 · URBAN-QUAKE",
+    phase: "CLOSED LOOP · GEMMA-4",
+    grid: 30, victims: 5, blockades: 2, fires: 1, collapses: 1,
+    intensity: 70, severity: 50, scout: 1, relay: 1, rescue: 1, clear: 1,
+    baseRange: 12, relayRange: 8, deadRadius: 4, dropout: 15
+  },
+  wildfire: {
+    label: "MSN-002 · WILDFIRE-WUI",
+    phase: "PERIMETER ASSESS · GEMMA-4",
+    grid: 34, victims: 6, blockades: 1, fires: 3, collapses: 0,
+    intensity: 85, severity: 60, scout: 2, relay: 1, rescue: 1, clear: 0,
+    baseRange: 14, relayRange: 9, deadRadius: 3, dropout: 25
+  },
+  industrial: {
+    label: "MSN-003 · INDUSTRIAL-COLLAPSE",
+    phase: "STRUCTURAL TRIAGE · GEMMA-4",
+    grid: 28, victims: 4, blockades: 4, fires: 1, collapses: 2,
+    intensity: 80, severity: 70, scout: 1, relay: 1, rescue: 2, clear: 2,
+    baseRange: 10, relayRange: 7, deadRadius: 5, dropout: 30
+  }
+};
+
+let activePreset = "urban_quake";
+
+function $(id) { return document.getElementById(id); }
+
+function readConfig() {
+  const num = (id, fb) => {
+    const el = $(id);
+    if (!el) return fb;
+    return Number(el.value);
+  };
+  const str = (id, fb) => {
+    const el = $(id);
+    return el ? el.value : fb;
+  };
+  return {
+    preset: activePreset,
+    missionId: str("cfgMissionId", "MSN-001"),
+    grid: num("cfgGrid", 30),
+    cellSize: num("cfgCell", 10),
+    seed: num("cfgSeed", 42),
+    scout: num("cfgScout", 1),
+    relay: num("cfgRelay", 1),
+    rescue: num("cfgRescue", 1),
+    clearN: num("cfgClear", 1),
+    battery: num("cfgBat", 75),
+    victims: num("cfgVictim", 5),
+    severity: num("cfgSeverity", 50) / 100,
+    survivalWindow: num("cfgWindow", 160),
+    blockades: num("cfgBlock", 2),
+    fires: num("cfgFire", 1),
+    collapses: num("cfgCollapse", 1),
+    intensity: num("cfgIntensity", 70) / 100,
+    baseRange: num("cfgBaseRange", 12),
+    relayRange: num("cfgRelayRange", 8),
+    deadRadius: num("cfgDead", 4),
+    dropout: num("cfgDropout", 15) / 100
+  };
+}
+
+function mulberry32(seed) {
+  let a = seed | 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function synthesizeScenario(base, cfg) {
+  // Build a brand-new scenario JSON from sliders, falling back to base values
+  // for things the user hasn't explicitly controlled (sensor configs, etc.).
+  const rng = mulberry32((cfg.seed | 0) * 7919 + (cfg.victims | 0) * 31 + (cfg.grid | 0) * 17);
+  const G = Math.max(20, Math.min(40, cfg.grid));
+  const baseCell = [Math.max(1, Math.floor(G * 0.07)), Math.max(1, Math.floor(G * 0.07))];
+
+  const occupied = new Set();
+  const mark = (x, y, r = 1) => {
+    for (let dx = -r; dx <= r; dx += 1)
+      for (let dy = -r; dy <= r; dy += 1)
+        occupied.add(`${x + dx},${y + dy}`);
+  };
+  mark(baseCell[0], baseCell[1], 2);
+
+  const pickCell = (minDist = 4) => {
+    for (let tries = 0; tries < 80; tries += 1) {
+      const x = 1 + Math.floor(rng() * (G - 2));
+      const y = 1 + Math.floor(rng() * (G - 2));
+      if (occupied.has(`${x},${y}`)) continue;
+      const d = Math.abs(x - baseCell[0]) + Math.abs(y - baseCell[1]);
+      if (d < minDist) continue;
+      return [x, y];
+    }
+    return [Math.floor(G / 2), Math.floor(G / 2)];
+  };
+
+  // Risk zones
+  const riskZones = [];
+  for (let i = 0; i < cfg.fires; i += 1) {
+    const c = pickCell(5);
+    const radius = 2 + Math.floor(rng() * 2);
+    riskZones.push({ id: `Z${riskZones.length + 1}`, center: c, radius, type: "fire", risk: 0.4 + cfg.intensity * 0.5 });
+    mark(c[0], c[1], radius);
+  }
+  for (let i = 0; i < cfg.collapses; i += 1) {
+    const c = pickCell(5);
+    const radius = 2 + Math.floor(rng() * 2);
+    riskZones.push({ id: `Z${riskZones.length + 1}`, center: c, radius, type: "collapse", risk: 0.35 + cfg.intensity * 0.45 });
+    mark(c[0], c[1], radius);
+  }
+
+  // Comm dead zone — anchor on a risk zone if present, else a random cell
+  const deadAnchor = riskZones.length ? riskZones[0].center : pickCell(6);
+  const deadZones = cfg.deadRadius > 0 ? [{
+    id: "C1",
+    center: deadAnchor,
+    radius: cfg.deadRadius,
+    dropout_addition: Math.max(0.1, cfg.dropout * 2)
+  }] : [];
+
+  // Blockades
+  const blockades = [];
+  for (let i = 0; i < cfg.blockades; i += 1) {
+    const loc = pickCell(3);
+    blockades.push({
+      id: `K${i + 1}`,
+      location: loc,
+      repair_cost: 60 + Math.floor(rng() * 30),
+      clear_progress: 0,
+      status: "blocked"
+    });
+    mark(loc[0], loc[1], 1);
+  }
+
+  // Victims — survival window controls hp/damage ratio
+  const victims = [];
+  for (let i = 0; i < cfg.victims; i += 1) {
+    const loc = pickCell(4);
+    const sev = cfg.severity * (0.6 + rng() * 0.8);
+    const damage = Math.round(20 + sev * 80);
+    const window = Math.max(40, cfg.survivalWindow + (rng() - 0.5) * 80);
+    const hp = Math.round(damage * window / 10);
+    victims.push({
+      id: `V${i + 1}`,
+      location: loc,
+      hp,
+      damage_per_step: damage,
+      buriedness: Math.round(15 + rng() * 60),
+      thermal_signal: round(0.25 + rng() * 0.7),
+      audio_signal: round(0.2 + rng() * 0.7),
+      vibration_signal: round(0.2 + rng() * 0.7),
+      status: rng() < 0.85 ? "trapped" : "unknown"
+    });
+    mark(loc[0], loc[1], 1);
+  }
+
+  // Agents — spawn ring around base
+  const agentTemplates = (base && base.agents) || [];
+  const agents = [];
+  let spawn = 0;
+  const ring = [
+    [0, 0], [1, 0], [0, 1], [-1, 0], [0, -1],
+    [1, 1], [-1, 1], [1, -1], [-1, -1]
+  ];
+  const place = () => {
+    const [dx, dy] = ring[spawn % ring.length] || [0, 0];
+    spawn += 1;
+    return [baseCell[0] + dx, baseCell[1] + dy];
+  };
+  const pickTpl = (kind, role) =>
+    agentTemplates.find((a) => a.type === kind && a.role === role) ||
+    agentTemplates.find((a) => a.type === kind) ||
+    null;
+
+  for (let i = 0; i < cfg.scout; i += 1) {
+    const tpl = pickTpl("drone", "scout");
+    agents.push({
+      ...(tpl || {}),
+      id: `Drone-${agents.filter((a) => a.type === "drone").length + 1}`,
+      type: "drone",
+      role: "scout",
+      location: place(),
+      battery: cfg.battery,
+      speed: 3,
+      perception_range: 6,
+      sensors: ["thermal", "camera", "audio"],
+      payload: "medical_beacon"
+    });
+  }
+  for (let i = 0; i < cfg.relay; i += 1) {
+    agents.push({
+      id: `Drone-${agents.filter((a) => a.type === "drone").length + 1}`,
+      type: "drone",
+      role: "relay",
+      location: place(),
+      battery: cfg.battery,
+      speed: 3,
+      perception_range: 5,
+      sensors: ["camera", "audio"],
+      payload: "radio_relay"
+    });
+  }
+  for (let i = 0; i < cfg.rescue; i += 1) {
+    agents.push({
+      id: `UGV-${agents.filter((a) => a.type === "ground_rescue").length + 1}`,
+      type: "ground_rescue",
+      role: "rescue",
+      location: place(),
+      battery: cfg.battery,
+      speed: 1,
+      perception_range: 3,
+      sensors: ["audio", "vibration"],
+      payload: "first_aid_pack"
+    });
+  }
+  for (let i = 0; i < cfg.clearN; i += 1) {
+    agents.push({
+      id: `UGV-${agents.filter((a) => a.type === "ground_clear").length + agents.filter((a) => a.type === "ground_rescue").length + 1}`,
+      type: "ground_clear",
+      role: "clear_blockade",
+      location: place(),
+      battery: cfg.battery,
+      speed: 1,
+      perception_range: 3,
+      clear_rate: 20,
+      sensors: ["camera"],
+      payload: "rubble_clear_tool"
+    });
+  }
+  if (agents.length === 0 && agentTemplates.length) {
+    agents.push(JSON.parse(JSON.stringify(agentTemplates[0])));
+  }
+
+  return {
+    scenario_id: cfg.missionId.toLowerCase().replace(/[^a-z0-9]+/g, "_") || "msn_synth",
+    description: base?.description ||
+      `Synthesized scenario: ${cfg.victims} victims · ${cfg.fires + cfg.collapses} hazard zones · ${cfg.blockades} blockades.`,
+    map: {
+      size: [G, G],
+      cell_size_m: cfg.cellSize,
+      base: baseCell,
+      refuges: [{ id: "R0", location: baseCell }],
+      blocked_cells: blockades,
+      risk_zones: riskZones,
+      communication_dead_zones: deadZones
+    },
+    victims,
+    agents,
+    communication: {
+      base_range: cfg.baseRange,
+      relay_range: cfg.relayRange,
+      direct_comm_range: 4,
+      bandwidth_limit: 3,
+      base_dropout_probability: cfg.dropout
+    }
+  };
+}
+
+/* ── Tear down 3D world so Apply & Reset can rebuild ──────────────────── */
+function disposeMaterial(mat) {
+  if (!mat) return;
+  for (const k of ["map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap"]) {
+    if (mat[k]) try { mat[k].dispose(); } catch {}
+  }
+  try { mat.dispose(); } catch {}
+}
+function disposeObject(obj) {
+  if (!obj) return;
+  obj.traverse?.((node) => {
+    if (node.isMesh) {
+      node.geometry?.dispose?.();
+      if (Array.isArray(node.material)) node.material.forEach(disposeMaterial);
+      else disposeMaterial(node.material);
+    }
+  });
+}
+
+function teardown3D() {
+  if (!world.initialized) return;
+  // dispose every child of the scene
+  if (world.scene) {
+    const children = [...world.scene.children];
+    for (const c of children) {
+      disposeObject(c);
+      world.scene.remove(c);
+    }
+  }
+  // dispose per-pov renderers
+  for (const entry of povs) {
+    try { entry.renderer.dispose(); } catch {}
+    const parent = entry.canvas.parentElement;
+    if (parent) {
+      // recreate canvas so we can attach a new renderer cleanly
+      const fresh = entry.canvas.cloneNode(false);
+      parent.replaceChild(fresh, entry.canvas);
+    }
+  }
+  povs.length = 0;
+  world.scene = null;
+  world.agentMeshes.clear();
+  world.victimMeshes.clear();
+  world.blockadeMeshes.clear();
+  world.riskMeshes.clear();
+  world.baseMesh = null;
+  world.groundGrid = null;
+  world.initialized = false;
+}
+
+function rebuildSimulation(cfg) {
+  stopAuto();
+  teardown3D();
+  initialScenario = synthesizeScenario(defaultScenario, cfg);
+  init3D(initialScenario);
+  reset();
+  updateMissionLabels(cfg);
+}
+
+/* ── KPI updates ───────────────────────────────────────────────────────── */
+function updateCommandKpis(candidates) {
+  const total = state?.victims?.length || 0;
+  const alive = state?.victims?.filter((v) => v.status === "trapped" || v.status === "unknown" || v.status === "rescued").length || 0;
+  const survivalRate = total ? Math.round((alive / total) * 100) : 0;
+  const ofEl = $("rescuedOf"); if (ofEl) ofEl.textContent = total;
+  const sEl = $("survivalPct");
+  if (sEl) {
+    sEl.textContent = `${survivalRate}%`;
+    sEl.classList.remove("accent", "warn", "danger");
+    sEl.classList.add(survivalRate > 75 ? "accent" : survivalRate > 45 ? "warn" : "danger");
+  }
+  const aEl = $("activeAgents");
+  if (aEl) aEl.textContent = state?.agents?.length || 0;
+  const tcEl = $("threatCount");
+  if (tcEl) tcEl.textContent = candidates?.length || 0;
+  const fcEl = $("fleetCount");
+  if (fcEl) fcEl.textContent = state?.agents?.length || 0;
+  // Bandwidth visual derived from active comm health
+  const lvl = survivalRate > 80 ? 5 : survivalRate > 60 ? 4 : survivalRate > 40 ? 3 : survivalRate > 20 ? 2 : 1;
+  const bw = $("bwBar");
+  if (bw) bw.className = `bw lvl-${lvl}`;
+}
+
+function updateMissionLabels(cfg) {
+  const preset = PRESET_DEFAULTS[cfg.preset] || PRESET_DEFAULTS.urban_quake;
+  const idEl = $("msnId");
+  if (idEl) idEl.textContent = `${cfg.missionId} · ${preset.label.split("· ")[1] || "MISSION"}`;
+  const phaseEl = $("msnPhase");
+  if (phaseEl) phaseEl.textContent = preset.phase;
+  const gridBadge = $("gridBadge");
+  if (gridBadge) gridBadge.textContent = `${cfg.grid} × ${cfg.grid}`;
+}
+
+/* ── Control wiring ────────────────────────────────────────────────────── */
+function setupCommandCenter() {
+  // Slider labels (live)
+  const bind = (id, labelId, fmt) => {
+    const input = $(id);
+    const label = $(labelId);
+    if (!input || !label) return;
+    const render = () => { label.textContent = fmt(input.value); };
+    input.addEventListener("input", render);
+    render();
+  };
+  bind("cfgGrid", "cfgGridLabel", (v) => `${v} × ${v}`);
+  bind("cfgCell", "cfgCellLabel", (v) => `${v}`);
+  bind("cfgSeed", "cfgSeedLabel", (v) => `${v}`);
+  bind("cfgScout", "cfgScoutLabel", (v) => `${v}`);
+  bind("cfgRelay", "cfgRelayLabel", (v) => `${v}`);
+  bind("cfgRescue", "cfgRescueLabel", (v) => `${v}`);
+  bind("cfgClear", "cfgClearLabel", (v) => `${v}`);
+  bind("cfgBat", "cfgBatLabel", (v) => `${v}%`);
+  bind("cfgVictim", "cfgVictimLabel", (v) => `${v}`);
+  bind("cfgSeverity", "cfgSeverityLabel", (v) => (v / 100).toFixed(2));
+  bind("cfgWindow", "cfgWindowLabel", (v) => `${v}s`);
+  bind("cfgBlock", "cfgBlockLabel", (v) => `${v}`);
+  bind("cfgFire", "cfgFireLabel", (v) => `${v}`);
+  bind("cfgCollapse", "cfgCollapseLabel", (v) => `${v}`);
+  bind("cfgIntensity", "cfgIntensityLabel", (v) => (v / 100).toFixed(2));
+  bind("cfgBaseRange", "cfgBaseRangeLabel", (v) => `${v}`);
+  bind("cfgRelayRange", "cfgRelayRangeLabel", (v) => `${v}`);
+  bind("cfgDead", "cfgDeadLabel", (v) => `${v}`);
+  bind("cfgDropout", "cfgDropoutLabel", (v) => (v / 100).toFixed(2));
+
+  // Presets
+  document.querySelectorAll(".preset").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.preset;
+      if (!PRESET_DEFAULTS[key]) return;
+      activePreset = key;
+      document.querySelectorAll(".preset").forEach((b) => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+      const p = PRESET_DEFAULTS[key];
+      const set = (id, v) => { const el = $(id); if (el) { el.value = v; el.dispatchEvent(new Event("input")); } };
+      set("cfgGrid", p.grid);
+      set("cfgVictim", p.victims);
+      set("cfgBlock", p.blockades);
+      set("cfgFire", p.fires);
+      set("cfgCollapse", p.collapses);
+      set("cfgIntensity", p.intensity);
+      set("cfgSeverity", p.severity);
+      set("cfgScout", p.scout);
+      set("cfgRelay", p.relay);
+      set("cfgRescue", p.rescue);
+      set("cfgClear", p.clear);
+      set("cfgBaseRange", p.baseRange);
+      set("cfgRelayRange", p.relayRange);
+      set("cfgDead", p.deadRadius);
+      set("cfgDropout", p.dropout);
+    });
+  });
+
+  // Apply & Reset
+  const applyBtn = $("cfgApply");
+  if (applyBtn) applyBtn.addEventListener("click", () => rebuildSimulation(readConfig()));
+
+  // Quick randomize: re-roll seed only, keep counts
+  const randBtn = $("cfgRandom");
+  if (randBtn) randBtn.addEventListener("click", () => {
+    const seed = $("cfgSeed");
+    if (seed) {
+      seed.value = 1 + Math.floor(Math.random() * 998);
+      seed.dispatchEvent(new Event("input"));
+    }
+    rebuildSimulation(readConfig());
+  });
+
+  // Config rail toggle
+  const cfgToggle = $("cfgToggle");
+  const grid = $("ccGrid");
+  if (cfgToggle && grid) {
+    cfgToggle.addEventListener("click", () => grid.classList.toggle("cfg-collapsed"));
+  }
+
+  // Speed buttons
+  document.querySelectorAll(".speed-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".speed-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      speedMultiplier = Number(btn.dataset.speed) || 1;
+      if (timer) startAuto();
+    });
+  });
+
+  // Copy mission JSON
+  const copyBtn = $("copyJson");
+  if (copyBtn) copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(missionJson.textContent || "");
+      emitToast("default", "mission JSON copied");
+    } catch {
+      emitToast("default", "clipboard unavailable");
+    }
+  });
+
+  // Clear event log
+  const clearBtn = $("clearLog");
+  const logEl = $("eventLog");
+  if (clearBtn && logEl) clearBtn.addEventListener("click", () => { logEl.innerHTML = ""; });
+
+  // Mission ID input updates label live
+  const idIn = $("cfgMissionId");
+  if (idIn) idIn.addEventListener("input", () => updateMissionLabels(readConfig()));
+
+  // Initial label paint
+  updateMissionLabels(readConfig());
+}

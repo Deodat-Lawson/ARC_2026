@@ -393,9 +393,9 @@ function drawMap(t) {
 }
 
 function drawGrid(cols, rows, cell) {
-  ctx.fillStyle = "#020812";
+  ctx.fillStyle = "#142235";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "rgba(0, 120, 200, 0.12)";
+  ctx.strokeStyle = "rgba(120, 180, 230, 0.22)";
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
     ctx.beginPath();
@@ -409,7 +409,7 @@ function drawGrid(cols, rows, cell) {
     ctx.lineTo(canvas.width, i * cell);
     ctx.stroke();
   }
-  ctx.fillStyle = "rgba(30, 58, 85, 0.55)";
+  ctx.fillStyle = "rgba(95, 130, 165, 0.75)";
   for (let y = 2; y < rows; y += 5) ctx.fillRect(0, y * cell + cell * 0.28, canvas.width, cell * 0.44);
   for (let x = 2; x < cols; x += 6) ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, canvas.height);
 }
