@@ -2,7 +2,6 @@
 
 import { useSyncExternalStore } from "react";
 import { Vector3 } from "three";
-import { resetMissionClock } from "./missionTimeline";
 
 /**
  * Tiny module-level state for the hero, with two parts:
@@ -31,14 +30,57 @@ export function getPovTarget(): PovTarget {
 export function setPovTarget(t: PovTarget): void {
   if (_povTarget === t) return;
   _povTarget = t;
-  // Restart the mission clock whenever the user enters an FPV so the loop
-  // plays from the beginning (NAVIGATE phase) every time. This makes each
-  // POV deterministic — same click, same starting view, full sequence
-  // visible from that asset's perspective.
-  if (t !== "cinematic") {
-    resetMissionClock();
-  }
   _listeners.forEach((l) => l());
+}
+
+/** Valid POV target ids — used to validate query-param values. */
+const VALID_POV_TARGETS: ReadonlySet<PovTarget> = new Set([
+  "cinematic",
+  "lead",
+  "perception",
+  "relay",
+  "dog1",
+  "dog2",
+] as PovTarget[]);
+
+/**
+ * Hard-navigate to a different POV via the URL query param. Reload triggers
+ * a fresh React tree, fresh R3F canvas, fresh component mounts — bypassing
+ * the in-page state-transition bugs that caused the camera to read stale
+ * ASSET_POSITIONS or wrong aspect-ratio on POV switch.
+ *
+ * UX cost: ~2 seconds of HeroFallback while GLBs reload. Use only when the
+ * in-page approach proves unreliable.
+ */
+export function setPovTargetViaUrl(t: PovTarget): void {
+  if (typeof window === "undefined") {
+    setPovTarget(t);
+    return;
+  }
+  const params = new URLSearchParams(window.location.search);
+  if (t === "cinematic") {
+    params.delete("pov");
+  } else {
+    params.set("pov", t);
+  }
+  const search = params.toString();
+  const url = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+  window.location.assign(url);
+}
+
+/**
+ * Read the POV target from the URL `?pov=` query param. Returns "cinematic"
+ * if the param is absent or invalid. Call this on mount to restore POV
+ * after a hard-refresh navigation.
+ */
+export function getPovFromUrl(): PovTarget {
+  if (typeof window === "undefined") return "cinematic";
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("pov");
+  if (!raw) return "cinematic";
+  return VALID_POV_TARGETS.has(raw as PovTarget)
+    ? (raw as PovTarget)
+    : "cinematic";
 }
 
 function subscribe(l: () => void): () => void {
@@ -87,20 +129,30 @@ export type PovOffset = {
   bobAmp: number;
   /** Bob frequency in Hz */
   bobHz: number;
+  /** Idle scan yaw amplitude in radians (peak left/right swing of the gimbal/head) */
+  scanYawAmp: number;
+  /** Idle scan yaw frequency in Hz */
+  scanYawHz: number;
+  /** Idle scan pitch amplitude in radians (peak up/down) */
+  scanPitchAmp: number;
+  /** Idle scan pitch frequency in Hz */
+  scanPitchHz: number;
 };
 
 export const POV_OFFSETS: Record<AssetId, PovOffset> = {
   // All FoVs are widened relative to cinematic (38°) so each FPV reads as
   // "looking around the world" rather than "telephoto on the target."
   //
-  // Drones — gimbal-cam under the nose.
-  lead: { eye: [0, -0.05, 0.5], lookAhead: 6, tilt: -0.22, fov: 70, bobAmp: 0.02, bobHz: 3.0 },
-  perception: { eye: [0, -0.05, 0.5], lookAhead: 6, tilt: -0.18, fov: 70, bobAmp: 0.02, bobHz: 3.0 },
-  // Overseer — wide overview lens.
-  relay: { eye: [0, -0.05, 0.4], lookAhead: 14, tilt: -0.4, fov: 90, bobAmp: 0.02, bobHz: 2.5 },
+  // Drones — gimbal-cam under the nose. Slow deliberate sweeps read as the
+  // gimbal scanning the scene. Dogs use faster, smaller swings to read as
+  // head turns while running.
+  lead: { eye: [0, -0.05, 0.5], lookAhead: 6, tilt: -0.22, fov: 70, bobAmp: 0.02, bobHz: 3.0, scanYawAmp: 0.35, scanYawHz: 0.11, scanPitchAmp: 0.08, scanPitchHz: 0.07 },
+  perception: { eye: [0, -0.05, 0.5], lookAhead: 6, tilt: -0.18, fov: 70, bobAmp: 0.02, bobHz: 3.0, scanYawAmp: 0.4, scanYawHz: 0.13, scanPitchAmp: 0.1, scanPitchHz: 0.09 },
+  // Overseer — wide overview lens, slowest widest sweep.
+  relay: { eye: [0, -0.05, 0.4], lookAhead: 14, tilt: -0.4, fov: 90, bobAmp: 0.02, bobHz: 2.5, scanYawAmp: 0.45, scanYawHz: 0.07, scanPitchAmp: 0.06, scanPitchHz: 0.05 },
   // Dogs — head-cam, raised above the dog's head height so we clear debris.
-  dog1: { eye: [0, 0.95, 0.55], lookAhead: 6, tilt: -0.05, fov: 85, bobAmp: 0.04, bobHz: 5.0 },
-  dog2: { eye: [0, 0.95, 0.55], lookAhead: 6, tilt: -0.05, fov: 85, bobAmp: 0.04, bobHz: 5.0 },
+  dog1: { eye: [0, 0.95, 0.55], lookAhead: 6, tilt: -0.05, fov: 85, bobAmp: 0.04, bobHz: 5.0, scanYawAmp: 0.28, scanYawHz: 0.18, scanPitchAmp: 0.09, scanPitchHz: 0.13 },
+  dog2: { eye: [0, 0.95, 0.55], lookAhead: 6, tilt: -0.05, fov: 85, bobAmp: 0.04, bobHz: 5.0, scanYawAmp: 0.3, scanYawHz: 0.21, scanPitchAmp: 0.09, scanPitchHz: 0.15 },
 };
 
 /**

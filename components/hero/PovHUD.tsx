@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import {
   ASSET_META,
   AssetId,
-  setPovTarget,
+  setPovTargetViaUrl,
   usePovTarget,
 } from "./missionStore";
 import {
@@ -14,7 +14,7 @@ import {
   PHASES,
 } from "./missionTimeline";
 import { HeroNarration } from "./HeroNarration";
-import { MiniMap } from "./MiniMap";
+import { SceneMapDebug } from "./SceneMapDebug";
 
 /**
  * FPV operator console — shown only when in POV mode. Replaces the cinematic
@@ -98,7 +98,7 @@ export function PovHUD() {
           <span className="text-arc-fg">{phaseName}</span>
           <button
             type="button"
-            onClick={() => setPovTarget("cinematic")}
+            onClick={() => setPovTargetViaUrl("cinematic")}
             className="ml-2 rounded-sm border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-arc-fg/80 transition hover:border-arc-accent/60 hover:text-arc-accent"
           >
             EXIT
@@ -163,9 +163,9 @@ export function PovHUD() {
       {/* Top-left: minimap revealing this asset's location in the disaster zone.
           The tiny CAM label is folded into the minimap panel header. */}
       <div className="absolute left-6 top-24 flex flex-col gap-2 md:left-10">
-        <MiniMap />
+        <SceneMapDebug variant="hud" />
         <div className="text-[9px] text-arc-muted">
-          {isDrone ? "CAM · gimbal 1 · IR overlay" : "CAM · head · stereo"}
+          {isDrone ? "MAP · scene overlay · gimbal" : "MAP · scene overlay · stereo"}
         </div>
       </div>
 

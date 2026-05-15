@@ -8,6 +8,7 @@ import {
   ASSET_WAYPOINTS,
   applyWaypointLerp,
   getLoopTime,
+  getSearchOffset,
   LOOP_SECONDS,
 } from "./missionTimeline";
 import { ASSET_POSITIONS, ASSET_YAWS, AssetId, usePovTarget } from "./missionStore";
@@ -56,18 +57,35 @@ function updateDrone(id: AssetId, g: Group | null, loopT: number, ahead: Vector3
   if (!g) return;
   const pos = ASSET_POSITIONS[id];
   applyWaypointLerp(pos, ASSET_WAYPOINTS[id], loopT);
-  // Subtle hover bob
-  pos.y += Math.sin(loopT * 1.6 + ASSET_WAYPOINTS[id][0][0]) * 0.06;
+
+  // Per-drone seed for micro hover-bob phase offset.
+  const seed = ASSET_WAYPOINTS[id][0][0];
+
+  // Macro motion — per-phase wandering (sweep / hover / orbit / probe).
+  const [sx, sy, sz] = getSearchOffset(id, loopT);
+  pos.x += sx;
+  pos.y += sy;
+  pos.z += sz;
+
+  // Micro hover-bob layered on top for fine-grain "alive" texture.
+  pos.y +=
+    Math.sin(loopT * 1.6 + seed) * 0.06 +
+    Math.sin(loopT * 0.7 + seed * 2) * 0.035;
+
   g.position.copy(pos);
 
   // Velocity-aligned yaw — look toward where we'll be in 0.4s.
-  // % LOOP_SECONDS (not a hardcoded number) so it wraps correctly with the
-  // current mission length.
   applyWaypointLerp(ahead, ASSET_WAYPOINTS[id], (loopT + 0.4) % LOOP_SECONDS);
   ahead.sub(pos);
-  if (ahead.lengthSq() > 0.0001) {
-    const yaw = Math.atan2(ahead.x, ahead.z);
-    g.rotation.set(0, yaw, 0);
-    ASSET_YAWS[id] = yaw;
+  if (ahead.x * ahead.x + ahead.z * ahead.z > 0.0001) {
+    const targetYaw = Math.atan2(ahead.x, ahead.z);
+    const currentYaw = g.rotation.y;
+    let delta = targetYaw - currentYaw;
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    // Snap on big deltas (loop wrap / FPV reset); ease otherwise.
+    const newYaw = Math.abs(delta) > 1.0 ? targetYaw : currentYaw + delta * 0.14;
+    g.rotation.set(0, newYaw, 0);
+    ASSET_YAWS[id] = newYaw;
   }
 }
