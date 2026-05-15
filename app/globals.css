@@ -14,6 +14,12 @@
   color-scheme: dark;
 }
 
+html {
+  scroll-snap-type: y mandatory;
+  /* Smooth scrolling for anchor links and keyboard navigation */
+  scroll-behavior: smooth;
+}
+
 html,
 body {
   background: var(--color-arc-bg);
@@ -22,6 +28,34 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+}
+
+/*
+ * Scroll snap targets
+ *
+ * Full-page sections: Hero, Mission, each of the five module sections,
+ * the DemoCta section, and Team. Each is at least 100 vh so the snap
+ * zone is always equal to or larger than the viewport — this prevents
+ * the browser from getting "stuck" between two sections.
+ *
+ * scroll-snap-stop: always  →  one section per scroll gesture,
+ *                               no accidental multi-section jumps.
+ */
+main > section,
+#system > section {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-height: 100vh;
+}
+
+/*
+ * The #system wrapper itself is also a snap point so that the
+ * "How it works" section divider is briefly visible when the user
+ * arrives from the Mission section, before continuing into the modules.
+ * No min-height needed — it is already far taller than the viewport.
+ */
+#system {
+  scroll-snap-align: start;
 }
 
 @keyframes arc-dust-drift {
@@ -84,6 +118,11 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {

@@ -19,7 +19,7 @@ export function HeroOverlay() {
             A.R.C.
           </span>
         </div>
-        <nav className="hidden gap-8 text-sm text-arc-muted md:flex">
+        <nav className="hidden gap-6 text-sm text-arc-muted md:flex">
           <a href="#system" className="hover:text-arc-fg">
             System
           </a>
@@ -28,6 +28,15 @@ export function HeroOverlay() {
           </a>
           <a href="#team" className="hover:text-arc-fg">
             Team
+          </a>
+          <a href="/Cost" className="hover:text-arc-fg">
+            Cost
+          </a>
+          <a href="/BP" className="hover:text-arc-fg">
+            BP
+          </a>
+          <a href="/Central-control" className="hover:text-arc-fg">
+            Central
           </a>
         </nav>
       </header>
