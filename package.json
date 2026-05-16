@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
+    "litert:server": "python scripts/litert_openai_server.py",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

@@ -103,6 +103,18 @@ The default scenario file is **`public/lite/scenario_canvas_lite.json`**. Larger
 
 Do not commit **`node_modules/`** or **`.next/`**.
 
+### Mission Command + Gemma 4 on LiteRT (Google AI Edge / hackathon LiteRT track)
+
+The static page **`/simulation`** calls **`/api/gemma-chat`**. For **real Gemma 4 E4B on-device inference** (LiteRT-LM, not LM Studio), run the OpenAI-compatible bridge and point Next.js at it:
+
+1. Install Python deps: `pip install -r requirements.txt`
+2. Ensure the **`.litertlm`** weights exist (see **Optional: Gemma on device (LiteRT)** above) or let **`GemmaPerceiver`** download **`litert-community/gemma-4-E4B-it-litert-lm`** on first init.
+3. Start the bridge: **`pnpm litert:server`** or **`python scripts/litert_openai_server.py`** (default **http://127.0.0.1:8787**). Optional: set **`LITERT_VISION_BACKEND=gpu`** and **`LITERT_BACKEND=gpu`** for faster vision + LLM on discrete GPUs.
+4. Copy **`.env.example` → `.env.local`** and set **`LITERT_OPENAI_BASE_URL=http://127.0.0.1:8787/v1`** (this takes priority over **`LMSTUDIO_BASE_URL`**).
+5. Run **`pnpm dev`**, open **`/simulation`**. Health check: **GET `/api/gemma-chat`** (used by the UI badge).
+
+The bridge passes browser FPV frames to LiteRT as **`{"type":"image","blob":"<base64>"}`** (see [LiteRT conversation schema](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/cpp/conversation.md)). The same **`vision_backend`** wiring is enabled on **`GemmaPerceiver`**’s LiteRT engine for Python **`arc_core`** demos.
+
 ### Optional: road-aware timeline (`lite_sim`)
 
 From repo root (needs both **`arc_core`** and **`lite_sim`** on `PYTHONPATH`):
