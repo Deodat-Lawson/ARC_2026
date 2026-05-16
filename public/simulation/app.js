@@ -51,6 +51,8 @@ const T0 = performance.now();
 const trails = new Map();
 const TRAIL_LEN = 10;
 const MS_PER_TICK = 900;
+/** Slower auto-step interval in GEMMA4 mode so LiteRT rounds can finish before the next tick (no MOCK backfill). */
+const GEMMA_MS_PER_TICK = 12000;
 /** Min wall time between new Fleet dialogue cards while auto-run is on (~4.4s). Multi-agent CoT in the field is usually seconds–tens of seconds per published heartbeat; this keeps the feed readable without slowing the simulation grid. Manual step still updates every tick. */
 const COT_FEED_AUTO_MIN_MS = 4400;
 /** Victim HP/damage — aligned with demo_player (timeline.json) scale.
@@ -215,10 +217,63 @@ let lastCotFeedWallMs = 0;
 const cotFeedTranscriptChunks = [];
 
 /* ------------------------------------------------------------------------- */
-/* Live Gemma 4 · LM Studio (via /api/gemma-chat)                             */
+/* Live Gemma 4 · LM Studio / LiteRT (via /api/gemma-chat)                   */
 /* ------------------------------------------------------------------------- */
-const LIVE_AI_MODE = true;
 const AI_ENDPOINT = "/api/gemma-chat";
+const LIVE_AI_STORAGE_KEY = "arc_sim_ai_mode";
+
+function readInitialLiveAiMode() {
+  try {
+    const q = (new URLSearchParams(window.location.search || "").get("ai") || "").toLowerCase();
+    if (q === "mock" || q === "0" || q === "false") return false;
+    if (q === "gemma" || q === "gemma4" || q === "1" || q === "true" || q === "live") return true;
+  } catch { /* ignore */ }
+  try {
+    const s = localStorage.getItem(LIVE_AI_STORAGE_KEY);
+    if (s === "mock") return false;
+    if (s === "gemma") return true;
+  } catch { /* ignore */ }
+  return true;
+}
+
+/** When true, call backend for orchestrator / vision / fleet; when false, template-only MOCK. */
+let liveAiModeEnabled = readInitialLiveAiMode();
+
+function persistLiveAiMode() {
+  try {
+    localStorage.setItem(LIVE_AI_STORAGE_KEY, liveAiModeEnabled ? "gemma" : "mock");
+  } catch { /* ignore */ }
+}
+
+function syncAiModeSegmentedUi() {
+  const mockBtn = document.getElementById("aiModeMock");
+  const gemmaBtn = document.getElementById("aiModeGemma");
+  if (!mockBtn || !gemmaBtn) return;
+  mockBtn.classList.toggle("active", !liveAiModeEnabled);
+  gemmaBtn.classList.toggle("active", liveAiModeEnabled);
+  mockBtn.setAttribute("aria-pressed", (!liveAiModeEnabled).toString());
+  gemmaBtn.setAttribute("aria-pressed", liveAiModeEnabled.toString());
+}
+
+function applyLiveAiModeFromUser(enableGemma) {
+  if (liveAiModeEnabled === enableGemma) return;
+  liveAiModeEnabled = enableGemma;
+  persistLiveAiMode();
+  syncAiModeSegmentedUi();
+  resetLiveAiState();
+  if (!liveAiModeEnabled) {
+    setAiStatusBadge(false);
+  } else {
+    liveAiConnected = null;
+    setAiStatusBadge(null);
+    void probeLmStudio();
+  }
+  if (state && plan) {
+    renderOnce();
+    if (liveAiModeEnabled) scheduleLiveAiRound(plan);
+  }
+  if (timer) startAuto();
+}
 
 const agentHistories = {
   Drone_Alpha: [],
@@ -244,6 +299,38 @@ let liveAiRequestId = 0;
 let liveAiInFlight = false;
 /** @type {boolean|null} null = probing, true = LM Studio reachable */
 let liveAiConnected = null;
+/** Latest plan to run after the current Gemma round finishes (simulation keeps stepping). */
+let liveAiPendingPlan = null;
+let liveAiRoundStartedAt = 0;
+const GEMMA_ROUND_TIMEOUT_MS = 180_000;
+
+function simulationTickIntervalMs() {
+  const base = liveAiModeEnabled ? GEMMA_MS_PER_TICK : MS_PER_TICK;
+  return Math.max(80, base / speedMultiplier);
+}
+
+function releaseStuckLiveAiRound() {
+  if (!liveAiInFlight) return false;
+  if (performance.now() - liveAiRoundStartedAt < GEMMA_ROUND_TIMEOUT_MS) return false;
+  liveAiRequestId += 1;
+  liveAiInFlight = false;
+  liveAiCache.orchestratorLive = false;
+  emitToast("default", "Gemma 4 round timed out — simulation continues");
+  return true;
+}
+
+/** GEMMA4: queue inference; never block simulation timestep (D — serial rounds, no MOCK). */
+function scheduleLiveAiRound(plan) {
+  if (!liveAiModeEnabled || !state || !plan) return;
+  if (liveAiConnected === false) return;
+  releaseStuckLiveAiRound();
+  if (liveAiInFlight) {
+    liveAiPendingPlan = plan;
+    syncLiveAiHudPending();
+    return;
+  }
+  void triggerLiveAiRound(plan);
+}
 
 function setAiStatusBadge(live) {
   const el = document.getElementById("gemmaAiStatus");
@@ -321,7 +408,6 @@ async function streamGemmaToThinking(agent, message, history, requestId) {
   if (!el) return "";
 
   liveAiCache.orchestratorLive = true;
-  liveAiCache.orchestratorTick = state.timestep;
 
   const row = document.createElement("div");
   row.className = "thinking-row thinking-row-live";
@@ -332,11 +418,13 @@ async function streamGemmaToThinking(agent, message, history, requestId) {
   body.className = "thinking-body";
   row.append(label, body);
   el.appendChild(row);
+  syncLiveAiHudPending();
 
   const result = await callGemmaChat(agent, message, { history, stream: true });
   if (result.fallback || !result.stream) {
     row.remove();
     liveAiCache.orchestratorLive = false;
+    syncLiveAiHudPending();
     return "";
   }
 
@@ -371,15 +459,24 @@ async function streamGemmaToThinking(agent, message, history, requestId) {
     }
   }
 
-  liveAiCache.orchestratorText = full.trim();
+  const cancelled = requestId !== liveAiRequestId;
+  const text = full.trim();
   liveAiCache.orchestratorLive = false;
-  if (full.trim()) {
+
+  if (!text) {
+    row.remove();
+  } else {
+    if (cancelled) body.textContent = `${text} …`;
+    liveAiCache.orchestratorText = text;
+    liveAiCache.orchestratorTick = state.timestep;
     pushAgentHistory("Orchestrator", "user", message);
-    pushAgentHistory("Orchestrator", "assistant", full.trim());
-    thinkingSeen.add(full.trim());
+    pushAgentHistory("Orchestrator", "assistant", text);
+    thinkingSeen.add(text);
   }
+
   while (el.children.length > 80) el.removeChild(el.firstChild);
-  return full.trim();
+  syncLiveAiHudPending();
+  return text;
 }
 
 function buildLiveFleetSlides(orchestrator, drone, beta, gamma, plan) {
@@ -499,6 +596,7 @@ async function fetchDroneAlpha(plan, contextMsg, requestId) {
     if (plan) {
       plan.commander_briefing = text;
       syncBriefingFeed(plan);
+      syncLiveAiHudPending();
     }
   }
   return text;
@@ -547,7 +645,7 @@ async function probeLmStudio() {
 }
 
 async function triggerLiveAiRound(plan) {
-  if (!LIVE_AI_MODE || !state || !plan) return;
+  if (!liveAiModeEnabled || !state || !plan) return;
   if (liveAiConnected === false) return;
 
   if (liveAiConnected === null) {
@@ -557,6 +655,8 @@ async function triggerLiveAiRound(plan) {
 
   const requestId = ++liveAiRequestId;
   liveAiInFlight = true;
+  liveAiRoundStartedAt = performance.now();
+  syncLiveAiHudPending();
   const contextMsg = buildSimulationContext(plan);
 
   try {
@@ -584,13 +684,23 @@ async function triggerLiveAiRound(plan) {
     console.warn("[simulation] Live Gemma round failed:", err);
     setAiStatusBadge(false);
   } finally {
-    if (requestId === liveAiRequestId) liveAiInFlight = false;
+    if (requestId === liveAiRequestId) {
+      liveAiInFlight = false;
+      syncLiveAiHudPending();
+      if (liveAiPendingPlan) {
+        const pending = liveAiPendingPlan;
+        liveAiPendingPlan = null;
+        scheduleLiveAiRound(pending);
+      }
+    }
   }
 }
 
 function resetLiveAiState() {
   liveAiRequestId += 1;
   liveAiInFlight = false;
+  liveAiPendingPlan = null;
+  liveAiRoundStartedAt = 0;
   liveAiCache.tick = -1;
   liveAiCache.orchestratorTick = -1;
   liveAiCache.orchestratorText = "";
@@ -707,7 +817,7 @@ function buildThinkingNarrative(plan) {
 function syncThinkingFeed(plan) {
   const el = thinkingFeedEl;
   if (!el || !plan) return;
-  if (LIVE_AI_MODE && liveAiConnected !== false) {
+  if (liveAiModeEnabled && liveAiConnected !== false) {
     if (liveAiCache.orchestratorLive || liveAiCache.orchestratorTick === state.timestep) return;
     if (liveAiConnected === null || liveAiInFlight) return;
   }
@@ -721,7 +831,7 @@ function syncThinkingFeed(plan) {
 
 function syncBriefingFeed(plan) {
   if (!briefText || !plan) return;
-  if (LIVE_AI_MODE && liveAiConnected !== false) {
+  if (liveAiModeEnabled && liveAiConnected !== false) {
     if (liveAiCache.briefingTick === state.timestep && liveAiCache.briefingText) {
       const text = liveAiCache.briefingText;
       if (briefingSeen.has(text)) return;
@@ -736,6 +846,70 @@ function syncBriefingFeed(plan) {
   if (briefingSeen.has(text)) return;
   briefingSeen.add(text);
   appendBriefingRow(briefText, state.timestep, text);
+}
+
+/** UI-only placeholders while waiting for real Gemma output (not MOCK decision text). */
+function syncLiveAiHudPending() {
+  const briefId = "briefAiPending";
+  const thinkId = "thinkAiPending";
+  let bp = document.getElementById(briefId);
+  let tp = document.getElementById(thinkId);
+
+  const gemmaHud =
+    liveAiModeEnabled && liveAiConnected !== false && state;
+
+  const needBrief =
+    gemmaHud &&
+    (liveAiInFlight || liveAiConnected === null) &&
+    liveAiCache.briefingTick !== state.timestep;
+
+  const needThink =
+    gemmaHud &&
+    (liveAiInFlight || liveAiConnected === null) &&
+    liveAiCache.orchestratorTick !== state.timestep &&
+    !liveAiCache.orchestratorLive;
+
+  if (needBrief && briefText) {
+    if (!bp) {
+      bp = document.createElement("div");
+      bp.id = briefId;
+      bp.className = "briefing-row briefing-row-pending";
+      const label = document.createElement("span");
+      label.className = "briefing-step";
+      label.textContent = `[T${String(state.timestep).padStart(3, "0")}] `;
+      const body = document.createElement("span");
+      body.className = "briefing-body";
+      body.textContent = "Awaiting Gemma 4 · Drone_Alpha vision…";
+      bp.append(label, body);
+      briefText.appendChild(bp);
+    } else {
+      bp.querySelector(".briefing-step").textContent =
+        `[T${String(state.timestep).padStart(3, "0")}] `;
+    }
+  } else if (bp) {
+    bp.remove();
+  }
+
+  if (needThink && thinkingFeedEl) {
+    if (!tp) {
+      tp = document.createElement("div");
+      tp.id = thinkId;
+      tp.className = "thinking-row thinking-row-pending";
+      const label = document.createElement("span");
+      label.className = "thinking-step";
+      label.textContent = `[T${String(state.timestep).padStart(3, "0")}] `;
+      const body = document.createElement("span");
+      body.className = "thinking-body";
+      body.textContent = "Awaiting Gemma 4 · orchestrator…";
+      tp.append(label, body);
+      thinkingFeedEl.appendChild(tp);
+    } else {
+      tp.querySelector(".thinking-step").textContent =
+        `[T${String(state.timestep).padStart(3, "0")}] `;
+    }
+  } else if (tp) {
+    tp.remove();
+  }
 }
 
 function resetDecisionFeeds() {
@@ -1130,7 +1304,8 @@ Promise.all([
     init3D(initialScenario);
     reset();
     setupCommandCenter();
-    if (LIVE_AI_MODE) void probeLmStudio();
+    if (liveAiModeEnabled) void probeLmStudio();
+    else setAiStatusBadge(false);
   })
   .catch((err) => {
     console.error(`[simulation] Failed to load /simulation/data/scenarios/${scenarioFile}:`, err);
@@ -1180,7 +1355,7 @@ function reset() {
   stopAuto();
   renderOnce();
   startRafLoop();
-  if (LIVE_AI_MODE) void triggerLiveAiRound(plan);
+  if (liveAiModeEnabled) scheduleLiveAiRound(plan);
 }
 
 function recordSurvivalSample() {
@@ -1234,7 +1409,8 @@ function step() {
   }
   recordSurvivalSample();
   renderOnce();
-  if (LIVE_AI_MODE) void triggerLiveAiRound(plan);
+  if (liveAiModeEnabled) scheduleLiveAiRound(plan);
+  return true;
 }
 
 function startRafLoop() {
@@ -1660,7 +1836,7 @@ function batteryPctLabel(agent) {
 
 function buildFleetDialogueSlides(plan) {
   if (
-    LIVE_AI_MODE &&
+    liveAiModeEnabled &&
     liveAiConnected === true &&
     liveAiCache.fleetSlides &&
     liveAiCache.tick === state?.timestep
@@ -2587,6 +2763,7 @@ function renderPanels() {
 
   syncThinkingFeed(plan);
   syncBriefingFeed(plan);
+  syncLiveAiHudPending();
   const fleetDialogueSlides = buildFleetDialogueSlides(plan);
   updateCotFeedMeta(fleetDialogueSlides);
   updateFleetDialogueCarousel(plan, fleetDialogueSlides);
@@ -2768,7 +2945,7 @@ function stopAuto() {
 function startAuto() {
   clearInterval(timer);
   lastCotFeedWallMs = performance.now() - COT_FEED_AUTO_MIN_MS;
-  timer = setInterval(step, Math.max(80, MS_PER_TICK / speedMultiplier));
+  timer = setInterval(() => step(), simulationTickIntervalMs());
   setRunLabel("PAUSE");
 }
 
@@ -4679,6 +4856,13 @@ function setupCommandCenter() {
 
   // Initial label paint
   updateMissionLabels(readConfig());
+
+  // MOCK / GEMMA4 header toggle
+  syncAiModeSegmentedUi();
+  const aiModeMock = $("aiModeMock");
+  const aiModeGemma = $("aiModeGemma");
+  if (aiModeMock) aiModeMock.addEventListener("click", () => applyLiveAiModeFromUser(false));
+  if (aiModeGemma) aiModeGemma.addEventListener("click", () => applyLiveAiModeFromUser(true));
 
   // Onboarding tour
   setupTour();
