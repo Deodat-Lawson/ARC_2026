@@ -911,14 +911,14 @@ applyFleetDialogueCotDom();
 
 const scenarioFile = resolveScenarioFilename();
 Promise.all([
-  fetch(`/simulation/${encodeURIComponent(scenarioFile)}`).then((response) => {
+  fetch(`/simulation/data/scenarios/${encodeURIComponent(scenarioFile)}`).then((response) => {
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     return response.json();
   }),
-  fetch("/simulation/firenze_300m_roads.json")
+  fetch("/simulation/data/geo/firenze_300m_roads.json")
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null),
-  fetch("/simulation/fleet-dialogue-cot.json")
+  fetch("/simulation/data/agents/fleet-dialogue-cot.json")
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null),
 ])
@@ -937,7 +937,7 @@ Promise.all([
     setupCommandCenter();
   })
   .catch((err) => {
-    console.error(`[simulation] Failed to load /simulation/${scenarioFile}:`, err);
+    console.error(`[simulation] Failed to load /simulation/data/scenarios/${scenarioFile}:`, err);
     const id = document.getElementById("briefText");
     if (id) {
       id.textContent = `Could not load scenario file “${scenarioFile}”. Use ?scenario=scenario_002.json or check the console.`;
