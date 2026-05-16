@@ -51,6 +51,8 @@ const T0 = performance.now();
 const trails = new Map();
 const TRAIL_LEN = 10;
 const MS_PER_TICK = 900;
+/** Min wall time between new Fleet dialogue cards while auto-run is on (~4.4s). Multi-agent CoT in the field is usually seconds–tens of seconds per published heartbeat; this keeps the feed readable without slowing the simulation grid. Manual step still updates every tick. */
+const COT_FEED_AUTO_MIN_MS = 4400;
 /** Victim HP/damage — aligned with demo_player (timeline.json) scale.
  *  hp_max: 5 000–10 000 per victim; damage_per_step: 40–100 per tick.
  *  survival_pct = hp / hp_max × 100 (individual, not cross-victim). */
@@ -77,7 +79,7 @@ const FLEET_DIALOGUE_COT_BUILTIN = {
       copyAriaLabel: "Copy transcript",
       metaSep: "·",
       slideLabelDefault: "—",
-      autoHint: "latest pinned top",
+      autoHint: "scroll for history · latest at top",
     },
     feed: {
       chainOfThoughtLabel: "Chain-of-thought",
@@ -208,6 +210,8 @@ const thinkingSeen = new Set();
 const briefingSeen = new Set();
 
 let cotFeedPrependedStep = -999;
+/** Wall clock for throttling dialogue feed under auto-run (see {@link COT_FEED_AUTO_MIN_MS}). */
+let lastCotFeedWallMs = 0;
 const cotFeedTranscriptChunks = [];
 
 function splitThinkingLog(text) {
@@ -760,6 +764,7 @@ function reset() {
   // ── 4. Clear UI feeds and render new state
   resetDecisionFeeds();
   cotFeedPrependedStep = -999;
+  lastCotFeedWallMs = 0;
   cotFeedTranscriptChunks.length = 0;
   if (cotCarouselTrack) cotCarouselTrack.innerHTML = "";
   const log = document.getElementById("eventLog");
@@ -1546,11 +1551,16 @@ function scrollLatestCotIntoView(smooth = true) {
   });
 }
 
-function updateFleetDialogueCarousel(plan) {
+function updateFleetDialogueCarousel(plan, slidesPrebuilt = null) {
   if (!cotCarouselTrack || !state) return;
   if (cotFeedPrependedStep === state.timestep) return;
+  if (timer) {
+    const now = performance.now();
+    if (now - lastCotFeedWallMs < COT_FEED_AUTO_MIN_MS) return;
+    lastCotFeedWallMs = now;
+  }
   cotFeedPrependedStep = state.timestep;
-  const slides = buildFleetDialogueSlides(plan);
+  const slides = slidesPrebuilt ?? buildFleetDialogueSlides(plan);
   const block = createCotFeedBlock(state.timestep, slides);
   cotCarouselTrack.appendChild(block);
   // CSS animation defined in styles.css; JS animate() is redundant and conflicts
@@ -1558,7 +1568,6 @@ function updateFleetDialogueCarousel(plan) {
   while (cotCarouselTrack.children.length > cotFeedMaxBlocks()) {
     cotCarouselTrack.removeChild(cotCarouselTrack.firstChild);
   }
-  updateCotFeedMeta(slides);
   cotFeedTranscriptChunks.unshift(formatSlidesTranscriptChunk(state.timestep, slides));
   while (cotFeedTranscriptChunks.length > cotFeedMaxBlocks()) cotFeedTranscriptChunks.pop();
   requestAnimationFrame(() => {
@@ -2014,7 +2023,9 @@ function renderPanels() {
 
   syncThinkingFeed(plan);
   syncBriefingFeed(plan);
-  updateFleetDialogueCarousel(plan);
+  const fleetDialogueSlides = buildFleetDialogueSlides(plan);
+  updateCotFeedMeta(fleetDialogueSlides);
+  updateFleetDialogueCarousel(plan, fleetDialogueSlides);
   updateCommandKpis(candidates);
   drawSurvivalChart();
   updateAgentCards();
@@ -2192,6 +2203,7 @@ function stopAuto() {
 
 function startAuto() {
   clearInterval(timer);
+  lastCotFeedWallMs = performance.now() - COT_FEED_AUTO_MIN_MS;
   timer = setInterval(step, Math.max(80, MS_PER_TICK / speedMultiplier));
   setRunLabel("PAUSE");
 }

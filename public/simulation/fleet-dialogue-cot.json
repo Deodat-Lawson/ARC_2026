@@ -13,7 +13,7 @@
       "copyAriaLabel": "Copy transcript",
       "metaSep": "·",
       "slideLabelDefault": "—",
-      "autoHint": "latest pinned top"
+      "autoHint": "scroll for history · latest at top"
     },
     "feed": {
       "chainOfThoughtLabel": "Chain-of-thought",

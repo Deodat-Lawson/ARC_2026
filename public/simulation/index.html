@@ -356,9 +356,23 @@
                 </button>
               </div>
             </header>
-            <p id="cotSlideMeta" class="cot-slide-meta"><span id="cotSlideLabel">—</span><span class="cot-meta-sep" id="cotMetaSep">·</span><span id="cotAutoHint" class="cot-auto-hint">latest pinned top</span></p>
-            <div class="cot-carousel-viewport" id="cotCarouselViewport">
-              <div class="cot-carousel-track cot-feed-stack" id="cotCarouselTrack" aria-live="polite"></div>
+            <div
+              class="cot-info-block"
+              id="cotInfoBlock"
+              aria-label="Fleet dialogue and chain-of-thought feed"
+            >
+              <p id="cotSlideMeta" class="cot-slide-meta">
+                <span id="cotSlideLabel">—</span><span class="cot-meta-sep" id="cotMetaSep">·</span
+                ><span id="cotAutoHint" class="cot-auto-hint">scroll for history · latest at top</span>
+              </p>
+              <div
+                class="cot-carousel-viewport"
+                id="cotCarouselViewport"
+                role="region"
+                aria-label="Scrollable dialogue blocks"
+              >
+                <div class="cot-carousel-track cot-feed-stack" id="cotCarouselTrack" aria-live="polite"></div>
+              </div>
             </div>
           </article>
         </section>

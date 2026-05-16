@@ -1195,10 +1195,20 @@ canvas#simCanvas {
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes cot-latest-pulse {
-  0%, 100% { box-shadow: inset 0 0 0 1px rgba(200, 180, 255, 0.14),
-                         0 0 0 0 rgba(200, 180, 255, 0); }
-  50%       { box-shadow: inset 0 0 0 1px rgba(200, 180, 255, 0.40),
-                         0 0 18px rgba(200, 180, 255, 0.08); }
+  0%, 100% {
+    box-shadow:
+      0 2px 10px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      inset 0 0 0 1px rgba(200, 180, 255, 0.18),
+      0 0 0 0 rgba(200, 180, 255, 0);
+  }
+  50% {
+    box-shadow:
+      0 2px 14px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset 0 0 0 1px rgba(200, 180, 255, 0.45),
+      0 0 22px rgba(200, 180, 255, 0.1);
+  }
 }
 @keyframes thinking-cursor {
   0%, 100% { opacity: 1; }
@@ -1241,24 +1251,44 @@ canvas#simCanvas {
   font-size: 9px;
   letter-spacing: 0.08em;
 }
-/* ── Viewport ─────────────────────────────────────────────────── */
+/* ── Fleet dialogue: single scrollable info block (like brief-body) ─ */
+.cot-info-block {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(200, 180, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(200, 180, 255, 0.05);
+}
+.cot-info-block .cot-slide-meta {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 10px 7px;
+  border-bottom: 1px solid rgba(200, 180, 255, 0.1);
+  background: rgba(200, 180, 255, 0.04);
+}
+/* ── Viewport (scrolls inside the info block) ───────────────── */
 .cot-carousel-viewport {
   flex: 1;
-  min-height: 140px;
-  max-height: 320px;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overflow-anchor: none;
   overscroll-behavior: contain;
-  border: 1px solid rgba(200, 180, 255, 0.20);
-  border-radius: var(--radius);
-  background: rgba(4, 6, 10, 0.72);
+  border: none;
+  border-radius: 0;
+  background: rgba(4, 6, 10, 0.45);
   scrollbar-width: thin;
   scrollbar-color: rgba(200, 180, 255, 0.28) transparent;
   position: relative;
-  box-shadow:
-    inset 0 0 0 1px rgba(200, 180, 255, 0.06),
-    inset 0 8px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.cot-carousel-viewport:focus-visible {
+  outline: 1px solid rgba(200, 180, 255, 0.45);
+  outline-offset: -1px;
 }
 .cot-carousel-viewport::-webkit-scrollbar { width: 4px; }
 .cot-carousel-viewport::-webkit-scrollbar-thumb {
@@ -1266,24 +1296,31 @@ canvas#simCanvas {
   border-radius: 999px;
 }
 
-/* ── Feed stack ───────────────────────────────────────────────── */
+/* ── Feed stack (each T+ heartbeat = one rounded card, spaced) ─ */
 .cot-feed-stack {
   display: flex;
   flex-direction: column-reverse;
   align-items: stretch;
   width: 100%;
-  gap: 0;
+  gap: 12px;
+  padding: 10px 10px 12px;
 }
 
-/* ── Heartbeat block ──────────────────────────────────────────── */
+/* ── Heartbeat block (one timestep = one card, all slides inside) ─ */
 .cot-feed-block {
+  flex-shrink: 0;
   padding: 0;
-  border-bottom: 1px solid rgba(200, 180, 255, 0.08);
-  background: transparent;
-  transition: background 250ms;
+  border: 1px solid rgba(200, 180, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(10, 14, 22, 0.88);
+  overflow: hidden;
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 220ms var(--ease), background 220ms var(--ease);
 }
 .cot-feed-block:last-child {
-  background: rgba(200, 180, 255, 0.028);
+  background: rgba(14, 18, 30, 0.94);
   animation: cot-latest-pulse 3s ease-in-out infinite;
 }
 
@@ -1296,12 +1333,12 @@ canvas#simCanvas {
   text-transform: uppercase;
   color: rgba(93, 255, 180, 0.65);
   margin: 0;
-  padding: 6px 12px 5px;
+  padding: 8px 12px 7px;
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(93, 255, 180, 0.035);
-  border-bottom: 1px solid rgba(93, 255, 180, 0.09);
+  background: rgba(93, 255, 180, 0.045);
+  border-bottom: 1px solid rgba(93, 255, 180, 0.1);
 }
 /* live pulse dot */
 .cot-feed-block-head .cot-live-dot {
