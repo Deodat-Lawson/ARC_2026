@@ -928,12 +928,12 @@ input[type="range"]::-moz-range-thumb {
   overflow: hidden;
   pointer-events: none;
   background:
-    linear-gradient(rgba(4, 6, 10, 0.48), rgba(4, 6, 10, 0.48)),
+    linear-gradient(rgba(4, 6, 10, 0.18), rgba(4, 6, 10, 0.18)),
     #0a1018;
 }
 
 .canvas-frame #tacticalBasemap .maplibregl-canvas {
-  filter: invert(1) hue-rotate(178deg) saturate(0.72) contrast(1.06) brightness(0.64);
+  filter: invert(1) hue-rotate(178deg) saturate(0.85) contrast(1.14) brightness(0.88);
 }
 
 .canvas-frame #tacticalBasemap .maplibregl-control-container {

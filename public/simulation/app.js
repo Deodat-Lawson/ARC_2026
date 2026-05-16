@@ -374,6 +374,8 @@ let tacticalPmtilesProtoInstalled = false;
 let tacticalPmtilesProtocol = null;
 let tacticalRoadSegments = [];
 let tacticalRoadNetworkReady = false;
+let tacticalBuildingFootprints = [];
+let tacticalBuildingsReady = false;
 
 /** OSM road export (lite_sim firenze_300m_roads.json) + live PMTiles fallback */
 let roadExportBase = null;
@@ -462,9 +464,9 @@ function makeTacticalBasemapStyle() {
         "source-layer": "buildings",
         type: "fill",
         paint: {
-          "fill-color": "#445873",
-          "fill-opacity": 0.68,
-          "fill-outline-color": "#6d86a8",
+          "fill-color": "#5a7392",
+          "fill-opacity": 0.92,
+          "fill-outline-color": "#94a8c4",
         },
       },
       {
@@ -620,6 +622,212 @@ function rebuildTacticalRoadNetwork() {
   }
 }
 
+/* ------------------------------------------------------------------------- */
+/* Tactical buildings — query PMTiles building footprints + tag damage      */
+/* ------------------------------------------------------------------------- */
+function flattenTacticalPolygonCoords(geometry) {
+  if (!geometry) return [];
+  if (geometry.type === "Polygon") return [geometry.coordinates[0] || []];
+  if (geometry.type === "MultiPolygon") {
+    return geometry.coordinates.map((poly) => poly[0] || []);
+  }
+  return [];
+}
+
+function polygonAreaAndCentroid(ring) {
+  let twiceArea = 0;
+  let cx = 0;
+  let cy = 0;
+  if (ring.length < 3) return { area: 0, centroid: [0, 0] };
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    const cross = xj * yi - xi * yj;
+    twiceArea += cross;
+    cx += (xi + xj) * cross;
+    cy += (yi + yj) * cross;
+  }
+  const area = Math.abs(twiceArea) * 0.5;
+  if (area < 1e-9) {
+    const sx = ring.reduce((s, p) => s + p[0], 0) / ring.length;
+    const sy = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+    return { area: 0, centroid: [sx, sy] };
+  }
+  return { area, centroid: [cx / (3 * twiceArea), cy / (3 * twiceArea)] };
+}
+
+function pointInPolygon(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersects =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / (yj - yi + 1e-12) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function polygonBounds(ring) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of ring) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function simplifyRing(ring, maxVerts) {
+  if (ring.length <= maxVerts) return ring;
+  const stride = Math.ceil(ring.length / maxVerts);
+  const out = [];
+  for (let i = 0; i < ring.length; i += stride) out.push(ring[i]);
+  if (out[out.length - 1] !== ring[ring.length - 1]) out.push(ring[ring.length - 1]);
+  return out;
+}
+
+function rebuildTacticalBuildingFootprints() {
+  if (!tacticalBaseMap || !tacticalBaseMapReady) return;
+  let features = [];
+  try {
+    features = tacticalBaseMap.querySourceFeatures("protomaps", { sourceLayer: "buildings" });
+  } catch (err) {
+    console.warn("[tactical basemap] building query failed:", err);
+    return;
+  }
+  const seen = new Set();
+  const out = [];
+  const [cols, rows] = getTacticalGridDims();
+  for (const feature of features) {
+    const fid = feature.id ?? feature.properties?.["@id"] ?? feature.properties?.id;
+    const key = fid != null ? String(fid) : `${feature.geometry?.type}:${JSON.stringify(feature.geometry?.coordinates?.[0]?.[0] || [])}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const rings = flattenTacticalPolygonCoords(feature.geometry);
+    for (const ringLngLat of rings) {
+      if (!ringLngLat || ringLngLat.length < 3) continue;
+      const gridRing = ringLngLat.map((c) => {
+        const p = tacticalLngLatToGrid(c[0], c[1]);
+        return [p.x, p.y];
+      });
+      const bounds = polygonBounds(gridRing);
+      if (bounds.maxX < -1 || bounds.minX > cols + 1) continue;
+      if (bounds.maxY < -1 || bounds.minY > rows + 1) continue;
+      const simplified = simplifyRing(gridRing, 16);
+      const { area, centroid } = polygonAreaAndCentroid(simplified);
+      if (area < 0.05) continue;
+      out.push({
+        id: `B${out.length + 1}`,
+        polygon: simplified,
+        centroid,
+        area,
+        bounds,
+        damage: "intact",
+      });
+    }
+  }
+  if (out.length) {
+    tacticalBuildingFootprints = out;
+    tacticalBuildingsReady = true;
+    if (state) applyBuildingsToState();
+  }
+}
+
+function tagBuildingDamage(buildings, riskZones, cellSize) {
+  if (!buildings?.length) return;
+  const samplesPerCell = 2;
+  for (const b of buildings) {
+    const { minX, minY, maxX, maxY } = b.bounds;
+    const w = maxX - minX;
+    const h = maxY - minY;
+    const stepX = Math.max(0.25, w / Math.max(1, Math.round(w * samplesPerCell)));
+    const stepY = Math.max(0.25, h / Math.max(1, Math.round(h * samplesPerCell)));
+    let totalSamples = 0;
+    let collapseSamples = 0;
+    let fireSamples = 0;
+    let proximityHit = false;
+    for (let sx = minX + stepX / 2; sx <= maxX; sx += stepX) {
+      for (let sy = minY + stepY / 2; sy <= maxY; sy += stepY) {
+        if (!pointInPolygon(sx, sy, b.polygon)) continue;
+        totalSamples += 1;
+        for (const z of riskZones || []) {
+          const dx = sx - z.center[0];
+          const dy = sy - z.center[1];
+          const d = Math.hypot(dx, dy);
+          if (d <= z.radius) {
+            if (z.type === "collapse") collapseSamples += 1;
+            else if (z.type === "fire") fireSamples += 1;
+          } else if (d <= z.radius + 2.2) {
+            proximityHit = true;
+          }
+        }
+      }
+    }
+    if (totalSamples === 0) { b.damage = "intact"; continue; }
+    const collapseFrac = collapseSamples / totalSamples;
+    const fireFrac = fireSamples / totalSamples;
+    if (collapseFrac >= 0.15) b.damage = "collapsed";
+    else if (fireFrac >= 0.10) b.damage = "burning";
+    else if (collapseSamples + fireSamples > 0 || proximityHit) b.damage = "damaged";
+    else b.damage = "intact";
+  }
+}
+
+function buildBlockadeCandidatePool(damagedBuildings, roadSegments, gridSize) {
+  if (!damagedBuildings.length || !roadSegments.length) return [];
+  const out = [];
+  const seen = new Set();
+  const proximity = 1.4;
+  for (const b of damagedBuildings) {
+    const { minX, minY, maxX, maxY } = b.bounds;
+    for (const seg of roadSegments) {
+      const ax = seg.a.x;
+      const ay = seg.a.y;
+      const bx = seg.b.x;
+      const by = seg.b.y;
+      const midX = (ax + bx) / 2;
+      const midY = (ay + by) / 2;
+      if (midX < minX - proximity || midX > maxX + proximity) continue;
+      if (midY < minY - proximity || midY > maxY + proximity) continue;
+      const gx = Math.max(1, Math.min(gridSize - 2, Math.round(midX)));
+      const gy = Math.max(1, Math.min(gridSize - 2, Math.round(midY)));
+      const key = `${gx},${gy}`;
+      if (seen.has(key)) continue;
+      if (pointInPolygon(midX, midY, b.polygon)) continue;
+      seen.add(key);
+      out.push([gx, gy]);
+    }
+  }
+  return out;
+}
+
+function applyBuildingsToState() {
+  if (!state) return;
+  if (!tacticalBuildingFootprints.length) {
+    state.tacticalBuildings = [];
+    return;
+  }
+  const cellSize = state.map?.cell_size_m || 10;
+  const cloned = tacticalBuildingFootprints.map((b) => ({
+    id: b.id,
+    polygon: b.polygon,
+    centroid: b.centroid,
+    area: b.area,
+    bounds: b.bounds,
+    damage: "intact",
+  }));
+  tagBuildingDamage(cloned, state.map?.risk_zones || [], cellSize);
+  state.tacticalBuildings = cloned;
+}
+
 function installTacticalPmtilesProtocol() {
   const ml = globalThis.maplibregl;
   const Pm = globalThis.pmtiles;
@@ -664,7 +872,10 @@ function initTacticalBasemap() {
       );
       syncTacticalBasemapSize();
     });
-    tacticalBaseMap.on("idle", rebuildTacticalRoadNetwork);
+    tacticalBaseMap.on("idle", () => {
+      rebuildTacticalRoadNetwork();
+      rebuildTacticalBuildingFootprints();
+    });
     tacticalBaseMap.on("error", (e) => {
       console.warn("[tactical basemap] map error:", e?.error || e);
     });
@@ -754,7 +965,11 @@ function reset() {
 
   // ── 2. Rebuild road network FIRST so generatePlan / executeActions are consistent
   refreshUgvRoadNetwork();
-  if (tacticalBaseMapReady) rebuildTacticalRoadNetwork();
+  if (tacticalBaseMapReady) {
+    rebuildTacticalRoadNetwork();
+    rebuildTacticalBuildingFootprints();
+  }
+  applyBuildingsToState();
 
   // ── 3. Generate fresh plan (now road network is ready)
   survivalHistory.length = 0;
@@ -1604,6 +1819,7 @@ function drawMap(t) {
 
   drawGrid(cols, rows, cell);
   drawCommunication(cell, t);
+  drawBuildingDamage(cell, t);
   drawRiskZones(cell, t);
   drawBlockades(cell);
   drawVictims(cell, t);
@@ -1612,9 +1828,9 @@ function drawMap(t) {
 }
 
 function drawGrid(cols, rows, cell) {
-  ctx.fillStyle = tacticalBaseMapReady ? "rgba(4, 6, 10, 0.40)" : "#04060a";
+  ctx.fillStyle = tacticalBaseMapReady ? "rgba(4, 6, 10, 0.14)" : "#04060a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = tacticalBaseMapReady ? "rgba(93, 255, 180, 0.06)" : "rgba(255, 255, 255, 0.04)";
+  ctx.strokeStyle = tacticalBaseMapReady ? "rgba(93, 255, 180, 0.05)" : "rgba(255, 255, 255, 0.04)";
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
     ctx.beginPath();
@@ -1686,31 +1902,357 @@ function drawCommunication(cell, t) {
   }
 }
 
+function tracePolygonPath(ring, cell) {
+  if (!ring || ring.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(ring[0][0] * cell, ring[0][1] * cell);
+  for (let i = 1; i < ring.length; i += 1) {
+    ctx.lineTo(ring[i][0] * cell, ring[i][1] * cell);
+  }
+  ctx.closePath();
+}
+
+function buildingSeedHash(id) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function drawBuildingDamage(cell, t) {
+  const buildings = state.tacticalBuildings;
+  if (!buildings || !buildings.length) return;
+  let smokeBudget = 14;
+  for (const b of buildings) {
+    if (b.damage === "intact") continue;
+    const seed = buildingSeedHash(b.id);
+    const rnd = (k) => {
+      const v = Math.sin(seed * 0.0001 + k * 12.9898) * 43758.5453;
+      return v - Math.floor(v);
+    };
+
+    if (b.damage === "collapsed") {
+      // Fully erase the building — fill with dark rubble, blot out the basemap polygon
+      tracePolygonPath(b.polygon, cell);
+      ctx.fillStyle = "rgba(48, 32, 22, 0.92)";
+      ctx.fill();
+      // Crumbled outline (dashed, broken)
+      ctx.save();
+      ctx.strokeStyle = "rgba(120, 85, 50, 0.85)";
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([3, 4]);
+      tracePolygonPath(b.polygon, cell);
+      ctx.stroke();
+      ctx.restore();
+      // Heavy rubble scatter
+      const specks = 14 + Math.floor(rnd(0) * 10);
+      const { minX, minY, maxX, maxY } = b.bounds;
+      for (let i = 0; i < specks; i += 1) {
+        let sx, sy;
+        for (let tries = 0; tries < 6; tries += 1) {
+          sx = minX + rnd(i * 2 + 1) * (maxX - minX);
+          sy = minY + rnd(i * 2 + 2) * (maxY - minY);
+          if (pointInPolygon(sx, sy, b.polygon)) break;
+        }
+        if (!pointInPolygon(sx, sy, b.polygon)) continue;
+        const palette = ["#6b4a2a", "#8b5a2a", "#a07246", "#5a3e26"];
+        ctx.fillStyle = palette[i % palette.length];
+        const w = 2 + rnd(i + 100) * 2.4;
+        const h = 1.6 + rnd(i + 101) * 1.8;
+        ctx.save();
+        ctx.translate(sx * cell, sy * cell);
+        ctx.rotate(rnd(i + 102) * Math.PI);
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.restore();
+      }
+      // Dust plume from the wreckage
+      const [cx, cy] = b.centroid;
+      for (let j = 0; j < 3; j += 1) {
+        const rise = ((t * 0.28 + j * 0.4 + rnd(j + 200)) % 1.5);
+        const drift = Math.sin(t * 0.4 + j * 1.3 + seed * 0.001) * 1.4;
+        const radius = (2.4 + rise * 6) * (cell / 14);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 0.42 - rise * 0.3);
+        ctx.fillStyle = "rgba(80, 65, 55, 1)";
+        ctx.beginPath();
+        ctx.arc((cx + drift) * cell, (cy - rise * 4) * cell, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    } else if (b.damage === "burning") {
+      // Bright glowing fill that pulses dramatically
+      const pulse = 0.55 + Math.sin(t * 2.2 + seed * 0.001) * 0.25;
+      tracePolygonPath(b.polygon, cell);
+      ctx.fillStyle = `rgba(255, 130, 55, ${0.55 * pulse})`;
+      ctx.fill();
+      // Inner core glow
+      tracePolygonPath(b.polygon, cell);
+      const [cx, cy] = b.centroid;
+      const innerGlow = ctx.createRadialGradient(
+        cx * cell, cy * cell, 0,
+        cx * cell, cy * cell, Math.max((b.bounds.maxX - b.bounds.minX), (b.bounds.maxY - b.bounds.minY)) * cell * 0.7
+      );
+      innerGlow.addColorStop(0, `rgba(255, 220, 130, ${0.55 * pulse})`);
+      innerGlow.addColorStop(0.5, `rgba(255, 100, 40, ${0.30 * pulse})`);
+      innerGlow.addColorStop(1, "rgba(180, 50, 20, 0)");
+      ctx.save();
+      ctx.fillStyle = innerGlow;
+      ctx.fill();
+      ctx.restore();
+      // Glowing outline
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 130, 50, ${0.85 * pulse})`;
+      ctx.lineWidth = 1.6;
+      ctx.shadowColor = "rgba(255, 110, 30, 0.75)";
+      ctx.shadowBlur = 12;
+      tracePolygonPath(b.polygon, cell);
+      ctx.stroke();
+      ctx.restore();
+      if (smokeBudget > 0) {
+        smokeBudget -= 1;
+        const [cx, cy] = b.centroid;
+        for (let i = 0; i < 6; i += 1) {
+          const drift = Math.sin(t * 0.4 + seed * 0.001 + i * 1.7);
+          const rise = (t * 0.45 + i * 0.32 + rnd(i + 10)) % 2.0;
+          const ox = drift * (1 + rise * 2);
+          const oy = -rise * 5;
+          const px = (cx + ox) * cell;
+          const py = (cy + oy) * cell;
+          const radius = (3.5 + rise * 9) * (cell / 12);
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, 0.55 - rise * 0.28);
+          ctx.fillStyle = "rgba(28, 22, 22, 1)";
+          ctx.beginPath();
+          ctx.arc(px, py, radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    } else if (b.damage === "damaged") {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 217, 93, 0.55)";
+      ctx.lineWidth = 1.0;
+      tracePolygonPath(b.polygon, cell);
+      ctx.stroke();
+      const { minX, minY, maxX, maxY } = b.bounds;
+      ctx.strokeStyle = "rgba(255, 217, 93, 0.35)";
+      ctx.lineWidth = 0.8;
+      for (let i = 0; i < 3; i += 1) {
+        const ax = minX + rnd(i + 1) * (maxX - minX);
+        const ay = minY + rnd(i + 2) * (maxY - minY);
+        const bx = ax + (rnd(i + 3) - 0.5) * 1.2;
+        const by = ay + (rnd(i + 4) - 0.5) * 1.2;
+        if (!pointInPolygon(ax, ay, b.polygon)) continue;
+        ctx.beginPath();
+        ctx.moveTo(ax * cell, ay * cell);
+        ctx.lineTo(bx * cell, by * cell);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+}
+
+function zoneSeedHash(id) {
+  let h = 2166136261;
+  const s = String(id || "");
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 function drawRiskZones(cell, t) {
+  // Pre-pass: large translucent ash haze for every zone, painted first so other
+  // overlays sit on top. Gives the whole quadrant a "dust in the air" wash.
+  for (const zone of state.map.risk_zones) {
+    const px = zone.center[0] * cell;
+    const py = zone.center[1] * cell;
+    const r = zone.radius * cell;
+    const hazeR = r * 2.4;
+    const isFire = zone.type === "fire";
+    const haze = ctx.createRadialGradient(px, py, r * 0.4, px, py, hazeR);
+    if (isFire) {
+      haze.addColorStop(0, "rgba(80, 25, 10, 0.42)");
+      haze.addColorStop(0.55, "rgba(60, 30, 20, 0.18)");
+      haze.addColorStop(1, "rgba(40, 30, 25, 0)");
+    } else {
+      haze.addColorStop(0, "rgba(35, 30, 25, 0.48)");
+      haze.addColorStop(0.55, "rgba(40, 38, 38, 0.22)");
+      haze.addColorStop(1, "rgba(35, 35, 40, 0)");
+    }
+    ctx.fillStyle = haze;
+    ctx.beginPath();
+    ctx.arc(px, py, hazeR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   for (const zone of state.map.risk_zones) {
     const px = zone.center[0] * cell;
     const py = zone.center[1] * cell;
     const r = zone.radius * cell;
     const isFire = zone.type === "fire";
-    const baseColor = isFire ? "255,60,0" : "168,135,255";
-    const alpha = 0.14 + Math.sin(t * 1.4) * 0.06;
+    const seed = zoneSeedHash(zone.id || `${zone.type}-${zone.center.join(",")}`);
+    const rnd = (k) => {
+      const v = Math.sin(seed * 0.0001 + k * 12.9898 + (zone.center[0] + zone.center[1]) * 0.31) * 43758.5453;
+      return v - Math.floor(v);
+    };
 
-    const grad = ctx.createRadialGradient(px, py, 0, px, py, r);
-    grad.addColorStop(0, `rgba(${baseColor},${alpha * 2})`);
-    grad.addColorStop(1, `rgba(${baseColor},0)`);
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fill();
+    if (isFire) {
+      // Flickering orange core
+      const pulse = 0.55 + Math.sin(t * 1.8 + seed * 0.001) * 0.15;
+      const core = ctx.createRadialGradient(px, py, 0, px, py, r);
+      core.addColorStop(0, `rgba(255, 150, 60, ${0.55 * pulse})`);
+      core.addColorStop(0.45, `rgba(255, 90, 30, ${0.42 * pulse})`);
+      core.addColorStop(1, "rgba(180, 50, 20, 0)");
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
 
-    ctx.strokeStyle = `rgba(${baseColor},${alpha * 3})`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+      // Ember sparks across the zone — many small bright dots, animated
+      const emberCount = Math.floor(r * 0.6);
+      for (let i = 0; i < emberCount; i += 1) {
+        const ang = rnd(i * 2) * Math.PI * 2;
+        const rad = Math.sqrt(rnd(i * 2 + 1)) * r * 0.95;
+        const flicker = 0.5 + Math.sin(t * 4.0 + i * 1.7 + seed * 0.001) * 0.5;
+        const ex = px + Math.cos(ang) * rad;
+        const ey = py + Math.sin(ang) * rad;
+        ctx.fillStyle = `rgba(255, ${160 + Math.floor(flicker * 70)}, 40, ${0.35 + flicker * 0.5})`;
+        ctx.fillRect(ex - 0.9, ey - 0.9, 1.8, 1.8);
+      }
 
-    ctx.fillStyle = `rgba(${isFire ? "255,80,0" : "200,170,255"},0.8)`;
-    ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
+      // Multiple smoke plumes rising from random anchor points across the zone
+      const plumeCount = 5 + Math.floor(rnd(99) * 3);
+      for (let i = 0; i < plumeCount; i += 1) {
+        const ang = rnd(i * 3 + 30) * Math.PI * 2;
+        const rad = Math.sqrt(rnd(i * 3 + 31)) * r * 0.8;
+        const sx = px + Math.cos(ang) * rad;
+        const sy = py + Math.sin(ang) * rad;
+        const drift = Math.sin(t * 0.4 + seed * 0.001 + i * 1.3);
+        for (let j = 0; j < 5; j += 1) {
+          const rise = ((t * 0.35 + j * 0.4 + rnd(i * 5 + j)) % 1.7);
+          const ox = drift * (1.5 + rise * 2.5);
+          const oy = -rise * (r * 1.2);
+          const radius = (3 + rise * 8) * (cell / 14);
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, 0.55 - rise * 0.32);
+          ctx.fillStyle = "rgba(28, 22, 22, 1)";
+          ctx.beginPath();
+          ctx.arc(sx + ox, sy + oy, radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // Bright glowing perimeter ring
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 120, 40, ${0.6 + Math.sin(t * 2) * 0.18})`;
+      ctx.lineWidth = 1.4;
+      ctx.shadowColor = "rgba(255, 90, 30, 0.55)";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // Collapse zone — dense rubble field across the radius
+      const dust = ctx.createRadialGradient(px, py, 0, px, py, r);
+      dust.addColorStop(0, "rgba(70, 55, 40, 0.45)");
+      dust.addColorStop(0.6, "rgba(60, 50, 40, 0.30)");
+      dust.addColorStop(1, "rgba(60, 50, 40, 0)");
+      ctx.fillStyle = dust;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Rubble scatter — dense across the whole radius, deterministic
+      const rubbleCount = Math.floor(r * r * 0.018);
+      for (let i = 0; i < rubbleCount; i += 1) {
+        const ang = rnd(i * 2) * Math.PI * 2;
+        const rad = Math.sqrt(rnd(i * 2 + 1)) * r * 0.95;
+        const rx = px + Math.cos(ang) * rad;
+        const ry = py + Math.sin(ang) * rad;
+        const variant = i % 4;
+        const palette = ["#5a3e26", "#7a5436", "#8b6232", "#624227"];
+        const w = 1.6 + rnd(i * 2 + 2) * 2.2;
+        const h = 1.4 + rnd(i * 2 + 3) * 1.6;
+        ctx.save();
+        ctx.translate(rx, ry);
+        ctx.rotate(rnd(i * 2 + 4) * Math.PI);
+        ctx.fillStyle = palette[variant];
+        ctx.globalAlpha = 0.72;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.restore();
+      }
+
+      // Ground fissures — jagged cracks radiating outward from epicenter
+      const fissureCount = 4 + Math.floor(rnd(50) * 3);
+      for (let i = 0; i < fissureCount; i += 1) {
+        const baseAng = (i / fissureCount) * Math.PI * 2 + rnd(i + 60) * 0.4;
+        const len = r * (0.7 + rnd(i + 61) * 0.6);
+        let cx = px;
+        let cy = py;
+        const segments = 6;
+        ctx.save();
+        ctx.strokeStyle = "rgba(15, 10, 8, 0.85)";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        for (let s = 1; s <= segments; s += 1) {
+          const step = len / segments;
+          const wobble = (rnd(i * 10 + s) - 0.5) * 0.6;
+          const ang = baseAng + wobble;
+          cx += Math.cos(ang) * step;
+          cy += Math.sin(ang) * step;
+          ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+        // Outer faint glow on fissure
+        ctx.strokeStyle = "rgba(255, 200, 120, 0.18)";
+        ctx.lineWidth = 3.2;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Central dust column — vertical smoke plume from the epicenter
+      for (let j = 0; j < 6; j += 1) {
+        const rise = ((t * 0.3 + j * 0.35) % 1.8);
+        const drift = Math.sin(t * 0.5 + j * 1.1 + seed * 0.001) * 2.5;
+        const ox = drift;
+        const oy = -rise * (r * 1.4);
+        const radius = (4 + rise * 9) * (cell / 14);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 0.45 - rise * 0.26);
+        ctx.fillStyle = "rgba(60, 50, 45, 1)";
+        ctx.beginPath();
+        ctx.arc(px + ox, py + oy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Perimeter ring (subtle)
+      ctx.save();
+      ctx.strokeStyle = "rgba(140, 110, 80, 0.45)";
+      ctx.lineWidth = 1.1;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Label
+    ctx.fillStyle = isFire ? "rgba(255, 200, 130, 0.95)" : "rgba(220, 200, 175, 0.92)";
+    ctx.font = "bold 10px 'JetBrains Mono', 'Courier New', monospace";
     const label = zone.type.toUpperCase();
-    ctx.fillText(label, px - label.length * 2.7, py + 3);
+    ctx.shadowColor = "rgba(0,0,0,0.85)";
+    ctx.shadowBlur = 4;
+    ctx.fillText(label, px - label.length * 3, py + 3);
+    ctx.shadowBlur = 0;
   }
 }
 
@@ -3849,17 +4391,19 @@ function synthesizeScenario(base, cfg) {
     return [Math.floor(G / 2), Math.floor(G / 2)];
   };
 
-  // Risk zones
+  // Risk zones — radii scaled by intensity so high-intensity earthquakes
+  // produce zone-scale destruction across multiple blocks, not single tiles.
   const riskZones = [];
+  const radiusBase = 3 + Math.round(cfg.intensity * 2.5); // 3..5+ cells
   for (let i = 0; i < cfg.fires; i += 1) {
     const c = pickCell(5);
-    const radius = 2 + Math.floor(rng() * 2);
+    const radius = radiusBase + Math.floor(rng() * 2);
     riskZones.push({ id: `Z${riskZones.length + 1}`, center: c, radius, type: "fire", risk: 0.4 + cfg.intensity * 0.5 });
     mark(c[0], c[1], radius);
   }
   for (let i = 0; i < cfg.collapses; i += 1) {
     const c = pickCell(5);
-    const radius = 2 + Math.floor(rng() * 2);
+    const radius = radiusBase + 1 + Math.floor(rng() * 2);
     riskZones.push({ id: `Z${riskZones.length + 1}`, center: c, radius, type: "collapse", risk: 0.35 + cfg.intensity * 0.45 });
     mark(c[0], c[1], radius);
   }
@@ -3873,10 +4417,35 @@ function synthesizeScenario(base, cfg) {
     dropout_addition: Math.max(0.1, cfg.dropout * 2)
   }] : [];
 
-  // Blockades
+  // Buildings — clone and tag against the freshly computed risk zones, so
+  // blockade/victim placement below can lean on actual Firenze polygons.
+  const synthBuildings = tacticalBuildingFootprints.map((b) => ({
+    id: b.id,
+    polygon: b.polygon,
+    centroid: b.centroid,
+    area: b.area,
+    bounds: b.bounds,
+    damage: "intact",
+  }));
+  tagBuildingDamage(synthBuildings, riskZones, cfg.cellSize || 10);
+  const damagedPool = synthBuildings.filter((b) => b.damage !== "intact");
+
+  // Road-snapped blockades: prefer cells where a road meets a damaged building.
   const blockades = [];
+  const blockadeCandidates = damagedPool.length && tacticalRoadSegments.length
+    ? buildBlockadeCandidatePool(damagedPool, tacticalRoadSegments, G)
+    : [];
   for (let i = 0; i < cfg.blockades; i += 1) {
-    const loc = pickCell(3);
+    let loc = null;
+    if (blockadeCandidates.length) {
+      for (let tries = 0; tries < 8 && !loc; tries += 1) {
+        const idx = Math.floor(rng() * blockadeCandidates.length);
+        const cand = blockadeCandidates[idx];
+        if (!cand || occupied.has(`${cand[0]},${cand[1]}`)) continue;
+        loc = cand;
+      }
+    }
+    if (!loc) loc = pickCell(3);
     blockades.push({
       id: `K${i + 1}`,
       location: loc,
@@ -3890,9 +4459,34 @@ function synthesizeScenario(base, cfg) {
   // Victims — HP system aligned with demo_player (timeline.json):
   //   hp_max ∈ [5000, 10000), damage_per_step ∈ [40, 100)
   //   survival_pct = hp / hp_max × 100  (individual baseline, not cross-victim)
+  // Placement: prefer interiors of damaged/collapsed buildings when basemap is loaded.
   const victims = [];
+  const pickVictimCell = () => {
+    if (!synthBuildings.length) return pickCell(4);
+    const weights = { collapsed: 3, damaged: 2, burning: 1, intact: 0.25 };
+    let total = 0;
+    for (const b of synthBuildings) total += weights[b.damage] * Math.min(b.area, 6);
+    if (total <= 0) return pickCell(4);
+    let r = rng() * total;
+    let pick = synthBuildings[0];
+    for (const b of synthBuildings) {
+      r -= weights[b.damage] * Math.min(b.area, 6);
+      if (r <= 0) { pick = b; break; }
+    }
+    const { minX, minY, maxX, maxY } = pick.bounds;
+    for (let tries = 0; tries < 12; tries += 1) {
+      const cx = pick.centroid[0] + (rng() - 0.5) * (maxX - minX) * 0.6;
+      const cy = pick.centroid[1] + (rng() - 0.5) * (maxY - minY) * 0.6;
+      const gx = Math.max(1, Math.min(G - 2, Math.round(cx)));
+      const gy = Math.max(1, Math.min(G - 2, Math.round(cy)));
+      if (occupied.has(`${gx},${gy}`)) continue;
+      if (!pointInPolygon(cx, cy, pick.polygon)) continue;
+      return [gx, gy];
+    }
+    return pickCell(4);
+  };
   for (let i = 0; i < cfg.victims; i += 1) {
-    const loc = pickCell(4);
+    const loc = pickVictimCell();
     const sev = cfg.severity * (0.6 + rng() * 0.8);
     const hp_max = VICTIM_HP_MIN + Math.floor(rng() * VICTIM_HP_RANGE);
     const damage_per_step = Math.round(VICTIM_DMG_MIN + sev * VICTIM_DMG_RANGE);
