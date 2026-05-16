@@ -144,6 +144,58 @@ a { color: inherit; text-decoration: none; }
   overflow: hidden;
 }
 
+.gemma-ai-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(130, 200, 255, 0.75);
+  background: rgba(4, 8, 14, 0.65);
+}
+
+.gemma-ai-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(130, 200, 255, 0.45);
+}
+
+.gemma-ai-status.live {
+  border-color: rgba(93, 255, 180, 0.45);
+  color: #5dffb4;
+  background: rgba(14, 40, 28, 0.55);
+}
+
+.gemma-ai-status.live .gemma-ai-status-dot {
+  background: #5dffb4;
+  box-shadow: 0 0 8px rgba(93, 255, 180, 0.65);
+}
+
+.gemma-ai-status.mock {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(180, 190, 200, 0.65);
+}
+
+.gemma-ai-status.mock .gemma-ai-status-dot {
+  background: rgba(180, 190, 200, 0.45);
+}
+
+.gemma-ai-status.pending .gemma-ai-status-dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
 .cc-divider {
   width: 1px;
   height: 22px;
