@@ -29,7 +29,9 @@
     { "id": "Drone-1", "type": "drone", "role": "scout", "location": [2, 2], "battery": 82, "speed": 3, "perception_range": 6, "sensors": ["thermal", "camera", "audio"], "payload": "medical_beacon" },
     { "id": "Drone-2", "type": "drone", "role": "relay", "location": [2, 3], "battery": 46, "speed": 3, "perception_range": 5, "sensors": ["camera", "audio"], "payload": "radio_relay" },
     { "id": "UGV-1", "type": "ground_rescue", "role": "rescue", "location": [3, 2], "battery": 76, "speed": 1, "perception_range": 3, "sensors": ["audio", "vibration"], "payload": "first_aid_pack" },
-    { "id": "UGV-2", "type": "ground_clear", "role": "clear_blockade", "location": [3, 3], "battery": 69, "speed": 1, "perception_range": 3, "clear_rate": 20, "sensors": ["camera"], "payload": "rubble_clear_tool" }
+    { "id": "UGV-2", "type": "ground_clear", "role": "clear_blockade", "location": [3, 3], "battery": 69, "speed": 1, "perception_range": 3, "clear_rate": 20, "sensors": ["camera"], "payload": "rubble_clear_tool" },
+    { "id": "BAL-1", "type": "balloon", "role": "relay", "location": [14, 7], "battery": 96, "speed": 0.5, "perception_range": 12, "sensors": ["camera", "audio"], "payload": "comm_relay" },
+    { "id": "AAV-1", "type": "ground_armored", "role": "rescue", "location": [4, 3], "battery": 88, "speed": 1, "perception_range": 4, "sensors": ["thermal", "audio", "vibration"], "payload": "rescue_pod", "risk_immune": true }
   ],
   "communication": {
     "base_range": 12,
