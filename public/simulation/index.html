@@ -79,6 +79,9 @@
             <button class="speed-btn" data-speed="2">2×</button>
             <button class="speed-btn" data-speed="4">4×</button>
           </div>
+          <button id="tourReplay" type="button" class="ico" title="Replay onboarding tour" aria-label="Replay onboarding tour">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .7-1 1.7"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>
+          </button>
           <button id="cfgToggle" type="button" class="ico" title="Toggle config rail" aria-label="Toggle config">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M3 12h12"/><path d="M3 18h18"/></svg>
           </button>
@@ -170,6 +173,14 @@
               <label class="cfg-row">
                 <span><i class="dot warn"></i>Clearer UGVs <b id="cfgClearLabel">1</b></span>
                 <input type="range" id="cfgClear" min="0" max="2" step="1" value="1">
+              </label>
+              <label class="cfg-row">
+                <span><i class="dot violet"></i>Balloons <b id="cfgBalloonsLabel">1</b></span>
+                <input type="range" id="cfgBalloons" min="0" max="3" step="1" value="1">
+              </label>
+              <label class="cfg-row">
+                <span><i class="dot armored"></i>Armored vehicles <b id="cfgArmoredLabel">0</b></span>
+                <input type="range" id="cfgArmored" min="0" max="2" step="1" value="0">
               </label>
               <label class="cfg-row">
                 <span>Start battery <b id="cfgBatLabel">75%</b></span>
@@ -286,6 +297,8 @@
               <span><i class="victim"></i>victim</span>
               <span><i class="drone"></i>drone</span>
               <span><i class="ugv"></i>UGV</span>
+              <span><i class="balloon"></i>balloon</span>
+              <span><i class="armored"></i>armored</span>
             </div>
           </article>
 
@@ -472,6 +485,54 @@
         </div>
       </footer>
     </main>
+
+    <!-- ───── ONBOARDING TOUR ───── -->
+    <aside id="tourRoot" class="tour-root" hidden aria-hidden="true">
+      <!-- Welcome modal (phase A) -->
+      <div class="tour-welcome" data-tour-phase="welcome">
+        <div class="tour-welcome-card">
+          <div class="tour-welcome-mark">
+            <span class="pulse"></span>
+            <span class="tour-welcome-brand">A · R · C</span>
+          </div>
+          <h1 class="tour-welcome-title">Welcome, operator.</h1>
+          <p class="tour-welcome-body">
+            This is your command center for autonomous post-disaster rescue.
+            We'll walk you through each region — eight quick stops, under 60 seconds.
+          </p>
+          <div class="tour-welcome-actions">
+            <button type="button" class="tour-btn ghost" data-tour-action="skip">Skip</button>
+            <button type="button" class="tour-btn primary" data-tour-action="start">Begin tour →</button>
+          </div>
+          <p class="tour-welcome-hint">Press <kbd>→</kbd> Next · <kbd>←</kbd> Back · <kbd>Esc</kbd> Skip</p>
+        </div>
+      </div>
+
+      <!-- Step overlay (phase B) -->
+      <div class="tour-step" data-tour-phase="step" hidden>
+        <svg class="tour-mask" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <mask id="tourSpotlightMask">
+              <rect width="100%" height="100%" fill="white"/>
+              <rect id="tourHole" x="0" y="0" width="0" height="0" rx="8" ry="8" fill="black"/>
+            </mask>
+          </defs>
+          <rect width="100%" height="100%" fill="rgba(4,6,10,0.74)" mask="url(#tourSpotlightMask)"/>
+          <rect id="tourHoleStroke" x="0" y="0" width="0" height="0" rx="8" ry="8" fill="none" stroke="#5dffb4" stroke-width="1.5" opacity="0.85"/>
+        </svg>
+        <div class="tour-caption" id="tourCaption" role="dialog" aria-live="polite">
+          <div class="tour-caption-counter"><span id="tourStepNum">01</span> / <span id="tourStepTotal">08</span></div>
+          <h2 class="tour-caption-title" id="tourStepTitle">…</h2>
+          <p class="tour-caption-body" id="tourStepBody">…</p>
+          <div class="tour-caption-dots" id="tourDots"></div>
+          <div class="tour-caption-actions">
+            <button type="button" class="tour-btn ghost" data-tour-action="back">← Back</button>
+            <button type="button" class="tour-btn ghost" data-tour-action="skip">Skip tour</button>
+            <button type="button" class="tour-btn primary" data-tour-action="next">Next →</button>
+          </div>
+        </div>
+      </div>
+    </aside>
 
     <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
     <script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>

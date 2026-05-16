@@ -883,8 +883,10 @@ function executeActions(actions) {
           && nearCell(agent.location, victim.location, 3)) {
         victim.status = "trapped";
       }
-      // Ground unit within reach → rescue (covers ground_rescue AND clearers acting as rescue)
-      const isGroundRescuer = agent.type === "ground_rescue" || agent.type === "ground_clear";
+      // Ground unit within reach → rescue (covers ground_rescue, ground_armored, and clearers acting as rescue)
+      const isGroundRescuer = agent.type === "ground_rescue"
+        || agent.type === "ground_armored"
+        || agent.type === "ground_clear";
       if (isGroundRescuer && (victim.status === "trapped" || victim.status === "unknown")
           && nearCell(agent.location, victim.location, 1.5)) {
         victim.status = "rescued";
@@ -1121,18 +1123,25 @@ function rankVictims() {
 }
 
 function chooseBestAgent(victim) {
+  const score = (agent) => {
+    const raw = locationRisk(victim.location, agent.type);
+    // Armored vehicles are hazard-immune — treat any risk-zone exposure as
+    // ~third the cost so they win contests inside fire/collapse cells.
+    const immune = agent.risk_immune || agent.type === "ground_armored";
+    return immune ? raw * 0.3 : raw;
+  };
   let options = state.agents
     .filter((agent) => agent.role !== "relay" && agent.role !== "clear_blockade")
     .map((agent) => ({
       agent,
-      pathRisk: locationRisk(victim.location, agent.type),
-      blocked: agent.type !== "drone" && isBlockedNear(victim.location)
+      pathRisk: score(agent),
+      blocked: agent.type !== "drone" && agent.type !== "balloon" && isBlockedNear(victim.location)
     }));
   if (!options.length && state.agents.length) {
     options = state.agents.map((agent) => ({
       agent,
-      pathRisk: locationRisk(victim.location, agent.type),
-      blocked: agent.type !== "drone" && isBlockedNear(victim.location)
+      pathRisk: score(agent),
+      blocked: agent.type !== "drone" && agent.type !== "balloon" && isBlockedNear(victim.location)
     }));
   }
   if (!options.length) {
@@ -1806,12 +1815,21 @@ function drawAgents(cell, t) {
     const battery = (agent.battery || 0) / 100;
     const trail = trails.get(agent.id);
 
+    let labelColor;
     if (agent.type === "drone") {
       drawUAV(px, py, cell, battery, agent.perception_range || 4, t, trail);
+      labelColor = "#82c8ff";
+    } else if (agent.type === "balloon") {
+      drawBalloon(px, py, cell, battery, agent.perception_range || 10, t);
+      labelColor = "#c8b4ff";
+    } else if (agent.type === "ground_armored") {
+      drawArmored(px, py, cell, battery, t, trail);
+      labelColor = "#ff8c3c";
     } else {
       drawUGV(px, py, cell, battery, t, trail);
+      labelColor = "#5dffb4";
     }
-    drawAgentLabel(agent.id, px, py, agent.type === "drone" ? "#82c8ff" : "#5dffb4");
+    drawAgentLabel(agent.id, px, py, labelColor);
   }
 }
 
@@ -1919,6 +1937,134 @@ function drawUGV(px, py, cell, battery, t, trail) {
   ctx.restore();
 
   ctx.fillStyle = battery < 0.15 ? "#ff5d6c" : battery < 0.3 ? "#ffd95d" : "#5dffb4";
+  ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
+  ctx.fillText(`${Math.round(battery * 100)}%`, px + 10, py - 10);
+}
+
+function drawBalloon(px, py, cell, battery, commCells, t) {
+  const baseR = Math.max(6, cell * 0.42);
+  const drift = Math.sin(t * 0.6) * cell * 0.15;
+  const cy = py + drift;
+  const commR = (commCells || 10) * cell;
+  const pulse = 1 + Math.sin(t * 1.2) * 0.04;
+
+  // comm coverage ring
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(px, cy, commR * pulse, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(200,180,255,0.05)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(200,180,255,0.28)";
+  ctx.setLineDash([6, 6]);
+  ctx.lineDashOffset = -t * 8;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // sphere
+  ctx.save();
+  ctx.shadowBlur = 12;
+  ctx.shadowColor = "#c8b4ff";
+  ctx.beginPath();
+  ctx.arc(px, cy - baseR * 0.18, baseR, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(200,180,255,0.75)";
+  ctx.fill();
+  ctx.strokeStyle = "#c8b4ff";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // gondola
+  ctx.fillStyle = "#c8b4ff";
+  const gw = baseR * 0.85;
+  const gh = baseR * 0.45;
+  ctx.fillRect(px - gw / 2, cy + baseR * 0.45, gw, gh);
+
+  // tether ropes
+  ctx.strokeStyle = "rgba(200,180,255,0.6)";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(px - gw / 4, cy + baseR * 0.45);
+  ctx.lineTo(px - baseR * 0.45, cy + baseR * 0.18);
+  ctx.moveTo(px + gw / 4, cy + baseR * 0.45);
+  ctx.lineTo(px + baseR * 0.45, cy + baseR * 0.18);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = battery < 0.15 ? "#ff5d6c" : battery < 0.3 ? "#ffd95d" : "#c8b4ff";
+  ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
+  ctx.fillText(`${Math.round(battery * 100)}%`, px + 10, py - 10);
+}
+
+function drawArmored(px, py, cell, battery, t, trail) {
+  const color = "rgb(255,140,60)";
+
+  // trail
+  if (trail && trail.length > 1) {
+    ctx.save();
+    for (let i = 1; i < trail.length; i += 1) {
+      const a = trail[i - 1];
+      const b = trail[i];
+      const alpha = (i / trail.length) * 0.45;
+      ctx.strokeStyle = `rgba(255,140,60,${alpha})`;
+      ctx.lineWidth = lerp(0.5, 2, i / trail.length);
+      ctx.beginPath();
+      ctx.moveTo((a.x + 0.5) * cell, (a.y + 0.5) * cell);
+      ctx.lineTo((b.x + 0.5) * cell, (b.y + 0.5) * cell);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // hex-ish armored hull
+  ctx.save();
+  ctx.shadowBlur = 9;
+  ctx.shadowColor = color;
+  const body = cell * 0.6;
+  const half = body / 2;
+  const slope = body * 0.28;
+  ctx.beginPath();
+  ctx.moveTo(px - half + slope, py - half);
+  ctx.lineTo(px + half - slope, py - half);
+  ctx.lineTo(px + half, py - half + slope);
+  ctx.lineTo(px + half, py + half - slope);
+  ctx.lineTo(px + half - slope, py + half);
+  ctx.lineTo(px - half + slope, py + half);
+  ctx.lineTo(px - half, py + half - slope);
+  ctx.lineTo(px - half, py - half + slope);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(255,140,60,0.18)";
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+
+  // tracks
+  const trackW = Math.max(2, body * 0.16);
+  ctx.fillStyle = color;
+  ctx.fillRect(px - half - trackW - 1, py - half + slope, trackW, body - slope * 2);
+  ctx.fillRect(px + half + 1, py - half + slope, trackW, body - slope * 2);
+
+  // forward headlight wedge
+  const wedge = body * 0.35;
+  ctx.beginPath();
+  ctx.moveTo(px, py - half - 1);
+  ctx.lineTo(px - wedge * 0.5, py - half - wedge);
+  ctx.lineTo(px + wedge * 0.5, py - half - wedge);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(255,200,140,0.25)";
+  ctx.fill();
+
+  // turret dot
+  ctx.beginPath();
+  ctx.arc(px, py, Math.max(1.5, body * 0.13), 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  ctx.fillStyle = battery < 0.15 ? "#ff5d6c" : battery < 0.3 ? "#ffd95d" : color;
   ctx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
   ctx.fillText(`${Math.round(battery * 100)}%`, px + 10, py - 10);
 }
@@ -2235,12 +2381,15 @@ function init3D(scenario) {
   // Build shared scene once
   world.scene = new THREE.Scene();
   world.scene.background = new THREE.Color(0x070d16);
-  world.scene.fog = new THREE.FogExp2(0x080f1a, 0.028);
+  world.scene.fog = new THREE.FogExp2(0x080f1a, 0.016);
+
+  // Ambient floor so shadow side of objects stays readable in the FPV cone.
+  world.scene.add(new THREE.AmbientLight(0x6b88aa, 0.35));
 
   // Three-point rig: warm hemi from above, cool fill, soft rim
-  const hemi = new THREE.HemisphereLight(0x5680c0, 0x0a0f1a, 0.7);
+  const hemi = new THREE.HemisphereLight(0x5680c0, 0x0a0f1a, 1.0);
   world.scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xfff0d8, 0.75);
+  const key = new THREE.DirectionalLight(0xfff0d8, 0.95);
   key.position.set(20, 30, 10);
   world.scene.add(key);
   const fill = new THREE.DirectionalLight(0x4a78b0, 0.35);
@@ -2376,8 +2525,8 @@ function init3D(scenario) {
 
   // Agents — detailed primitive build matching the marketing hero aesthetic
   for (const a of scenario.agents) {
-    const grp = a.type === "drone" ? createDroneMesh() : createUgvMesh();
-    grp.position.set(a.location[0] + 0.5, a.type === "drone" ? 1.5 : 0, a.location[1] + 0.5);
+    const grp = createAgentMesh(a.type);
+    grp.position.set(a.location[0] + 0.5, agentBaseAltitude(a.type), a.location[1] + 0.5);
     world.scene.add(grp);
     world.agentMeshes.set(a.id, grp);
   }
@@ -2401,11 +2550,21 @@ function init3D(scenario) {
     renderer.setClearColor(0x02060f, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 1.4;
 
     const camera = new THREE.PerspectiveCamera(72, 16 / 10, 0.1, 200);
     camera.position.set(cols / 2, 1.5, rows / 2);
     camera.lookAt(cols / 2 + 1, 0.8, rows / 2);
+
+    // Camera-mounted spotlight so the operator can see the immediate forward
+    // surroundings of the active agent. Each POV gets its own light so multiple
+    // viewports don't double-illuminate the same agent.
+    const povSpot = new THREE.SpotLight(0xffd9a0, 1.6, 18, Math.PI / 4, 0.4, 1.0);
+    povSpot.position.set(0, 0, 0);
+    povSpot.target.position.set(0, 0, -6);
+    camera.add(povSpot);
+    camera.add(povSpot.target);
+    world.scene.add(camera);
 
     const initialId = DEFAULT_POV_AGENTS[i] || scenario.agents[i]?.id || scenario.agents[0]?.id;
     const heading = col.querySelector("[data-pov-heading]");
@@ -2416,6 +2575,7 @@ function init3D(scenario) {
       canvas,
       renderer,
       camera,
+      povSpot,
       selectedId: initialId,
       smoothPos: new THREE.Vector3().copy(camera.position),
       smoothLook: new THREE.Vector3(cols / 2 + 1, 0.8, rows / 2),
@@ -2668,6 +2828,166 @@ function createUgvMesh() {
   return grp;
 }
 
+function createBalloonMesh() {
+  // Aerostat — translucent envelope, gondola, tethered comm relay halo
+  const grp = new THREE.Group();
+
+  const envelopeMat = new THREE.MeshStandardMaterial({
+    color: 0xc8b4ff,
+    emissive: 0xc8b4ff,
+    emissiveIntensity: 0.55,
+    transparent: true,
+    opacity: 0.78,
+    roughness: 0.35,
+    metalness: 0.05
+  });
+  const envelope = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 18), envelopeMat);
+  envelope.scale.set(1, 1.2, 1);
+  envelope.position.y = 0.15;
+  grp.add(envelope);
+
+  const skirt = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.32, 0.18, 14, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0x8c7bb0, roughness: 0.7 })
+  );
+  skirt.position.y = -0.42;
+  grp.add(skirt);
+
+  const gondola = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.18, 0.34),
+    new THREE.MeshStandardMaterial({ color: 0x3a3450, roughness: 0.7, metalness: 0.25 })
+  );
+  gondola.position.y = -0.6;
+  grp.add(gondola);
+
+  // Comm-relay halo (visible from other POVs)
+  const haloLight = new THREE.PointLight(0xc8b4ff, 1.4, 10);
+  haloLight.position.y = 0.1;
+  grp.add(haloLight);
+
+  // Beacon strip on the envelope
+  const beacon = new THREE.Mesh(
+    new THREE.TorusGeometry(0.45, 0.012, 6, 28),
+    new THREE.MeshStandardMaterial({ color: 0xc8b4ff, emissive: 0xc8b4ff, emissiveIntensity: 1.6, toneMapped: false })
+  );
+  beacon.rotation.x = Math.PI / 2;
+  beacon.position.y = 0.15;
+  grp.add(beacon);
+
+  // Tether (visible thin line trailing down)
+  const tether = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.01, 0.01, 3.0, 6),
+    new THREE.MeshBasicMaterial({ color: 0xc8b4ff, transparent: true, opacity: 0.45, fog: false })
+  );
+  tether.position.y = -2.1;
+  grp.add(tether);
+
+  grp.userData = { navLight: haloLight, beacon, statusRing: beacon };
+  return grp;
+}
+
+function createArmoredMesh() {
+  // Heavy armored ground rescuer — wide tracked chassis, sloped armor wedges,
+  // amber light bar, six road wheels (visual; not driven by physics).
+  const grp = new THREE.Group();
+  const chassisColor = 0x6a3b18;
+  const trimColor = 0x8a4a20;
+
+  const chassisMat = new THREE.MeshStandardMaterial({ color: chassisColor, metalness: 0.55, roughness: 0.5 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: trimColor, metalness: 0.55, roughness: 0.45 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0xff8c3c, emissive: 0xff8c3c, emissiveIntensity: 1.4, toneMapped: false });
+
+  // Lower hull
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.22, 1.0), chassisMat);
+  hull.position.y = 0.22;
+  grp.add(hull);
+
+  // Sloped front armor
+  const front = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.26, 0.22), trimMat);
+  front.position.set(0, 0.26, 0.58);
+  front.rotation.x = -0.42;
+  grp.add(front);
+
+  // Sloped rear armor
+  const rear = front.clone();
+  rear.position.set(0, 0.26, -0.58);
+  rear.rotation.x = 0.42;
+  grp.add(rear);
+
+  // Upper hull
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.16, 0.7), trimMat);
+  upper.position.set(0, 0.42, -0.05);
+  grp.add(upper);
+
+  // Sensor / remote-weapon-station mast
+  const mast = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.14, 0.34), chassisMat);
+  mast.position.set(0, 0.56, -0.05);
+  grp.add(mast);
+
+  const lens = new THREE.Mesh(
+    new THREE.SphereGeometry(0.06, 12, 12),
+    new THREE.MeshStandardMaterial({ color: 0x05080a, metalness: 0.9, roughness: 0.08 })
+  );
+  lens.position.set(0, 0.56, 0.13);
+  grp.add(lens);
+
+  // Amber light bar (emissive, this is the beacon)
+  const lightBar = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.07), accentMat);
+  lightBar.position.set(0, 0.65, -0.05);
+  grp.add(lightBar);
+
+  // Tracks
+  const trackMat = new THREE.MeshStandardMaterial({ color: 0x12100a, roughness: 0.92, metalness: 0.05 });
+  for (const side of [-1, 1]) {
+    const tread = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 1.0), trackMat);
+    tread.position.set(side * 0.42, 0.12, 0);
+    grp.add(tread);
+    // six road wheels per side (purely visual)
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x2a2218, roughness: 0.7, metalness: 0.3 });
+    for (let i = 0; i < 6; i += 1) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 14), wheelMat);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(side * 0.42, 0.07, -0.42 + i * 0.17);
+      grp.add(wheel);
+    }
+  }
+
+  // Headlights
+  const hlMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffd9a0, emissiveIntensity: 1.6, toneMapped: false });
+  const hlL = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10), hlMat);
+  hlL.position.set(-0.28, 0.26, 0.7);
+  grp.add(hlL);
+  const hlR = hlL.clone();
+  hlR.position.x = 0.28;
+  grp.add(hlR);
+
+  const spot = new THREE.SpotLight(0xffd9a0, 1.3, 8, Math.PI / 4.5, 0.5, 1.2);
+  spot.position.set(0, 0.55, 0.55);
+  spot.target.position.set(0, 0, 3);
+  grp.add(spot);
+  grp.add(spot.target);
+
+  const navLight = new THREE.PointLight(0xff8c3c, 1.2, 5);
+  navLight.position.y = 0.7;
+  grp.add(navLight);
+
+  grp.userData = { navLight, lightBar, beacon: lightBar };
+  return grp;
+}
+
+function createAgentMesh(type) {
+  if (type === "drone") return createDroneMesh();
+  if (type === "balloon") return createBalloonMesh();
+  if (type === "ground_armored") return createArmoredMesh();
+  return createUgvMesh();
+}
+
+function agentBaseAltitude(type) {
+  if (type === "drone") return 1.5;
+  if (type === "balloon") return 3.6;
+  return 0;
+}
+
 function resizePov(entry) {
   if (!entry || !entry.renderer || !entry.canvas.parentElement) return;
   const w = entry.canvas.parentElement.clientWidth;
@@ -2678,9 +2998,12 @@ function resizePov(entry) {
   entry.camera.updateProjectionMatrix();
 }
 
-function agentIcon(kind) {
-  if (kind === "drone") {
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+function agentIcon(type) {
+  const wrap = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+
+  if (type === "drone") {
+    // Quadcopter — X frame, four rotors, sensor lens
+    return wrap(`
       <circle cx="6" cy="6" r="2.6"/>
       <circle cx="18" cy="6" r="2.6"/>
       <circle cx="6" cy="18" r="2.6"/>
@@ -2688,15 +3011,64 @@ function agentIcon(kind) {
       <line x1="6" y1="6" x2="18" y2="18"/>
       <line x1="18" y1="6" x2="6" y2="18"/>
       <circle cx="12" cy="12" r="2.4" fill="currentColor"/>
-    </svg>`;
+    `);
   }
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+
+  if (type === "balloon") {
+    // Aerostat — envelope, tether ropes, gondola, beacon
+    return wrap(`
+      <ellipse cx="12" cy="9" rx="5.5" ry="6"/>
+      <path d="M12 9 m-5.5 0 a5.5 4 0 0 0 11 0" fill="currentColor" fill-opacity="0.18" stroke="none"/>
+      <line x1="9" y1="14.5" x2="10.5" y2="17"/>
+      <line x1="15" y1="14.5" x2="13.5" y2="17"/>
+      <rect x="9.5" y="17" width="5" height="3" rx="0.5"/>
+      <circle cx="12" cy="9" r="1.4" fill="currentColor"/>
+    `);
+  }
+
+  if (type === "ground_rescue") {
+    // Rescue UGV — chassis, tracks, medical cross
+    return wrap(`
+      <rect x="4" y="11" width="16" height="8" rx="1.5"/>
+      <rect x="2.5" y="13" width="2" height="4" rx="0.6" fill="currentColor"/>
+      <rect x="19.5" y="13" width="2" height="4" rx="0.6" fill="currentColor"/>
+      <path d="M11 4 L13 4 L13 6 L15 6 L15 8 L13 8 L13 10 L11 10 L11 8 L9 8 L9 6 L11 6 Z" fill="currentColor" stroke="none"/>
+    `);
+  }
+
+  if (type === "ground_clear") {
+    // Clearer UGV — chassis with forward bulldozer blade
+    return wrap(`
+      <rect x="7" y="10" width="13" height="8" rx="1.2"/>
+      <rect x="6" y="12" width="2" height="4" rx="0.6" fill="currentColor"/>
+      <rect x="19.5" y="12" width="2" height="4" rx="0.6" fill="currentColor"/>
+      <path d="M3 8 L3 20" stroke-width="2.4"/>
+      <path d="M3 8 L7 11" />
+      <path d="M3 20 L7 17" />
+      <rect x="11" y="6" width="6" height="4" rx="0.6"/>
+    `);
+  }
+
+  if (type === "ground_armored") {
+    // Armored vehicle — sloped hexagonal hull, tracks, turret mast
+    return wrap(`
+      <path d="M3 13 L6 9 L18 9 L21 13 L21 17 L18 21 L6 21 L3 17 Z"/>
+      <line x1="3" y1="13" x2="21" y2="13"/>
+      <line x1="3" y1="17" x2="21" y2="17"/>
+      <rect x="10" y="4" width="4" height="5" rx="0.5"/>
+      <circle cx="12" cy="6.5" r="0.9" fill="currentColor"/>
+      <circle cx="8" cy="15" r="0.9" fill="currentColor"/>
+      <circle cx="16" cy="15" r="0.9" fill="currentColor"/>
+    `);
+  }
+
+  // fallback — generic ground unit
+  return wrap(`
     <rect x="4" y="9" width="16" height="9" rx="1.5"/>
     <rect x="2.5" y="11" width="2" height="5" rx="0.8" fill="currentColor"/>
     <rect x="19.5" y="11" width="2" height="5" rx="0.8" fill="currentColor"/>
-    <path d="M8 9 L8 6 L16 6 L16 9"/>
     <circle cx="12" cy="13.5" r="1.4" fill="currentColor"/>
-  </svg>`;
+  `);
 }
 
 function buildAgentSelector(agents) {
@@ -2704,12 +3076,11 @@ function buildAgentSelector(agents) {
   agentSelectorHost.innerHTML = "";
   agentCardEls.clear();
   agents.forEach((a, idx) => {
-    const kind = a.type === "drone" ? "drone" : "ground";
     const card = document.createElement("button");
     card.type = "button";
     card.className = "agent-card";
     card.dataset.agentId = a.id;
-    card.dataset.kind = kind;
+    card.dataset.kind = a.type;
     card.setAttribute("role", "tab");
     card.setAttribute("aria-controls", "povCanvas");
     card.setAttribute("aria-selected", "false");
@@ -3154,7 +3525,16 @@ function update3D(t) {
     const prev = a.prevLocation || a.location;
     const ix = lerp(prev[0], a.location[0], frac);
     const iy = lerp(prev[1], a.location[1], frac);
-    const targetY = a.type === "drone" ? 1.5 + Math.sin(t * 1.0 + a.id.charCodeAt(0)) * 0.5 + Math.sin(t * 0.4 + a.id.charCodeAt(0) * 0.5) * 0.25 : 0;
+    const phase = a.id.charCodeAt(0);
+    let targetY;
+    if (a.type === "drone") {
+      targetY = 1.5 + Math.sin(t * 1.0 + phase) * 0.5 + Math.sin(t * 0.4 + phase * 0.5) * 0.25;
+    } else if (a.type === "balloon") {
+      // hovers high, very slow gentle drift
+      targetY = 3.6 + Math.sin(t * 0.35 + phase) * 0.18 + Math.sin(t * 0.18 + phase * 0.5) * 0.12;
+    } else {
+      targetY = 0;
+    }
     mesh.position.set(ix + 0.5, targetY, iy + 0.5);
 
     const dx = a.location[0] - prev[0];
@@ -3263,19 +3643,26 @@ function update3D(t) {
     const iy = lerp(prev[1], driver.location[1], frac);
 
     const phaseSeed = driver.id.charCodeAt(0) * 0.13;
-    // Drones: base 1.5 + dual-sine vertical wander (matches drone mesh).
-    // UGVs: 0.45 — sensor turret height, so the camera sits where the lens lives.
-    const altitude = driver.type === "drone"
-      ? 1.5 + Math.sin(t * 1.0 + driver.id.charCodeAt(0)) * 0.5 + Math.sin(t * 0.4 + driver.id.charCodeAt(0) * 0.5) * 0.25
-      : 0.45;
-    const headBobX = driver.type === "drone" ? Math.sin(t * 1.6 + phaseSeed) * 0.05 : 0;
-    const headBobY = driver.type === "drone" ? Math.sin(t * 2.2 + phaseSeed) * 0.04 : 0;
+    // Drones: base 1.5 + dual-sine vertical wander.
+    // Balloons: base 3.6 — high-altitude observation.
+    // Ground (UGV / armored): 0.45 — sensor turret height.
+    let altitude;
+    if (driver.type === "drone") {
+      altitude = 1.5 + Math.sin(t * 1.0 + driver.id.charCodeAt(0)) * 0.5 + Math.sin(t * 0.4 + driver.id.charCodeAt(0) * 0.5) * 0.25;
+    } else if (driver.type === "balloon") {
+      altitude = 3.6 + Math.sin(t * 0.35 + driver.id.charCodeAt(0)) * 0.18;
+    } else {
+      altitude = 0.45;
+    }
+    const isAerial = driver.type === "drone" || driver.type === "balloon";
+    const headBobX = isAerial ? Math.sin(t * 1.6 + phaseSeed) * 0.05 : 0;
+    const headBobY = isAerial ? Math.sin(t * 2.2 + phaseSeed) * 0.04 : 0;
     const targetPos = new THREE.Vector3(ix + 0.5 + headBobX, altitude + headBobY, iy + 0.5);
 
     const target = currentTargetFor(driver);
-    // Drones look strongly down at the ground (surveying for survivors).
-    // UGVs look slightly forward-down (mid-distance for path scanning).
-    const pitch = driver.type === "drone" ? -0.45 : -0.1;
+    // Drones / balloons look strongly down at the ground (surveying for survivors).
+    // Ground vehicles look slightly forward-down (mid-distance path scanning).
+    const pitch = driver.type === "drone" ? -0.45 : driver.type === "balloon" ? -0.65 : -0.1;
     const fwd = new THREE.Vector3();
     if (target) {
       fwd.set(target[0] + 0.5 - (ix + 0.5), pitch, target[1] + 0.5 - (iy + 0.5));
@@ -3363,6 +3750,7 @@ const PRESET_DEFAULTS = {
     phase: "CLOSED LOOP · GEMMA-4",
     grid: 30, victims: 5, blockades: 2, fires: 1, collapses: 1,
     intensity: 70, severity: 50, scout: 1, relay: 1, rescue: 1, clear: 1,
+    balloons: 1, armored: 1,
     baseRange: 12, relayRange: 8, deadRadius: 4, dropout: 15
   },
   wildfire: {
@@ -3370,13 +3758,15 @@ const PRESET_DEFAULTS = {
     phase: "PERIMETER ASSESS · GEMMA-4",
     grid: 34, victims: 6, blockades: 1, fires: 3, collapses: 0,
     intensity: 85, severity: 60, scout: 2, relay: 1, rescue: 1, clear: 0,
+    balloons: 2, armored: 2,
     baseRange: 14, relayRange: 9, deadRadius: 3, dropout: 25
   },
   industrial: {
     label: "MSN-003 · INDUSTRIAL-COLLAPSE",
     phase: "STRUCTURAL TRIAGE · GEMMA-4",
     grid: 28, victims: 4, blockades: 4, fires: 1, collapses: 2,
-    intensity: 80, severity: 70, scout: 1, relay: 1, rescue: 2, clear: 2,
+    intensity: 80, severity: 70, scout: 1, relay: 1, rescue: 1, clear: 2,
+    balloons: 1, armored: 2,
     baseRange: 10, relayRange: 7, deadRadius: 5, dropout: 30
   }
 };
@@ -3405,6 +3795,8 @@ function readConfig() {
     relay: num("cfgRelay", 1),
     rescue: num("cfgRescue", 1),
     clearN: num("cfgClear", 1),
+    balloons: num("cfgBalloons", 1),
+    armored: num("cfgArmored", 0),
     battery: num("cfgBat", 75),
     victims: num("cfgVictim", 5),
     severity: num("cfgSeverity", 50) / 100,
@@ -3590,6 +3982,33 @@ function synthesizeScenario(base, cfg) {
       payload: "rubble_clear_tool"
     });
   }
+  for (let i = 0; i < cfg.balloons; i += 1) {
+    agents.push({
+      id: `BAL-${agents.filter((a) => a.type === "balloon").length + 1}`,
+      type: "balloon",
+      role: "relay",
+      location: place(),
+      battery: cfg.battery,
+      speed: 0.5,
+      perception_range: 12,
+      sensors: ["camera", "audio"],
+      payload: "comm_relay"
+    });
+  }
+  for (let i = 0; i < cfg.armored; i += 1) {
+    agents.push({
+      id: `AAV-${agents.filter((a) => a.type === "ground_armored").length + 1}`,
+      type: "ground_armored",
+      role: "rescue",
+      location: place(),
+      battery: cfg.battery,
+      speed: 1,
+      perception_range: 4,
+      sensors: ["thermal", "audio", "vibration"],
+      payload: "rescue_pod",
+      risk_immune: true
+    });
+  }
   if (agents.length === 0 && agentTemplates.length) {
     agents.push(JSON.parse(JSON.stringify(agentTemplates[0])));
   }
@@ -3742,6 +4161,8 @@ function setupCommandCenter() {
   bind("cfgRelay", "cfgRelayLabel", (v) => `${v}`);
   bind("cfgRescue", "cfgRescueLabel", (v) => `${v}`);
   bind("cfgClear", "cfgClearLabel", (v) => `${v}`);
+  bind("cfgBalloons", "cfgBalloonsLabel", (v) => `${v}`);
+  bind("cfgArmored", "cfgArmoredLabel", (v) => `${v}`);
   bind("cfgBat", "cfgBatLabel", (v) => `${v}%`);
   bind("cfgVictim", "cfgVictimLabel", (v) => `${v}`);
   bind("cfgSeverity", "cfgSeverityLabel", (v) => (v / 100).toFixed(2));
@@ -3775,6 +4196,8 @@ function setupCommandCenter() {
       set("cfgRelay", p.relay);
       set("cfgRescue", p.rescue);
       set("cfgClear", p.clear);
+      set("cfgBalloons", p.balloons);
+      set("cfgArmored", p.armored);
       set("cfgBaseRange", p.baseRange);
       set("cfgRelayRange", p.relayRange);
       set("cfgDead", p.deadRadius);
@@ -3838,8 +4261,269 @@ function setupCommandCenter() {
 
   // Initial label paint
   updateMissionLabels(readConfig());
+
+  // Onboarding tour
+  setupTour();
+
+  // Bandwidth meter initial paint (will refresh on each render)
+  const bw = $("bwBar");
+  if (bw) bw.className = "bw lvl-5";
 }
 
 initTacticalBasemap();
 wireTacticalBasemapResize();
 requestAnimationFrame(() => syncTacticalBasemapSize());
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Onboarding tour
+   - First visit (no localStorage flag): welcome modal then 8-step spotlight
+   - Replay button (#tourReplay) launches the tour from step 1 any time
+   ────────────────────────────────────────────────────────────────────────── */
+const TOUR_KEY = "arc-sim-tour-v1";
+const TOUR_STEPS = [
+  {
+    selector: ".cc-top-c",
+    title: "Mission status",
+    body: "Live T+ clock, rescued / total, agents online, survival rate. Watch SURVIVAL drop — that's your scoreboard."
+  },
+  {
+    selector: ".vp-2d .canvas-frame",
+    title: "Tactical map",
+    body: "Top-down view of the disaster zone. Red pulse = victim. Yellow box = base. Orange = blockade. Translucent zones = fire / collapse."
+  },
+  {
+    selector: ".vp-3d",
+    title: "FPV feed",
+    body: "First-person from the active agent. Press 1–4 to switch, or arrow keys to cycle."
+  },
+  {
+    selector: ".cc-rail-r .rail-section:nth-of-type(1)",
+    title: "Threat board",
+    body: "Gemma-4 re-ranks every victim each tick by survival window × signal strength × access cost. The top of this list is your next move."
+  },
+  {
+    selector: ".cc-rail-r .rail-section:nth-of-type(2)",
+    title: "Fleet status",
+    body: "Battery and current task per agent. Yellow text = actively assigned."
+  },
+  {
+    selector: ".vp-brief",
+    title: "Commander brief",
+    body: "Plain-language explanation of why the planner chose what it chose."
+  },
+  {
+    selector: "#cfgRail",
+    title: "Scenario config",
+    body: "Tune the disaster: presets, fleet counts, hazards, comms. Hit Apply & Reset to rebuild the scene."
+  },
+  {
+    selector: ".cc-top-r .cc-controls",
+    title: "Transport",
+    body: "Space = play/pause, period = step, R = reset. Use the speed selector to scrub fast through long missions."
+  }
+];
+
+const tourState = {
+  index: 0,
+  active: false,
+  phase: null,
+  resizeHandler: null,
+  keyHandler: null
+};
+
+function setupTour() {
+  const root = $("tourRoot");
+  if (!root) return;
+
+  // Phase A — welcome buttons
+  root.querySelectorAll("[data-tour-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.dataset.tourAction;
+      if (action === "start") startTourSteps();
+      else if (action === "skip") endTour();
+      else if (action === "next") tourNext();
+      else if (action === "back") tourBack();
+    });
+  });
+
+  // Replay button always available
+  const replay = $("tourReplay");
+  if (replay) replay.addEventListener("click", () => openTour());
+
+  // Build progress dots
+  const dotsEl = $("tourDots");
+  if (dotsEl) {
+    dotsEl.innerHTML = TOUR_STEPS.map(() => "<i></i>").join("");
+  }
+  const totalEl = $("tourStepTotal");
+  if (totalEl) totalEl.textContent = String(TOUR_STEPS.length).padStart(2, "0");
+
+  // First-visit auto-launch
+  let seen = false;
+  try { seen = window.localStorage.getItem(TOUR_KEY) === "done"; } catch {}
+  if (!seen) {
+    // Small delay so initial layout settles
+    setTimeout(() => openTour({ welcome: true }), 350);
+  }
+}
+
+function openTour({ welcome = true } = {}) {
+  const root = $("tourRoot");
+  if (!root) return;
+  root.hidden = false;
+  root.setAttribute("aria-hidden", "false");
+  tourState.active = true;
+  tourState.index = 0;
+
+  const welcomeEl = root.querySelector('[data-tour-phase="welcome"]');
+  const stepEl = root.querySelector('[data-tour-phase="step"]');
+  if (welcome) {
+    if (welcomeEl) welcomeEl.hidden = false;
+    if (stepEl) stepEl.hidden = true;
+    tourState.phase = "welcome";
+  } else {
+    if (welcomeEl) welcomeEl.hidden = true;
+    startTourSteps();
+  }
+
+  if (!tourState.keyHandler) {
+    tourState.keyHandler = (e) => {
+      if (!tourState.active) return;
+      if (e.key === "Escape") { e.preventDefault(); endTour(); }
+      else if (tourState.phase === "step") {
+        if (e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); tourNext(); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); tourBack(); }
+      } else if (tourState.phase === "welcome") {
+        if (e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); startTourSteps(); }
+      }
+    };
+    window.addEventListener("keydown", tourState.keyHandler, true);
+  }
+}
+
+function startTourSteps() {
+  const root = $("tourRoot");
+  if (!root) return;
+  const welcomeEl = root.querySelector('[data-tour-phase="welcome"]');
+  const stepEl = root.querySelector('[data-tour-phase="step"]');
+  if (welcomeEl) welcomeEl.hidden = true;
+  if (stepEl) stepEl.hidden = false;
+  tourState.phase = "step";
+  tourState.index = 0;
+
+  if (!tourState.resizeHandler) {
+    tourState.resizeHandler = () => { if (tourState.active && tourState.phase === "step") renderTourStep(); };
+    window.addEventListener("resize", tourState.resizeHandler);
+  }
+  renderTourStep();
+}
+
+function tourNext() {
+  tourState.index += 1;
+  if (tourState.index >= TOUR_STEPS.length) { endTour(); return; }
+  renderTourStep();
+}
+
+function tourBack() {
+  if (tourState.index <= 0) return;
+  tourState.index -= 1;
+  renderTourStep();
+}
+
+function endTour() {
+  const root = $("tourRoot");
+  if (!root) return;
+  root.hidden = true;
+  root.setAttribute("aria-hidden", "true");
+  tourState.active = false;
+  tourState.phase = null;
+  if (tourState.keyHandler) {
+    window.removeEventListener("keydown", tourState.keyHandler, true);
+    tourState.keyHandler = null;
+  }
+  if (tourState.resizeHandler) {
+    window.removeEventListener("resize", tourState.resizeHandler);
+    tourState.resizeHandler = null;
+  }
+  try { window.localStorage.setItem(TOUR_KEY, "done"); } catch {}
+}
+
+function renderTourStep() {
+  const step = TOUR_STEPS[tourState.index];
+  if (!step) return;
+
+  // Resolve target element; if missing, skip to next
+  const target = document.querySelector(step.selector);
+  if (!target) {
+    // Skip silently if the element isn't on this page (e.g. responsive collapse)
+    tourState.index = Math.min(TOUR_STEPS.length - 1, tourState.index + 1);
+    renderTourStep();
+    return;
+  }
+
+  // Make sure the config rail is open if we're highlighting it
+  if (step.selector === "#cfgRail") {
+    const grid = $("ccGrid");
+    if (grid && grid.classList.contains("cfg-collapsed")) grid.classList.remove("cfg-collapsed");
+  }
+
+  const rect = target.getBoundingClientRect();
+  const pad = 8;
+  const x = Math.max(4, rect.left - pad);
+  const y = Math.max(4, rect.top - pad);
+  const w = Math.min(window.innerWidth - x - 4, rect.width + pad * 2);
+  const h = Math.min(window.innerHeight - y - 4, rect.height + pad * 2);
+
+  // Update spotlight hole
+  const hole = document.getElementById("tourHole");
+  const stroke = document.getElementById("tourHoleStroke");
+  if (hole) {
+    hole.setAttribute("x", x); hole.setAttribute("y", y);
+    hole.setAttribute("width", w); hole.setAttribute("height", h);
+  }
+  if (stroke) {
+    stroke.setAttribute("x", x); stroke.setAttribute("y", y);
+    stroke.setAttribute("width", w); stroke.setAttribute("height", h);
+  }
+
+  // Update caption content + position
+  const caption = $("tourCaption");
+  const numEl = $("tourStepNum");
+  const titleEl = $("tourStepTitle");
+  const bodyEl = $("tourStepBody");
+  const dots = $("tourDots");
+  if (numEl) numEl.textContent = String(tourState.index + 1).padStart(2, "0");
+  if (titleEl) titleEl.textContent = step.title;
+  if (bodyEl) bodyEl.textContent = step.body;
+  if (dots) {
+    [...dots.children].forEach((dot, i) => {
+      dot.classList.toggle("done", i < tourState.index);
+      dot.classList.toggle("current", i === tourState.index);
+    });
+  }
+
+  if (caption) {
+    caption.classList.add("entering");
+    requestAnimationFrame(() => {
+      // Position caption to the right of the spotlight, or left if no room
+      const captionW = 380;
+      const captionH = caption.offsetHeight || 220;
+      const margin = 18;
+      let cx = x + w + margin;
+      if (cx + captionW > window.innerWidth - 8) cx = Math.max(8, x - captionW - margin);
+      if (cx < 8) cx = Math.max(8, (window.innerWidth - captionW) / 2);
+      let cy = y + (h - captionH) / 2;
+      cy = Math.max(8, Math.min(window.innerHeight - captionH - 8, cy));
+      caption.style.left = `${cx}px`;
+      caption.style.top = `${cy}px`;
+      requestAnimationFrame(() => caption.classList.remove("entering"));
+    });
+  }
+
+  // Disable Back on first step, change Next → Finish on last
+  const backBtn = document.querySelector('[data-tour-action="back"]');
+  const nextBtn = document.querySelector('[data-tour-action="next"]');
+  if (backBtn) backBtn.disabled = tourState.index === 0;
+  if (nextBtn) nextBtn.textContent = tourState.index === TOUR_STEPS.length - 1 ? "Finish ✓" : "Next →";
+}
+
