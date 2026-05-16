@@ -59,6 +59,45 @@ function StatCell({
   );
 }
 
+function MarketModelNotes() {
+  const notes: [string, string][] = [
+    [
+      "TAM",
+      "$320B+ is the broad 2030 disaster management, public-safety robotics, humanitarian reconstruction, and infrastructure-security market context.",
+    ],
+    [
+      "SAM",
+      "$12.53B adds four serviceable scenarios: urban disaster pre-deployment, critical infrastructure, post-conflict search/demining, and CBRN response.",
+    ],
+    [
+      "SOM",
+      "$500M is the five-year capture target, equal to roughly 4% of SAM, not first-year revenue.",
+    ],
+    [
+      "Revenue mix",
+      "65% deployment revenue establishes the hardware footprint; 25% SaaS and 10% data services drive recurring margin after deployment.",
+    ],
+  ];
+
+  return (
+    <div className="rounded-md border border-white/10 bg-[#0e1014] px-5 py-4">
+      <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-arc-accent">
+        Market model notes
+      </div>
+      <dl className="mt-3 grid gap-3 md:grid-cols-2">
+        {notes.map(([label, value]) => (
+          <div key={label} className="border-t border-white/5 pt-3 first:border-0 first:pt-0 md:first:border-t md:first:pt-3">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.16em] text-arc-muted">
+              {label}
+            </dt>
+            <dd className="mt-1 text-sm leading-relaxed text-arc-fg/85">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 function Stars({ n }: { n: number }) {
   return (
     <span className="flex items-center gap-0.5">
@@ -275,6 +314,10 @@ export default function BPPage() {
             <StatCell label="5-year target (SOM)" value="$500M" sub="50 cities · 4% penetration" />
             <StatCell label="Net lives saved / year" value="~1,900" sub="per city deployment" accent />
           </Reveal>
+
+          <Reveal className="mt-6">
+            <MarketModelNotes />
+          </Reveal>
         </div>
       </section>
 
@@ -286,7 +329,7 @@ export default function BPPage() {
             Four addressable verticals.
           </h2>
           <p className="mt-4 max-w-2xl text-arc-muted">
-            ARC is not a "disaster drone" — it is a universal autonomous sensing and rescue
+            ARC is not a {'"'}disaster drone{'"'} — it is a universal autonomous sensing and rescue
             operating system covering all disaster types and high-risk environments.
           </p>
         </Reveal>
@@ -360,6 +403,19 @@ export default function BPPage() {
               $12.53B
             </div>
           </div>
+        </Reveal>
+
+        <Reveal className="mt-4 rounded-md border border-white/10 bg-[#0e1014] px-5 py-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-arc-accent">
+            Source and calculation
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-arc-muted">
+            SAM is modeled from the business-plan source as scenario A
+            ($3.36B), B ($4.77B), C ($3.0B), and D ($1.4B). Deployment prices
+            are tied to the cost model: large cities use the four-warehouse
+            $3-6M configuration, smaller or single-site customers use reduced
+            one-to-two warehouse configurations.
+          </p>
         </Reveal>
       </Sec>
 

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { TacticalRoadNetwork } from "./road-network.js";
 
 const canvas = document.querySelector("#simCanvas");
 const ctx = canvas.getContext("2d");
@@ -9,7 +10,10 @@ const rescuedCount = document.querySelector("#rescuedCount");
 const priorityList = document.querySelector("#priorityList");
 const agentList = document.querySelector("#agentList");
 const briefText = document.querySelector("#briefText");
-const missionJson = document.querySelector("#missionJson");
+const thinkingFeedEl = document.querySelector("#thinkingText");
+const cotCarouselTrack = document.querySelector("#cotCarouselTrack");
+const cotCarouselViewport = document.querySelector("#cotCarouselViewport");
+const cotSlideLabel = document.querySelector("#cotSlideLabel");
 const stepBtn = document.querySelector("#stepBtn");
 const autoBtn = document.querySelector("#autoBtn");
 const resetBtn = document.querySelector("#resetBtn");
@@ -47,27 +51,686 @@ const T0 = performance.now();
 const trails = new Map();
 const TRAIL_LEN = 10;
 const MS_PER_TICK = 900;
+/** Min wall time between new Fleet dialogue cards while auto-run is on (~4.4s). Multi-agent CoT in the field is usually seconds–tens of seconds per published heartbeat; this keeps the feed readable without slowing the simulation grid. Manual step still updates every tick. */
+const COT_FEED_AUTO_MIN_MS = 4400;
+/** Victim HP/damage — aligned with demo_player (timeline.json) scale.
+ *  hp_max: 5 000–10 000 per victim; damage_per_step: 40–100 per tick.
+ *  survival_pct = hp / hp_max × 100 (individual, not cross-victim). */
+const VICTIM_HP_MIN   = 5000;
+const VICTIM_HP_RANGE = 5000;   // hp_max ∈ [HP_MIN, HP_MIN + HP_RANGE)
+const VICTIM_DMG_MIN  = 40;
+const VICTIM_DMG_RANGE = 61;    // damage ∈ [DMG_MIN, DMG_MIN + DMG_RANGE)
 const MAX_EVENT_LOG = 20;
-let typewriterTimer = null;
-const TOAST_STYLES = {
-  rescued:          { color: "#5dffb4", bg: "rgba(14,16,20,0.92)" },
-  victim_dead:      { color: "#ff5d6c", bg: "rgba(14,16,20,0.92)" },
-  blockade_cleared: { color: "#ffd95d", bg: "rgba(14,16,20,0.92)" },
-  relay_deployed:   { color: "#c8b4ff", bg: "rgba(14,16,20,0.92)" },
-  default:          { color: "#82c8ff", bg: "rgba(14,16,20,0.92)" }
+/** Legacy fallback if `fleet-dialogue-cot.json` fails to load */
+const COT_FEED_MAX_BLOCKS = 28;
+
+const FLEET_DIALOGUE_COT_BUILTIN = {
+  version: 1,
+  feedMaxBlocks: 28,
+  feedSlideMax: 6,
+  ui: {
+    panel: {
+      kicker: "Gemma 4 · Mesh agents",
+      title: "Fleet dialogue & CoT",
+      toolsAriaLabel: "Transcript",
+      jumpTitle: "Jump to latest heartbeat (top)",
+      jumpAriaLabel: "Jump to latest",
+      copyTitle: "Copy full transcript",
+      copyAriaLabel: "Copy transcript",
+      metaSep: "·",
+      slideLabelDefault: "—",
+      autoHint: "scroll for history · latest at top",
+    },
+    feed: {
+      chainOfThoughtLabel: "Chain-of-thought",
+      blockHeadTemplate: "${padT} · Gemma 4 fleet heartbeat",
+      liveBadge: "● LIVE",
+      radioArrow: "▶",
+    },
+    transcript: {
+      sectionHeaderTemplate: "# ${padT} · fleet dialogue",
+      chunkSeparator: "\n\n---\n\n",
+      cotBulletPrefix: "  • ",
+      cotBracketTemplate: "[CoT · ${who}]",
+      msgLineTemplate: "[${who} → ${to}] ${text}",
+    },
+    meta: {
+      latestTemplate: "Latest ${padT} · ${head}",
+    },
+  },
+  dialogue: {
+    standby: {
+      title: "Standby",
+      who: "Gemma 4 · edge",
+      lines: ["Waiting for simulation state."],
+    },
+    orchestrator: {
+      slideTitleTemplate: "${padT} · Gemma 4 orchestrator · CoT",
+      who: "Gemma 4 · mesh orchestrator",
+      heartbeatFused: "${padT}: fused local grid + hazard layers ingested for this heartbeat.",
+      rankingPrefix: "Surface ranking: ",
+      rankingSuffix: ".",
+      rankingItemTemplate: "${id}(${score})",
+      noHypotheses: "No open hypotheses — patrol and logistics preservation mode.",
+      leadVictim: "Lead ${id}: survival ${survivalPct}% (${survivalSteps}t), comm ${comm}, suggested mover ${bestAgent}.",
+      policy: "Policy: emit ${taskCount} bound tasks after Gemma-4 safety gates.",
+    },
+    agentSlide: {
+      slideTitleTemplate: "${padT} · ${agent} · ${taskHuman}",
+      whoTemplate: "Gemma 4@${agent}",
+      goal: "Goal: ${taskHuman} → ${target}.",
+      nodeUav: "Node ${agent} (UAV): battery ${battery}, cell (${loc}).",
+      nodeUgv: "Node ${agent} (UGV): battery ${battery}, cell (${loc}).",
+      riskNote: "Risk note: ${note}",
+      meshAck: "Require mesh ACK from ${peer} before committing motion.",
+      peerFallback: "subscribers",
+      radioToAllCall: "all-call",
+      radioDroneOut: "${agent} → ${radioTo}: eyes on ${target}; holding safe offset orbit. Request ground corridor status before ingress.",
+      radioUgvOut: "${agent} → ${radioTo}: advancing on routed cells toward ${target}; need air picture refresh each leg.",
+      radioInRelay: "${peerId} → ${agent}: acknowledged — extending relay bubble; watch handoff latency.",
+      radioInOther: "${peerId} → ${agent}: acknowledged — syncing posture; will shadow your vector.",
+      meshAwait: "${padT} · mesh: await ARQ from ${agent}; no immediate peer on this hop.",
+    },
+    trafficNote: {
+      slideTitleTemplate: "${padT} · Traffic note",
+      who: "Gemma 4 · traffic agent",
+      lineBlock: "${blockId} still blocks ground flow — convoy risk elevated until clearance is allocated.",
+      lineRecommend: "Recommend re-running allocator when aerial confidence on the lane improves.",
+    },
+    meshStandby: {
+      slideTitleTemplate: "${padT} · mesh standby",
+      who: "mesh",
+      to: "fleet",
+      text: "No new task edges this heartbeat — autonomous patrol, battery-balanced loiter, and watch dormant thermal tiles.",
+    },
+  },
 };
+
+/** Resolved from JSON fetch when available; defaults to builtin (mirrors `fleet-dialogue-cot.json`). */
+let fleetDialogueCot = FLEET_DIALOGUE_COT_BUILTIN;
+
+function interpolate(template, vars = {}) {
+  if (template == null) return "";
+  return String(template).replace(/\$\{(\w+)\}/g, (_, key) =>
+    (vars[key] !== undefined && vars[key] !== null ? String(vars[key]) : ""));
+}
+
+function cotFeedMaxBlocks() {
+  return fleetDialogueCot?.feedMaxBlocks ?? COT_FEED_MAX_BLOCKS;
+}
+
+function cotFeedSlideMax() {
+  return fleetDialogueCot?.feedSlideMax ?? 6;
+}
+
+/** Apply panel chrome from `fleet-dialogue-cot.json` (kicker, title, buttons, meta). */
+function applyFleetDialogueCotDom() {
+  const ui = fleetDialogueCot?.ui;
+  if (!ui) return;
+  const p = ui.panel;
+  if (p) {
+    const k = document.getElementById("cotPanelKicker");
+    const t = document.getElementById("cotPanelTitle");
+    if (k) k.textContent = p.kicker ?? "";
+    if (t) t.textContent = p.title ?? "";
+    const tools = document.querySelector(".vp-mission-head .cot-carousel-tools");
+    if (tools && p.toolsAriaLabel) tools.setAttribute("aria-label", p.toolsAriaLabel);
+    const jump = document.getElementById("cotJumpLatest");
+    if (jump) {
+      if (p.jumpTitle) jump.title = p.jumpTitle;
+      if (p.jumpAriaLabel) jump.setAttribute("aria-label", p.jumpAriaLabel);
+    }
+    const copyBtn = document.getElementById("copyJson");
+    if (copyBtn) {
+      if (p.copyTitle) copyBtn.title = p.copyTitle;
+      if (p.copyAriaLabel) copyBtn.setAttribute("aria-label", p.copyAriaLabel);
+    }
+    const hint = document.getElementById("cotAutoHint");
+    if (hint && p.autoHint) hint.textContent = p.autoHint;
+    const sep = document.getElementById("cotMetaSep");
+    if (sep && p.metaSep != null) sep.textContent = p.metaSep;
+    const slideDef = document.getElementById("cotSlideLabel");
+    if (slideDef && p.slideLabelDefault) slideDef.textContent = p.slideLabelDefault;
+  }
+}
+
+/** Icons align with demo_player TOAST_CFG */
+const TOAST_CFG = {
+  rescued:          { icon: "✅", color: "#5dffb4", bg: "rgba(14,60,30,0.92)" },
+  victim_dead:      { icon: "💔", color: "#ff5d6c", bg: "rgba(60,10,20,0.92)" },
+  blockade_cleared: { icon: "🚧", color: "#ffd95d", bg: "rgba(60,50,0,0.9)" },
+  relay_deployed:   { icon: "📡", color: "#c8b4ff", bg: "rgba(40,20,80,0.9)" },
+  default:          { icon: "ℹ️", color: "#82c8ff", bg: "rgba(14,16,20,0.92)" },
+};
+
+let thinkingTimer = null;
+let thinkingQueue = [];
+let thinkingTyping = false;
+const thinkingSeen = new Set();
+const briefingSeen = new Set();
+
+let cotFeedPrependedStep = -999;
+/** Wall clock for throttling dialogue feed under auto-run (see {@link COT_FEED_AUTO_MIN_MS}). */
+let lastCotFeedWallMs = 0;
+const cotFeedTranscriptChunks = [];
+
+function splitThinkingLog(text) {
+  return String(text || "")
+    .split(/(?<=[。！？.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function appendThinkingEntry(el, step, text, animate = true) {
+  if (!el) return;
+  const row = document.createElement("div");
+  row.className = "thinking-row";
+  const label = document.createElement("span");
+  label.className = "thinking-step";
+  label.textContent = `[T${String(step).padStart(3, "0")}] `;
+  const body = document.createElement("span");
+  body.className = "thinking-body";
+  row.append(label, body);
+  el.appendChild(row);
+
+  const finish = () => {
+    el.scrollTop = el.scrollHeight;
+    while (el.children.length > 80) el.removeChild(el.firstChild);
+  };
+
+  if (!animate) {
+    body.textContent = text;
+    finish();
+    return;
+  }
+
+  let i = 0;
+  thinkingTyping = true;
+  clearInterval(thinkingTimer);
+  thinkingTimer = setInterval(() => {
+    body.textContent += text[i++] || "";
+    el.scrollTop = el.scrollHeight;
+    if (i >= text.length) {
+      clearInterval(thinkingTimer);
+      thinkingTimer = null;
+      thinkingTyping = false;
+      finish();
+      playThinkingQueue(el);
+    }
+  }, 16);
+}
+
+function playThinkingQueue(el) {
+  if (thinkingTyping || !thinkingQueue.length) return;
+  const next = thinkingQueue.shift();
+  appendThinkingEntry(el, next.step, next.text, next.animate);
+}
+
+function queueThinkingLog(el, step, text, animate = true) {
+  splitThinkingLog(text).forEach((line) => {
+    thinkingQueue.push({ step, text: line, animate });
+  });
+  playThinkingQueue(el);
+}
+
+function appendBriefingRow(el, step, text) {
+  if (!el) return;
+  const row = document.createElement("div");
+  row.className = "briefing-row";
+  const label = document.createElement("span");
+  label.className = "briefing-step";
+  label.textContent = `[T${String(step).padStart(3, "0")}] `;
+  const body = document.createElement("span");
+  body.className = "briefing-body";
+  body.textContent = text;
+  row.append(label, body);
+  el.appendChild(row);
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 48) el.removeChild(el.firstChild);
+}
+
+function buildThinkingNarrative(plan) {
+  if (!plan || !state) return "Standing by — no planner output yet.";
+  const parts = [];
+  const po = plan.priority_order || [];
+  if (po.length) {
+    parts.push(`Victim stack is ${po.join(" → ")}. Re-checking comms, corridor risk, and battery headroom.`);
+  }
+  const verbs = {
+    aerial_confirmation: "confirming",
+    deploy_relay: "staging relay for",
+    vibration_audio_verification: "closing on",
+    ground_rescue: "extracting",
+    clear_blockade: "clearing",
+  };
+  for (const a of plan.mission_plan || []) {
+    const v = verbs[a.task] || "executing";
+    parts.push(`${a.agent} is ${v} ${a.target}.`);
+  }
+  for (const line of plan.human_confirmation_required || []) {
+    if (line && !/^no\s/i.test(line)) parts.push(`Commander gate: ${line}`);
+  }
+  if (!parts.length) parts.push("No open allocator edges — hold and refresh mesh telemetry.");
+  return parts.join(" ");
+}
+
+function syncThinkingFeed(plan) {
+  const el = thinkingFeedEl;
+  if (!el || !plan) return;
+  const narrative = buildThinkingNarrative(plan);
+  splitThinkingLog(narrative).forEach((line) => {
+    if (thinkingSeen.has(line)) return;
+    thinkingSeen.add(line);
+    queueThinkingLog(el, state.timestep, line, true);
+  });
+}
+
+function syncBriefingFeed(plan) {
+  if (!briefText || !plan?.commander_briefing) return;
+  const text = plan.commander_briefing;
+  if (briefingSeen.has(text)) return;
+  briefingSeen.add(text);
+  appendBriefingRow(briefText, state.timestep, text);
+}
+
+function resetDecisionFeeds() {
+  clearInterval(thinkingTimer);
+  thinkingTimer = null;
+  thinkingQueue.length = 0;
+  thinkingTyping = false;
+  thinkingSeen.clear();
+  briefingSeen.clear();
+  if (thinkingFeedEl) thinkingFeedEl.innerHTML = "";
+  if (briefText) briefText.innerHTML = "";
+}
 function lerp(a, b, t) { return a + (b - a) * Math.min(1, Math.max(0, t)); }
+
+/* ------------------------------------------------------------------------- */
+/* Tactical basemap — MapLibre + PMTiles (Firenze), aligned with demo_player */
+/* ------------------------------------------------------------------------- */
+const TACTICAL_PMTILES_REMOTE = "https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles";
+const GEO_BOUNDS_300M = {
+  label: "Firenze Centro 300m x 300m",
+  southWest: [43.76825, 11.25393],
+  northEast: [43.77095, 11.25767],
+};
+
+function resolveTacticalPmtilesUrl() {
+  try {
+    const o = window.location?.origin;
+    if (o && o !== "null" && window.location?.protocol !== "file:") {
+      return `${o}/api/pmtiles-proxy`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return TACTICAL_PMTILES_REMOTE;
+}
+
+let tacticalPmtilesUrl = resolveTacticalPmtilesUrl();
+let tacticalBaseMap = null;
+let tacticalBaseMapReady = false;
+let tacticalPmtilesProtoInstalled = false;
+let tacticalPmtilesProtocol = null;
+let tacticalRoadSegments = [];
+let tacticalRoadNetworkReady = false;
+
+/** OSM road export (lite_sim firenze_300m_roads.json) + live PMTiles fallback */
+let roadExportBase = null;
+let ugvRoadNetwork = null;
+const roadRouteCache = new Map();
+
+function getTacticalGridDims() {
+  if (state?.map?.size) return state.map.size;
+  return [30, 30];
+}
+
+function tacticalLngLatToGrid(lng, lat) {
+  const [cols, rows] = getTacticalGridDims();
+  const west = GEO_BOUNDS_300M.southWest[1];
+  const east = GEO_BOUNDS_300M.northEast[1];
+  const north = GEO_BOUNDS_300M.northEast[0];
+  const south = GEO_BOUNDS_300M.southWest[0];
+  return {
+    x: ((lng - west) / (east - west)) * cols,
+    y: ((north - lat) / (north - south)) * rows,
+  };
+}
+
+function syncTacticalBasemapSize() {
+  const el = document.getElementById("tacticalBasemap");
+  if (!el || !canvas) return;
+  const w = Math.max(1, Math.floor(canvas.clientWidth));
+  const h = Math.max(1, Math.floor(canvas.clientHeight));
+  el.style.width = `${w}px`;
+  el.style.height = `${h}px`;
+  if (tacticalBaseMap) {
+    tacticalBaseMap.resize();
+    tacticalBaseMap.fitBounds(
+      [
+        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+      ],
+      { padding: 0, duration: 0 },
+    );
+  }
+}
+
+function makeTacticalBasemapStyle() {
+  return {
+    version: 8,
+    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+    sources: {
+      protomaps: {
+        type: "vector",
+        url: `pmtiles://${tacticalPmtilesUrl}`,
+        attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+      },
+    },
+    layers: [
+      {
+        id: "pm-mask",
+        source: "protomaps",
+        "source-layer": "mask",
+        type: "fill",
+        paint: { "fill-color": "#0f1726" },
+      },
+      {
+        id: "pm-earth",
+        source: "protomaps",
+        "source-layer": "earth",
+        type: "fill",
+        paint: { "fill-color": "#121d2e" },
+      },
+      {
+        id: "pm-water",
+        source: "protomaps",
+        "source-layer": "water",
+        type: "fill",
+        paint: { "fill-color": "#164969", "fill-opacity": 0.85 },
+      },
+      {
+        id: "pm-landuse",
+        source: "protomaps",
+        "source-layer": "landuse",
+        type: "fill",
+        paint: { "fill-color": "#1b2940", "fill-opacity": 0.72 },
+      },
+      {
+        id: "pm-buildings",
+        source: "protomaps",
+        "source-layer": "buildings",
+        type: "fill",
+        paint: {
+          "fill-color": "#445873",
+          "fill-opacity": 0.68,
+          "fill-outline-color": "#6d86a8",
+        },
+      },
+      {
+        id: "pm-roads",
+        source: "protomaps",
+        "source-layer": "roads",
+        type: "line",
+        paint: {
+          "line-color": "#a9bdd5",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 16, 3.2, 18, 5.6],
+          "line-opacity": 0.82,
+        },
+      },
+      {
+        id: "pm-road-labels",
+        source: "protomaps",
+        "source-layer": "roads",
+        type: "symbol",
+        filter: ["has", "name"],
+        layout: {
+          "symbol-placement": "line",
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9, 16, 11, 18, 13],
+          "text-padding": 2,
+        },
+        paint: {
+          "text-color": "#c9d6e7",
+          "text-halo-color": "#07101d",
+          "text-halo-width": 1.2,
+          "text-opacity": 0.76,
+        },
+      },
+    ],
+  };
+}
+
+function flattenTacticalRoadCoords(geometry) {
+  if (!geometry) return [];
+  if (geometry.type === "LineString") return [geometry.coordinates];
+  if (geometry.type === "MultiLineString") return geometry.coordinates;
+  return [];
+}
+
+function tacticalSegmentInMap(a, b) {
+  const [cols, rows] = getTacticalGridDims();
+  const margin = 1;
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxY = Math.max(a.y, b.y);
+  return maxX >= -margin && minX <= cols + margin && maxY >= -margin && minY <= rows + margin;
+}
+
+function scaleRoadSegmentsFromExport(data, toCols, toRows) {
+  if (!data?.segments?.length) return [];
+  const from = data.mapSize || [30, 30];
+  const fc = Math.max(1, from[0]);
+  const fr = Math.max(1, from[1]);
+  const sx = toCols / fc;
+  const sy = toRows / fr;
+  return data.segments.map((seg) => ({
+    a: { x: seg.a.x * sx, y: seg.a.y * sy },
+    b: { x: seg.b.x * sx, y: seg.b.y * sy },
+  }));
+}
+
+function tryUgvRoadNetworkFromLiveSegments() {
+  if (!state?.map?.size || !tacticalRoadSegments.length) return;
+  const [cols, rows] = state.map.size;
+  const segs = tacticalRoadSegments.map((s) => ({
+    a: { x: s.a.x, y: s.a.y },
+    b: { x: s.b.x, y: s.b.y },
+  }));
+  ugvRoadNetwork = new TacticalRoadNetwork(segs, [cols, rows], 0.55);
+}
+
+function refreshUgvRoadNetwork() {
+  if (!state?.map?.size) return;
+  const [cols, rows] = state.map.size;
+  ugvRoadNetwork = null;
+  if (roadExportBase?.segments?.length) {
+    const segs = scaleRoadSegmentsFromExport(roadExportBase, cols, rows);
+    ugvRoadNetwork = new TacticalRoadNetwork(segs, [cols, rows], 0.55);
+  }
+  if (!ugvRoadNetwork?.available && tacticalRoadSegments.length) {
+    tryUgvRoadNetworkFromLiveSegments();
+  }
+}
+
+function getBlockedCellCentersForRoads() {
+  if (!state?.map?.blocked_cells) return [];
+  return state.map.blocked_cells
+    .filter((b) => b.status === "blocked")
+    .map((b) => b.location);
+}
+
+function agentUsesRoadRouting(agent) {
+  if (!ugvRoadNetwork?.available) return false;
+  const t = String(agent.type || "").toLowerCase();
+  if (t === "drone") return false;
+  return t === "ground_rescue" || t === "ground_clear" || t === "ugv";
+}
+
+function moveAgentOnRoad(agent, targetCell, targetKey) {
+  if (!ugvRoadNetwork?.available) {
+    moveAgentToward(agent, targetCell);
+    return;
+  }
+  const speed = agent.speed || 1;
+  const blockedPts = getBlockedCellCentersForRoads();
+  const current = [agent.location[0], agent.location[1]];
+  const target = [targetCell[0], targetCell[1]];
+  const cached = roadRouteCache.get(agent.id);
+  const [nextPt, routeState] = ugvRoadNetwork.routeStep(
+    current,
+    target,
+    speed,
+    targetKey,
+    cached,
+    blockedPts,
+  );
+  roadRouteCache.set(agent.id, routeState);
+  agent.location = [roundCoord(nextPt[0]), roundCoord(nextPt[1])];
+}
+
+function rebuildTacticalRoadNetwork() {
+  if (!tacticalBaseMap || !tacticalBaseMapReady) return;
+  let features = [];
+  try {
+    features = tacticalBaseMap.querySourceFeatures("protomaps", { sourceLayer: "roads" });
+  } catch (err) {
+    console.warn("[tactical basemap] road query failed:", err);
+    return;
+  }
+  const segments = [];
+  for (const feature of features) {
+    for (const line of flattenTacticalRoadCoords(feature.geometry)) {
+      for (let i = 1; i < line.length; i += 1) {
+        const a = tacticalLngLatToGrid(line[i - 1][0], line[i - 1][1]);
+        const b = tacticalLngLatToGrid(line[i][0], line[i][1]);
+        if (tacticalSegmentInMap(a, b)) segments.push({ a, b });
+      }
+    }
+  }
+  if (segments.length) {
+    tacticalRoadSegments = segments;
+    tacticalRoadNetworkReady = true;
+    window.__arcSimulationRoadSegments = tacticalRoadSegments;
+  }
+  if (!ugvRoadNetwork?.available && tacticalRoadSegments.length && state?.map?.size) {
+    tryUgvRoadNetworkFromLiveSegments();
+  }
+}
+
+function installTacticalPmtilesProtocol() {
+  const ml = globalThis.maplibregl;
+  const Pm = globalThis.pmtiles;
+  if (!ml || !Pm) return;
+  if (!tacticalPmtilesProtoInstalled) {
+    tacticalPmtilesProtocol = new Pm.Protocol();
+    ml.addProtocol("pmtiles", tacticalPmtilesProtocol.tile);
+    tacticalPmtilesProtoInstalled = true;
+  }
+  tacticalPmtilesProtocol.add(new Pm.PMTiles(tacticalPmtilesUrl));
+}
+
+function initTacticalBasemap() {
+  const ml = globalThis.maplibregl;
+  const Pm = globalThis.pmtiles;
+  if (tacticalBaseMap || !ml || !Pm) return;
+  const mount = document.getElementById("tacticalBasemap");
+  if (!mount) return;
+
+  tacticalPmtilesUrl = resolveTacticalPmtilesUrl();
+  try {
+    installTacticalPmtilesProtocol();
+    tacticalBaseMap = new ml.Map({
+      container: mount,
+      style: makeTacticalBasemapStyle(),
+      bounds: [
+        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+      ],
+      fitBoundsOptions: { padding: 0, duration: 0 },
+      interactive: false,
+      attributionControl: false,
+    });
+    tacticalBaseMap.on("load", () => {
+      tacticalBaseMapReady = true;
+      tacticalBaseMap.fitBounds(
+        [
+          [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
+          [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
+        ],
+        { padding: 0, duration: 0 },
+      );
+      syncTacticalBasemapSize();
+    });
+    tacticalBaseMap.on("idle", rebuildTacticalRoadNetwork);
+    tacticalBaseMap.on("error", (e) => {
+      console.warn("[tactical basemap] map error:", e?.error || e);
+    });
+  } catch (err) {
+    console.warn("[tactical basemap] initialization failed:", err);
+  }
+}
+
+function wireTacticalBasemapResize() {
+  const frame = canvas?.closest(".canvas-frame");
+  if (!frame || typeof ResizeObserver === "undefined") return;
+  const ro = new ResizeObserver(() => syncTacticalBasemapSize());
+  ro.observe(frame);
+}
 
 let defaultScenario;
 
-fetch("/simulation/scenario_001.json")
-  .then((response) => response.json())
-  .then((scenario) => {
+function resolveScenarioFilename() {
+  const params = new URLSearchParams(window.location.search);
+  let raw = (params.get("scenario") || params.get("s") || "scenario_001.json").trim();
+  if (/^\d+$/.test(raw)) {
+    raw = `scenario_${String(parseInt(raw, 10)).padStart(3, "0")}.json`;
+  } else if (raw && !raw.endsWith(".json")) {
+    raw = `${raw}.json`;
+  }
+  if (!raw || /[\\/]/.test(raw) || raw.startsWith(".")) {
+    raw = "scenario_001.json";
+  }
+  return raw;
+}
+
+applyFleetDialogueCotDom();
+
+const scenarioFile = resolveScenarioFilename();
+Promise.all([
+  fetch(`/simulation/${encodeURIComponent(scenarioFile)}`).then((response) => {
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response.json();
+  }),
+  fetch("/simulation/firenze_300m_roads.json")
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null),
+  fetch("/simulation/fleet-dialogue-cot.json")
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null),
+])
+  .then(([scenario, roadsData, fleetCot]) => {
+    if (fleetCot && typeof fleetCot.version === "number") {
+      fleetDialogueCot = fleetCot;
+    } else {
+      fleetDialogueCot = FLEET_DIALOGUE_COT_BUILTIN;
+    }
+    applyFleetDialogueCotDom();
+    roadExportBase = roadsData;
     defaultScenario = scenario;
     initialScenario = synthesizeScenario(scenario, readConfig());
     init3D(initialScenario);
     reset();
     setupCommandCenter();
+  })
+  .catch((err) => {
+    console.error(`[simulation] Failed to load /simulation/${scenarioFile}:`, err);
+    const id = document.getElementById("briefText");
+    if (id) {
+      id.textContent = `Could not load scenario file “${scenarioFile}”. Use ?scenario=scenario_002.json or check the console.`;
+    }
   });
 
 function clone(value) {
@@ -79,16 +742,34 @@ function reset() {
   state.timestep = 0;
   state.rescued = 0;
   lastTickAt = performance.now();
+
+  // ── 1. Clear all route/targeting state ────────────────────────────────────
+  roadRouteCache.clear();
   trails.clear();
   for (const agent of state.agents) {
     agent.prevLocation = [...agent.location];
+    agent._rescueTarget = null;       // clear committed-target lock for every agent
     trails.set(agent.id, [{ x: agent.location[0], y: agent.location[1] }]);
   }
+
+  // ── 2. Rebuild road network FIRST so generatePlan / executeActions are consistent
+  refreshUgvRoadNetwork();
+  if (tacticalBaseMapReady) rebuildTacticalRoadNetwork();
+
+  // ── 3. Generate fresh plan (now road network is ready)
   survivalHistory.length = 0;
   recordSurvivalSample();
+  plan = generatePlan();
+
+  // ── 4. Clear UI feeds and render new state
+  resetDecisionFeeds();
+  cotFeedPrependedStep = -999;
+  lastCotFeedWallMs = 0;
+  cotFeedTranscriptChunks.length = 0;
+  if (cotCarouselTrack) cotCarouselTrack.innerHTML = "";
   const log = document.getElementById("eventLog");
   if (log) log.innerHTML = "";
-  plan = generatePlan();
+
   stopAuto();
   renderOnce();
   startRafLoop();
@@ -164,6 +845,8 @@ function updateVictims() {
       victim.hp = Math.max(0, victim.hp - victim.damage_per_step);
       if (victim.hp === 0) victim.status = "dead";
     }
+    // Keep survival_pct in sync — mirrors demo_player per-victim baseline
+    victim.survival_pct = parseFloat(((victim.hp / victim.hp_max) * 100).toFixed(1));
   }
 }
 
@@ -188,21 +871,55 @@ function executeActions(actions) {
 
     if (action.target?.startsWith("V")) {
       const victim = state.victims.find((item) => item.id === action.target);
-      moveAgentToward(agent, victim.location);
-      const canRescue = agent.type === "ground_rescue" || agent.type === "ground_armored";
-      if (canRescue && victim.status === "trapped" && sameCell(agent.location, victim.location)) {
+      if (!victim) continue;
+      const rk = `${action.agent}|${action.task}|${action.target}`;
+      if (agentUsesRoadRouting(agent)) {
+        moveAgentOnRoad(agent, victim.location, rk);
+      } else {
+        moveAgentToward(agent, victim.location);
+      }
+      // Drone overhead confirms an unknown victim's location → mark as trapped
+      if (agent.type === "drone" && victim.status === "unknown"
+          && nearCell(agent.location, victim.location, 3)) {
+        victim.status = "trapped";
+      }
+      // Ground unit within reach → rescue (covers ground_rescue, ground_armored, and clearers acting as rescue)
+      const isGroundRescuer = agent.type === "ground_rescue"
+        || agent.type === "ground_armored"
+        || agent.type === "ground_clear";
+      if (isGroundRescuer && (victim.status === "trapped" || victim.status === "unknown")
+          && nearCell(agent.location, victim.location, 1.5)) {
         victim.status = "rescued";
         state.rescued += 1;
+        agent._rescueTarget = null;  // release lock so agent picks next target
       }
-    } else if (action.target === "Relay-R1") {
-      moveAgentToward(agent, [14, 7]);
+    } else if (action.target?.startsWith("Relay-")) {
+      // Dynamic relay anchor — position stored on the action by generatePlan
+      const relayPos = action._relayPos ?? [
+        Math.round(state.map.size[0] * 0.47),
+        Math.round(state.map.size[1] * 0.37),
+      ];
+      const rk = `${action.agent}|${action.task}|${action.target}`;
+      if (agentUsesRoadRouting(agent)) {
+        moveAgentOnRoad(agent, relayPos, rk);
+      } else {
+        moveAgentToward(agent, relayPos);
+      }
     } else if (action.target?.startsWith("K")) {
       const blockade = state.map.blocked_cells.find((item) => item.id === action.target);
-      moveAgentToward(agent, blockade.location);
+      if (!blockade) continue;
+      const rk = `${action.agent}|${action.task}|${action.target}`;
+      if (agentUsesRoadRouting(agent)) {
+        moveAgentOnRoad(agent, blockade.location, rk);
+      } else {
+        moveAgentToward(agent, blockade.location);
+      }
     }
 
-    const drain = agent.type === "drone" ? 2 : agent.type === "balloon" ? 0.2 : 1;
-    agent.battery = Math.max(0, agent.battery - drain);
+    // Drain rates aligned with demo_player (timeline.json):
+    //   UAV: 0.001/step on 0-1 scale → 0.1/step on 0-100 scale
+    //   UGV: near-zero in demo_player  → 0.05/step (keeps display alive without fast depletion)
+    agent.battery = Math.max(0, agent.battery - (agent.type === "drone" ? 0.1 : 0.05));
   }
 }
 
@@ -211,11 +928,13 @@ function moveAgentToward(agent, target) {
   const [x, y] = agent.location;
   const dx = target[0] - x;
   const dy = target[1] - y;
-  const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.05) return;
+  // Move exactly `speed` cells per step along the straight-line vector.
+  // Old formula used speed/Chebyshev_steps which made agents ~10× too slow.
   const speed = agent.speed || 1;
-  const nx = x + Math.sign(dx) * Math.min(Math.abs(dx), speed / steps);
-  const ny = y + Math.sign(dy) * Math.min(Math.abs(dy), speed / steps);
-  agent.location = [roundCoord(nx), roundCoord(ny)];
+  const scale = Math.min(speed, dist) / dist;
+  agent.location = [roundCoord(x + dx * scale), roundCoord(y + dy * scale)];
 }
 
 function roundCoord(value) {
@@ -226,69 +945,142 @@ function sameCell(a, b) {
   return Math.round(a[0]) === b[0] && Math.round(a[1]) === b[1];
 }
 
+/** Road-routing stops at the nearest road node, which may be up to ~1 cell away
+ *  from an off-road victim. Use this for rescue trigger checks. */
+function nearCell(a, b, radius = 1.5) {
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  return Math.sqrt(dx * dx + dy * dy) <= radius;
+}
+
 function generatePlan() {
-  const candidates = rankVictims();
-  const top = candidates[0];
-  const v2 = candidates[1] || candidates.find((candidate) => candidate.id === "V2");
-  const criticalBlockade = state.map.blocked_cells.find((blockade) => blockade.status === "blocked");
-  const needsRelay = top && top.communication_status !== "available" && top.score > 0.62;
+  const candidates  = rankVictims();
+  const allBlockades = state.map.blocked_cells.filter((b) => b.status === "blocked");
 
-  const firstByRole = (role) => state.agents.find((a) => a.role === role);
-  const firstByType = (type) => state.agents.find((a) => a.type === type);
+  // Group ALL configured agents by role — no longer capped at "first of each type"
+  const scouts   = state.agents.filter((a) => a.role === "scout");
+  const relays   = state.agents.filter((a) => a.role === "relay");
+  const rescues  = state.agents.filter((a) => a.role === "rescue" || a.type === "ground_rescue");
+  const clearers = state.agents.filter((a) => a.role === "clear_blockade" || a.type === "ground_clear");
 
-  const scout = firstByRole("scout") || firstByType("drone");
-  // Balloons are the canonical comm relay; fall back to a relay-role drone, then any spare drone.
-  const relay = firstByType("balloon") || firstByRole("relay") || state.agents.filter((a) => a.type === "drone")[1] || scout;
-  // If the top victim is in a hazard zone, prefer the armored rescuer over the soft UGV.
-  const topVictim = state.victims.find((v) => v.id === (candidates[0] && candidates[0].id));
-  const topInRisk = topVictim ? locationRisk(topVictim.location, "ground_rescue") > 0.3 : false;
-  const armoredRescuer = state.agents.find((a) => a.type === "ground_armored");
-  const rescue = (topInRisk && armoredRescuer)
-    ? armoredRescuer
-    : (firstByRole("rescue") || firstByType("ground_rescue") || firstByType("ground_armored") || firstByType("ground_clear"));
-  const clearer = firstByRole("clear_blockade") || firstByType("ground_clear");
+  const offlineVics = candidates.filter((c) => c.communication_status !== "available");
+  const needsRelay  = offlineVics.length > 0 && (offlineVics[0]?.score ?? 0) > 0.3;
 
-  const missionPlan = [];
-  if (top && scout) {
+  const missionPlan       = [];
+  const assignedVictimIds = new Set();   // prevent two ground units targeting same victim
+
+  // ── SCOUTS ─────────────────────────────────────────────────────────────────
+  // Each scout drone confirms a different top-priority victim.
+  // Excess scouts (more drones than victims) hover the last known victim.
+  scouts.forEach((scout, i) => {
+    const target = candidates[i] || candidates[candidates.length - 1];
+    if (!target) return;
     missionPlan.push({
       agent: scout.id,
       task: "aerial_confirmation",
-      target: top.id,
+      target: target.id,
       safety_note: "Keep flight path above blocked roads and avoid prolonged hover over collapse-risk cells."
     });
-  }
-  if (needsRelay && relay && relay.id !== scout?.id) {
+  });
+
+  // ── RELAYS ──────────────────────────────────────────────────────────────────
+  // Each relay drone is placed at a dynamically computed anchor along the
+  // base→offline-victim vector, forming a daisy-chain for multi-hop coverage.
+  // If no offline victims exist, redirect relay drones as additional scouts.
+  relays.forEach((relay, i) => {
+    if (!needsRelay) {
+      // Re-purpose as scout for victims beyond current scout coverage
+      const target = candidates[scouts.length + i] || candidates[candidates.length - 1];
+      if (target) {
+        missionPlan.push({
+          agent: relay.id,
+          task: "aerial_confirmation",
+          target: target.id,
+          safety_note: "No relay needed — acting as supplementary scout."
+        });
+      }
+      return;
+    }
+    const anchor = computeRelayAnchor(i, offlineVics);
     missionPlan.push({
       agent: relay.id,
       task: "deploy_relay",
-      target: "Relay-R1",
+      target: `Relay-R${i + 1}`,
+      _relayPos: anchor,
       safety_note: "Hold relay coverage between base and the weak communication zone."
     });
-  }
-  if (v2 && rescue) {
+  });
+
+  // ── RESCUE UGVs ────────────────────────────────────────────────────────────
+  // Each rescue UGV locks onto a unique victim. Lock persists across steps so
+  // UGVs don't constantly swap targets as the ranking shifts.
+  // An emergency override fires when a *different* victim has < 3 steps left.
+  rescues.forEach((rescue) => {
+    const committed      = rescue._rescueTarget;
+    const committedStill = committed
+      && !assignedVictimIds.has(committed)
+      && candidates.find((c) => c.id === committed && c.survival_steps > 0);
+    const emergency = candidates.find(
+      (c) => c.survival_steps < 3 && !assignedVictimIds.has(c.id) && c.id !== committed
+    );
+    const nextBest = candidates.find((c) => !assignedVictimIds.has(c.id));
+
+    const target = emergency || committedStill || nextBest;
+    if (!target) return;
+
+    assignedVictimIds.add(target.id);
+    rescue._rescueTarget = target.id;
     missionPlan.push({
       agent: rescue.id,
-      task: "vibration_audio_verification",
-      target: v2.id,
+      task: "ground_rescue",
+      target: target.id,
       safety_note: "Use the safer corridor and do not enter blocked or extreme collapse-risk cells."
     });
-  }
-  if (criticalBlockade && clearer) {
+  });
+
+  // ── CLEARERS ───────────────────────────────────────────────────────────────
+  // Each clearer tackles a different blockade.
+  // Once all blockades are cleared, clearers switch to supplementary rescue.
+  clearers.forEach((clearer, i) => {
+    const blockade = allBlockades[i];
+    if (blockade) {
+      missionPlan.push({
+        agent: clearer.id,
+        task: "clear_blockade",
+        target: blockade.id,
+        safety_note: "Clear one blockade at a time; parallel clearing is not counted as extra benefit."
+      });
+      return;
+    }
+    // No blockade assigned — act as ground rescue
+    const committed  = clearer._rescueTarget;
+    const committedStill = committed
+      && !assignedVictimIds.has(committed)
+      && candidates.find((c) => c.id === committed && c.survival_steps > 0);
+    const nextBest = candidates.find((c) => !assignedVictimIds.has(c.id));
+    const target = committedStill || nextBest;
+    if (!target) return;
+
+    assignedVictimIds.add(target.id);
+    clearer._rescueTarget = target.id;
     missionPlan.push({
       agent: clearer.id,
-      task: "clear_blockade",
-      target: criticalBlockade.id,
-      safety_note: "Clear one blockade at a time; parallel clearing is not counted as extra benefit."
+      task: "ground_rescue",
+      target: target.id,
+      safety_note: "No blockades remaining — assisting rescue operations."
     });
-  }
+  });
 
+  const top = candidates[0] ?? null;
   return {
-    commander_briefing: makeBrief(candidates, needsRelay, criticalBlockade),
-    priority_order: candidates.map((candidate) => candidate.id),
+    commander_briefing: makeBrief(candidates, needsRelay && relays.length > 0, allBlockades[0] ?? null),
+    priority_order: candidates.map((c) => c.id),
     mission_plan: missionPlan,
     human_confirmation_required: [
-      top ? `Approve aerial confirmation of ${top.id}.` : "No active victim needs confirmation.",
-      needsRelay ? "Confirm relay drone deployment before high-risk close approach." : "Relay not required for the current top target."
+      top ? `Approve ground approach to ${top.id}.` : "No active victims.",
+      needsRelay
+        ? `Confirm relay deployment to cover ${offlineVics.length} offline victim(s).`
+        : "Relay not required for current targets."
     ]
   };
 }
@@ -305,7 +1097,8 @@ function rankVictims() {
       const distance = manhattan(state.map.base, victim.location);
       const normalizedDistance = Math.min(1, distance / 40);
       const accessDifficulty = bestAgent.pathRisk + (bestAgent.blocked ? 0.35 : 0);
-      const energyFeasible = bestAgent.agent.battery - distance * 0.8 >= 15 ? 1 : 0;
+      // Threshold lowered to 5% to stay meaningful with the slower drain rate
+      const energyFeasible = bestAgent.agent.battery - distance * 0.8 >= 5 ? 1 : 0;
       const score =
         0.35 * urgency(victim, maxSurvival) +
         0.25 * lifeSignalConfidence(victim) +
@@ -317,6 +1110,8 @@ function rankVictims() {
         id: victim.id,
         score: round(score),
         hp: Math.round(victim.hp),
+        hp_max: victim.hp_max,
+        survival_pct: victim.survival_pct,
         survival_steps: round(estimatedSurvivalSteps(victim)),
         life_signal_confidence: round(lifeSignalConfidence(victim)),
         best_agent: bestAgent.agent.id,
@@ -356,7 +1151,8 @@ function chooseBestAgent(victim) {
 }
 
 function lifeSignalConfidence(victim) {
-  return 0.4 * victim.thermal_signal + 0.3 * victim.audio_signal + 0.3 * victim.vibration_signal;
+  // Aligned with demo_player: only thermal_signal is tracked per victim
+  return victim.thermal_signal;
 }
 
 function estimatedSurvivalSteps(victim) {
@@ -379,6 +1175,33 @@ function isBlockedNear(location) {
   return state.map.blocked_cells.some((blockade) => blockade.status === "blocked" && manhattan(blockade.location, location) <= 3);
 }
 
+/**
+ * Compute a relay drone anchor position for relay index `idx`.
+ * Places each relay along the base→offline-victim vector at increasing depth,
+ * so multiple relays form a communication daisy-chain.
+ * @param {number} idx  - relay index (0 = closest to base, 1 = further, …)
+ * @param {Array}  offlineVicCandidates - ranked candidates with comm !== "available"
+ */
+function computeRelayAnchor(idx, offlineVicCandidates) {
+  const base = state.map.base;
+  const [cols, rows] = state.map.size;
+  const vCand = offlineVicCandidates[idx % Math.max(1, offlineVicCandidates.length)];
+  const vObj  = vCand && state.victims.find((v) => v.id === vCand.id);
+  if (!vObj) {
+    // Fallback: spread anchors toward map centre
+    return [
+      Math.round(cols * (0.40 + idx * 0.12)),
+      Math.round(rows * (0.35 + idx * 0.10)),
+    ];
+  }
+  // Place relay at 55 % (relay-0), 70 % (relay-1), … of the base→victim vector
+  const t = Math.min(0.55 + idx * 0.18, 0.80);
+  return [
+    Math.round(base[0] + (vObj.location[0] - base[0]) * t),
+    Math.round(base[1] + (vObj.location[1] - base[1]) * t),
+  ];
+}
+
 function communicationStatus(location) {
   const baseDistance = distance(location, state.map.base);
   const inDeadZone = state.map.communication_dead_zones.some((zone) => distance(location, zone.center) <= zone.radius);
@@ -393,6 +1216,379 @@ function makeBrief(candidates, needsRelay, blockade) {
   const relayText = needsRelay ? " Because communication is weak, Drone-2 should establish Relay-R1 before close approach." : "";
   const blockadeText = blockade ? ` UGV-2 should continue clearing ${blockade.id} to open the ground corridor.` : " Ground corridors are currently open enough for the next move.";
   return `${top.id} is the current priority because it combines a short survival window, strong life-signal confidence, and acceptable access cost. Drone-1 should confirm the site from above while UGV-1 verifies the safest reachable target.${relayText}${blockadeText}`;
+}
+
+function agentDialogueClass(agent) {
+  if (!agent) return "mesh";
+  return agent.type === "drone" ? "drone" : "ugv";
+}
+
+function pickDialoguePeer(action, agents) {
+  const others = agents.filter((a) => a.id !== action.agent);
+  if (!others.length) return null;
+  if (action.task === "aerial_confirmation") {
+    return others.find((a) => a.role === "rescue" || a.type === "ground_rescue")
+      || others.find((a) => a.role === "relay")
+      || others[0];
+  }
+  if (action.task === "deploy_relay") {
+    return others.find((a) => a.role === "scout" || a.type === "drone") || others[0];
+  }
+  if (action.task === "vibration_audio_verification" || action.task === "ground_rescue") {
+    return others.find((a) => a.type === "drone") || others[0];
+  }
+  if (action.task === "clear_blockade") {
+    return others.find((a) => a.type === "drone") || others[0];
+  }
+  return others[0];
+}
+
+function batteryPctLabel(agent) {
+  if (!agent) return "—";
+  const b = agent.battery;
+  return `${Math.round(b <= 1 ? b * 100 : b)}%`;
+}
+
+function buildFleetDialogueSlides(plan) {
+  const dDlg = fleetDialogueCot?.dialogue ?? FLEET_DIALOGUE_COT_BUILTIN.dialogue;
+  const standby = dDlg.standby ?? FLEET_DIALOGUE_COT_BUILTIN.dialogue.standby;
+  if (!state || !plan) {
+    return [
+      {
+        title: standby.title,
+        turns: [{ kind: "cot", who: standby.who, lines: [...(standby.lines || [])] }],
+      },
+    ];
+  }
+
+  const t = state.timestep;
+  const padT = `T+${String(t).padStart(3, "0")}`;
+  const candidates = rankVictims();
+  const agents = state.agents;
+  const activeBlock = state.map.blocked_cells.find((b) => b.status === "blocked");
+  const slides = [];
+
+  const orch = dDlg.orchestrator;
+  const rankingLine = candidates.length
+    ? `${orch.rankingPrefix}${candidates
+        .map((c) => interpolate(orch.rankingItemTemplate, { padT, id: c.id, score: c.score.toFixed(2) }))
+        .join(", ")}${orch.rankingSuffix}`
+    : orch.noHypotheses;
+
+  const orchLines = [interpolate(orch.heartbeatFused, { padT }), rankingLine];
+  if (candidates[0]) {
+    const top = candidates[0];
+    orchLines.push(
+      interpolate(orch.leadVictim, {
+        padT,
+        id: top.id,
+        survivalPct: top.survival_pct,
+        survivalSteps: top.survival_steps,
+        comm: top.communication_status,
+        bestAgent: top.best_agent,
+      })
+    );
+  }
+  orchLines.push(
+    interpolate(orch.policy, { padT, taskCount: plan.mission_plan?.length ?? 0 })
+  );
+
+  slides.push({
+    title: interpolate(orch.slideTitleTemplate, { padT }),
+    turns: [{ kind: "cot", who: orch.who, lines: orchLines }],
+  });
+
+  const actions = plan.mission_plan || [];
+  const ag = dDlg.agentSlide;
+  const slideMax = cotFeedSlideMax();
+  let shown = 0;
+  for (const action of actions) {
+    if (shown >= slideMax) break;
+    const agent = agents.find((a) => a.id === action.agent);
+    const peer = pickDialoguePeer(action, agents);
+    const cls = agentDialogueClass(agent);
+    const taskHuman = action.task.replace(/_/g, " ");
+    const loc = agent?.location?.map((n) => Math.round(n)).join(", ") || "—";
+    const cotLines = [
+      interpolate(ag.goal, { padT, agent: action.agent, taskHuman, target: action.target }),
+      interpolate(cls === "drone" ? ag.nodeUav : ag.nodeUgv, {
+        padT,
+        agent: action.agent,
+        battery: batteryPctLabel(agent),
+        loc,
+      }),
+    ];
+    if (action.safety_note) {
+      cotLines.push(interpolate(ag.riskNote, { padT, note: action.safety_note }));
+    }
+    cotLines.push(
+      interpolate(ag.meshAck, { padT, peer: peer?.id || ag.peerFallback })
+    );
+
+    const radioTo = peer?.id || ag.radioToAllCall;
+    const radioOut =
+      cls === "drone"
+        ? interpolate(ag.radioDroneOut, { padT, agent: action.agent, radioTo, target: action.target })
+        : interpolate(ag.radioUgvOut, { padT, agent: action.agent, radioTo, target: action.target });
+
+    let radioIn;
+    if (peer && peer.id !== action.agent) {
+      const pr = peer.role || peer.type || "node";
+      radioIn =
+        pr === "relay"
+          ? interpolate(ag.radioInRelay, { padT, peerId: peer.id, agent: action.agent })
+          : interpolate(ag.radioInOther, { padT, peerId: peer.id, agent: action.agent });
+    } else {
+      radioIn = interpolate(ag.meshAwait, { padT, agent: action.agent });
+    }
+
+    slides.push({
+      title: interpolate(ag.slideTitleTemplate, { padT, agent: action.agent, taskHuman }),
+      turns: [
+        {
+          kind: "cot",
+          who: interpolate(ag.whoTemplate, { padT, agent: action.agent }),
+          lines: cotLines,
+        },
+        { kind: "msg", who: action.agent, to: radioTo, cls, text: radioOut },
+        {
+          kind: "msg",
+          who: peer?.id || "mesh",
+          to: action.agent,
+          cls: peer ? agentDialogueClass(peer) : "mesh",
+          text: radioIn,
+        },
+      ],
+    });
+    shown += 1;
+  }
+
+  const hasClearTask = actions.some((a) => a.task === "clear_blockade");
+  const tn = dDlg.trafficNote;
+  const ms = dDlg.meshStandby;
+  if (activeBlock && !hasClearTask) {
+    slides.push({
+      title: interpolate(tn.slideTitleTemplate, { padT }),
+      turns: [
+        {
+          kind: "cot",
+          who: tn.who,
+          lines: [
+            interpolate(tn.lineBlock, { padT, blockId: activeBlock.id }),
+            tn.lineRecommend,
+          ],
+        },
+      ],
+    });
+  } else if (slides.length === 1) {
+    slides.push({
+      title: interpolate(ms.slideTitleTemplate, { padT }),
+      turns: [
+        {
+          kind: "msg",
+          who: ms.who,
+          to: ms.to,
+          cls: "mesh",
+          text: interpolate(ms.text, { padT }),
+        },
+      ],
+    });
+  }
+
+  return slides;
+}
+
+function createCotTurnElement(turn) {
+  const wrap = document.createElement("div");
+  wrap.className = `cot-turn ${turn.kind} ${turn.cls || ""}`.trim();
+  const feedUi = fleetDialogueCot?.ui?.feed ?? FLEET_DIALOGUE_COT_BUILTIN.ui.feed;
+
+  if (turn.kind === "cot") {
+    // ── CoT reasoning block ────────────────────────────────────────
+    const lab = document.createElement("div");
+    lab.className = "cot-turn-label";
+    const dot = document.createElement("span");
+    dot.className = "cot-label-dot";
+    lab.append(dot, feedUi.chainOfThoughtLabel || "Chain-of-thought");
+
+    const head = document.createElement("div");
+    head.className = "cot-turn-head";
+    head.textContent = turn.who;
+
+    const bub = document.createElement("div");
+    bub.className = "cot-bubble";
+    const ul = document.createElement("ul");
+    ul.className = "cot-line-list";
+    for (const line of turn.lines || []) {
+      const li = document.createElement("li");
+      li.textContent = line;
+      ul.appendChild(li);
+    }
+    bub.appendChild(ul);
+    wrap.append(lab, head, bub);
+
+  } else {
+    // ── Radio comms message ────────────────────────────────────────
+    const head = document.createElement("div");
+    head.className = "cot-turn-head";
+
+    const csOut = document.createElement("span");
+    csOut.className = "cot-callsign cot-callsign-out";
+    csOut.textContent = turn.who;
+
+    const arrow = document.createElement("span");
+    arrow.className = "cot-arrow";
+    arrow.textContent = feedUi.radioArrow || "▶";
+
+    const csIn = document.createElement("span");
+    csIn.className = "cot-callsign-in";
+    csIn.textContent = turn.to;
+
+    head.append(csOut, arrow, csIn);
+
+    const bub = document.createElement("div");
+    bub.className = "cot-bubble";
+    bub.textContent = turn.text;
+
+    wrap.append(head, bub);
+  }
+  return wrap;
+}
+
+function createCotFeedBlock(timestep, slides) {
+  const block = document.createElement("div");
+  block.className = "cot-feed-block";
+  block.dataset.timestep = String(timestep);
+  const padT = `T+${String(timestep).padStart(3, "0")}`;
+  const feedUi = fleetDialogueCot?.ui?.feed ?? FLEET_DIALOGUE_COT_BUILTIN.ui.feed;
+
+  // Header bar with live dot + optional LIVE badge
+  const head = document.createElement("header");
+  head.className = "cot-feed-block-head";
+
+  const dot = document.createElement("span");
+  dot.className = "cot-live-dot";
+  head.appendChild(dot);
+
+  const label = document.createElement("span");
+  label.textContent = interpolate(feedUi.blockHeadTemplate, { padT });
+  head.appendChild(label);
+
+  const liveBadge = document.createElement("span");
+  liveBadge.className = "cot-live-badge";
+  liveBadge.textContent = feedUi.liveBadge || "● LIVE";
+  head.appendChild(liveBadge);
+
+  block.appendChild(head);
+
+  for (const slide of slides) {
+    const sec = document.createElement("section");
+    sec.className = "cot-feed-section";
+
+    const ht = document.createElement("h4");
+    ht.className = "cot-feed-section-title";
+    ht.textContent = slide.title;
+    sec.appendChild(ht);
+
+    for (const t of slide.turns) sec.appendChild(createCotTurnElement(t));
+    block.appendChild(sec);
+  }
+  return block;
+}
+
+function formatSlidesTranscriptChunk(timestep, slides) {
+  const padT = `T+${String(timestep).padStart(3, "0")}`;
+  const tr = fleetDialogueCot?.ui?.transcript ?? FLEET_DIALOGUE_COT_BUILTIN.ui.transcript;
+  const lines = [interpolate(tr.sectionHeaderTemplate, { padT })];
+  const bullet = tr.cotBulletPrefix ?? "  • ";
+  for (const s of slides) {
+    lines.push(`## ${s.title}`);
+    for (const turn of s.turns) {
+      if (turn.kind === "cot") {
+        lines.push(interpolate(tr.cotBracketTemplate, { padT, who: turn.who }));
+        for (const ln of turn.lines || []) lines.push(bullet + ln);
+      } else {
+        lines.push(
+          interpolate(tr.msgLineTemplate, {
+            padT,
+            who: turn.who,
+            to: turn.to,
+            text: turn.text,
+          })
+        );
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+function updateCotFeedMeta(slides) {
+  const el = cotSlideLabel;
+  if (!el || !state) return;
+  const panel = fleetDialogueCot?.ui?.panel ?? FLEET_DIALOGUE_COT_BUILTIN.ui.panel;
+  const metaT =
+    fleetDialogueCot?.ui?.meta?.latestTemplate ??
+    FLEET_DIALOGUE_COT_BUILTIN.ui.meta.latestTemplate;
+  const padT = `T+${String(state.timestep).padStart(3, "0")}`;
+  const head = slides[0]?.title ?? panel?.slideLabelDefault ?? "—";
+  el.textContent = interpolate(metaT, { padT, head });
+}
+
+/** Scroll viewport so the newest heartbeat (last in DOM, column-reverse stack) is at the top. */
+function flushScrollToLatestCot() {
+  const vp = cotCarouselViewport;
+  const track = cotCarouselTrack;
+  if (!vp || !track?.lastElementChild) return;
+  const latest = track.lastElementChild;
+  const snap = () => {
+    latest.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
+  };
+  snap();
+  requestAnimationFrame(() => {
+    snap();
+    requestAnimationFrame(snap);
+  });
+}
+
+function scrollLatestCotIntoView(smooth = true) {
+  const track = cotCarouselTrack;
+  if (!track?.lastElementChild) return;
+  track.lastElementChild.scrollIntoView({
+    block: "start",
+    inline: "nearest",
+    behavior: smooth ? "smooth" : "instant",
+  });
+}
+
+function updateFleetDialogueCarousel(plan, slidesPrebuilt = null) {
+  if (!cotCarouselTrack || !state) return;
+  if (cotFeedPrependedStep === state.timestep) return;
+  if (timer) {
+    const now = performance.now();
+    if (now - lastCotFeedWallMs < COT_FEED_AUTO_MIN_MS) return;
+    lastCotFeedWallMs = now;
+  }
+  cotFeedPrependedStep = state.timestep;
+  const slides = slidesPrebuilt ?? buildFleetDialogueSlides(plan);
+  const block = createCotFeedBlock(state.timestep, slides);
+  cotCarouselTrack.appendChild(block);
+  // CSS animation defined in styles.css; JS animate() is redundant and conflicts
+  block.style.animation = "cot-block-enter 420ms cubic-bezier(0.22,1,0.36,1) both";
+  while (cotCarouselTrack.children.length > cotFeedMaxBlocks()) {
+    cotCarouselTrack.removeChild(cotCarouselTrack.firstChild);
+  }
+  cotFeedTranscriptChunks.unshift(formatSlidesTranscriptChunk(state.timestep, slides));
+  while (cotFeedTranscriptChunks.length > cotFeedMaxBlocks()) cotFeedTranscriptChunks.pop();
+  requestAnimationFrame(() => {
+    flushScrollToLatestCot();
+  });
+}
+
+function formatCotTranscript() {
+  const sep =
+    fleetDialogueCot?.ui?.transcript?.chunkSeparator ??
+    FLEET_DIALOGUE_COT_BUILTIN.ui.transcript.chunkSeparator;
+  return cotFeedTranscriptChunks.join(sep);
 }
 
 function renderOnce() {
@@ -416,9 +1612,9 @@ function drawMap(t) {
 }
 
 function drawGrid(cols, rows, cell) {
-  ctx.fillStyle = "#04060a";
+  ctx.fillStyle = tacticalBaseMapReady ? "rgba(4, 6, 10, 0.40)" : "#04060a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+  ctx.strokeStyle = tacticalBaseMapReady ? "rgba(93, 255, 180, 0.06)" : "rgba(255, 255, 255, 0.04)";
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
     ctx.beginPath();
@@ -432,7 +1628,8 @@ function drawGrid(cols, rows, cell) {
     ctx.lineTo(canvas.width, i * cell);
     ctx.stroke();
   }
-  ctx.fillStyle = "rgba(60, 80, 110, 0.32)";
+  const arterialAlpha = tacticalBaseMapReady ? 0.14 : 0.32;
+  ctx.fillStyle = `rgba(60, 80, 110, ${arterialAlpha})`;
   for (let y = 2; y < rows; y += 5) ctx.fillRect(0, y * cell + cell * 0.28, canvas.width, cell * 0.44);
   for (let x = 2; x < cols; x += 6) ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, canvas.height);
 }
@@ -577,8 +1774,7 @@ function drawVictims(cell, t) {
     ctx.fillText(victim.id, px - 8, py - cell * 0.42);
 
     if (victim.status === "trapped" || victim.status === "unknown") {
-      const maxHp = 10000;
-      const pct = Math.max(0, Math.min(1, victim.hp / maxHp));
+      const pct = Math.max(0, Math.min(1, victim.survival_pct / 100));
       const barW = cell * 0.7;
       const barH = 3;
       const barX = px - barW / 2;
@@ -896,15 +2092,15 @@ function circle(location, radius, cell, fill) {
 }
 
 function emitToast(type, description) {
-  const style = TOAST_STYLES[type] || TOAST_STYLES.default;
+  const cfg = TOAST_CFG[type] || TOAST_CFG.default;
   const layer = document.getElementById("toastLayer");
   if (!layer) return;
   const el = document.createElement("div");
   el.className = "toast";
-  el.style.background = style.bg;
-  el.style.borderLeftColor = style.color;
-  el.style.color = style.color;
-  el.textContent = description;
+  el.style.background = cfg.bg;
+  el.style.borderLeftColor = cfg.color;
+  el.style.color = cfg.color;
+  el.textContent = `${cfg.icon} ${description}`;
   layer.appendChild(el);
   el.animate(
     [
@@ -917,17 +2113,19 @@ function emitToast(type, description) {
     const fade = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 360, fill: "forwards" });
     fade.onfinish = () => el.remove();
   }, 2600);
-  pushEventLog(type, description, style.color);
+  pushEventLog(type, description);
 }
 
-function pushEventLog(type, description, color) {
+function pushEventLog(type, description) {
   const log = document.getElementById("eventLog");
   if (!log) return;
+  const cfg = TOAST_CFG[type] || TOAST_CFG.default;
   const row = document.createElement("div");
   row.className = "event-row";
-  row.style.borderLeftColor = color;
-  row.style.color = color;
-  row.textContent = `t${state ? state.timestep : 0} · ${description}`;
+  row.style.borderLeftColor = cfg.color;
+  row.style.color = cfg.color;
+  const t = state ? state.timestep : 0;
+  row.textContent = `${cfg.icon} [T${String(t).padStart(3, "0")}] ${description}`;
   log.prepend(row);
   while (log.children.length > MAX_EVENT_LOG) log.lastChild.remove();
 }
@@ -938,17 +2136,6 @@ function popCounter(el, val) {
   void el.offsetWidth;
   el.classList.add("pop");
   setTimeout(() => el.classList.remove("pop"), 260);
-}
-
-function typewriter(el, text, speed = 18) {
-  clearInterval(typewriterTimer);
-  el.textContent = "";
-  let i = 0;
-  typewriterTimer = setInterval(() => {
-    el.textContent += text.charAt(i);
-    i += 1;
-    if (i >= text.length) clearInterval(typewriterTimer);
-  }, speed);
 }
 
 function renderPanels() {
@@ -963,7 +2150,7 @@ function renderPanels() {
       <strong>${candidate.id}</strong>
       <div>
         <div class="bar" style="--value: ${candidate.score * 100}%"><i></i></div>
-        <span>HP ${candidate.hp} / surv ${candidate.survival_steps} / ${candidate.communication_status}</span>
+        <span>${candidate.survival_pct}% · ${candidate.survival_steps}t · ${candidate.communication_status}</span>
       </div>
       <b class="tag">${candidate.score.toFixed(2)}</b>
     </div>
@@ -980,15 +2167,18 @@ function renderPanels() {
     </div>
   `).join("");
 
-  typewriter(briefText, plan.commander_briefing);
-  missionJson.textContent = JSON.stringify(plan, null, 2);
+  syncThinkingFeed(plan);
+  syncBriefingFeed(plan);
+  const fleetDialogueSlides = buildFleetDialogueSlides(plan);
+  updateCotFeedMeta(fleetDialogueSlides);
+  updateFleetDialogueCarousel(plan, fleetDialogueSlides);
   updateCommandKpis(candidates);
   drawSurvivalChart();
   updateAgentCards();
 }
 
 function drawSurvivalChart() {
-  if (!chartCtx || !survivalChart) return;
+  if (!chartCtx || !survivalChart || !state) return;
   const dpr = window.devicePixelRatio || 1;
   const cssW = survivalChart.clientWidth || 380;
   const cssH = survivalChart.clientHeight || 160;
@@ -1001,10 +2191,14 @@ function drawSurvivalChart() {
   const H = cssH;
   chartCtx.clearRect(0, 0, W, H);
 
+  const VIC_BAND = Math.min(52, Math.max(36, Math.floor(H * 0.22)));
+  const trendH = H - VIC_BAND;
+  const plotH = Math.max(24, trendH - 24);
+
   chartCtx.strokeStyle = "rgba(130,200,255,0.12)";
   chartCtx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i += 1) {
-    const y = (H - 20) * (i / 4) + 4;
+    const y = 4 + plotH * (i / 4);
     chartCtx.beginPath();
     chartCtx.moveTo(28, y);
     chartCtx.lineTo(W - 8, y);
@@ -1013,53 +2207,109 @@ function drawSurvivalChart() {
   chartCtx.fillStyle = "rgba(130,200,255,0.55)";
   chartCtx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
   chartCtx.fillText("100%", 2, 9);
-  chartCtx.fillText("50%", 4, (H - 20) / 2 + 7);
-  chartCtx.fillText("0%", 8, H - 20 + 4);
+  chartCtx.fillText("50%", 4, 4 + plotH / 2);
+  chartCtx.fillText("0%", 8, 4 + plotH + 3);
 
-  if (survivalHistory.length < 1) return;
-  const n = survivalHistory.length;
-  const xAt = (i) => 28 + (W - 36) * (n === 1 ? 0 : i / (n - 1));
-  const yAt = (pct) => (H - 20) * (1 - pct) + 4;
+  if (survivalHistory.length >= 1) {
+    const n = survivalHistory.length;
+    const xAt = (i) => 28 + (W - 36) * (n === 1 ? 0 : i / (n - 1));
+    const yAt = (pct) => 4 + plotH * (1 - pct);
+    const baselineY = trendH - 12;
 
-  chartCtx.beginPath();
-  chartCtx.moveTo(xAt(0), H - 16);
-  for (let i = 0; i < n; i += 1) chartCtx.lineTo(xAt(i), yAt(survivalHistory[i].alive));
-  chartCtx.lineTo(xAt(n - 1), H - 16);
-  chartCtx.closePath();
-  chartCtx.fillStyle = "rgba(93,255,180,0.18)";
-  chartCtx.fill();
+    chartCtx.beginPath();
+    chartCtx.moveTo(xAt(0), baselineY);
+    for (let i = 0; i < n; i += 1) chartCtx.lineTo(xAt(i), yAt(survivalHistory[i].alive));
+    chartCtx.lineTo(xAt(n - 1), baselineY);
+    chartCtx.closePath();
+    chartCtx.fillStyle = "rgba(93,255,180,0.18)";
+    chartCtx.fill();
 
-  chartCtx.beginPath();
-  for (let i = 0; i < n; i += 1) {
-    const x = xAt(i);
-    const y = yAt(survivalHistory[i].alive);
-    if (i === 0) chartCtx.moveTo(x, y);
-    else chartCtx.lineTo(x, y);
+    chartCtx.beginPath();
+    for (let i = 0; i < n; i += 1) {
+      const x = xAt(i);
+      const y = yAt(survivalHistory[i].alive);
+      if (i === 0) chartCtx.moveTo(x, y);
+      else chartCtx.lineTo(x, y);
+    }
+    chartCtx.strokeStyle = "#5dffb4";
+    chartCtx.lineWidth = 1.5;
+    chartCtx.shadowBlur = 6;
+    chartCtx.shadowColor = "#5dffb4";
+    chartCtx.stroke();
+    chartCtx.shadowBlur = 0;
+
+    chartCtx.beginPath();
+    for (let i = 0; i < n; i += 1) {
+      const x = xAt(i);
+      const y = yAt(survivalHistory[i].rescued);
+      if (i === 0) chartCtx.moveTo(x, y);
+      else chartCtx.lineTo(x, y);
+    }
+    chartCtx.strokeStyle = "#82c8ff";
+    chartCtx.lineWidth = 1.2;
+    chartCtx.setLineDash([4, 3]);
+    chartCtx.stroke();
+    chartCtx.setLineDash([]);
   }
-  chartCtx.strokeStyle = "#5dffb4";
-  chartCtx.lineWidth = 1.5;
-  chartCtx.shadowBlur = 6;
-  chartCtx.shadowColor = "#5dffb4";
-  chartCtx.stroke();
-  chartCtx.shadowBlur = 0;
 
+  chartCtx.strokeStyle = "rgba(130,200,255,0.14)";
+  chartCtx.lineWidth = 1;
   chartCtx.beginPath();
-  for (let i = 0; i < n; i += 1) {
-    const x = xAt(i);
-    const y = yAt(survivalHistory[i].rescued);
-    if (i === 0) chartCtx.moveTo(x, y);
-    else chartCtx.lineTo(x, y);
-  }
-  chartCtx.strokeStyle = "#82c8ff";
-  chartCtx.lineWidth = 1.2;
-  chartCtx.setLineDash([4, 3]);
+  chartCtx.moveTo(6, trendH - 2);
+  chartCtx.lineTo(W - 6, trendH - 2);
   chartCtx.stroke();
-  chartCtx.setLineDash([]);
+
+  drawVictimSurvivalBars(chartCtx, W, H, trendH, VIC_BAND);
 
   chartCtx.fillStyle = "#5dffb4";
-  chartCtx.fillText("alive", W - 78, H - 4);
+  chartCtx.font = "9px 'JetBrains Mono', 'Courier New', monospace";
+  chartCtx.fillText("alive", W - 130, H - 4);
   chartCtx.fillStyle = "#82c8ff";
-  chartCtx.fillText("rescued", W - 42, H - 4);
+  chartCtx.fillText("rescued", W - 90, H - 4);
+  chartCtx.fillStyle = "rgba(130,200,255,0.6)";
+  chartCtx.fillText("HP", W - 46, H - 4);
+}
+
+function drawVictimSurvivalBars(ctx, W, H, trendH, vicBand) {
+  const victims = state.victims;
+  if (!victims.length) return;
+  const top = trendH + 6;
+  const barMaxH = Math.max(8, vicBand - 26);
+  const n = victims.length;
+  const barW = Math.max(2, Math.min(34, (W - 32) / (n + 1)));
+  const gap = barW * 0.2;
+  victims.forEach((v, i) => {
+    // Use per-victim hp_max baseline — matches demo_player survival_pct semantics
+    let pct = 0;
+    if (v.status === "rescued") pct = 1;
+    else if (v.status === "dead") pct = 0;
+    else pct = clamp(v.survival_pct / 100, 0, 1);
+
+    const barH = Math.max(2, barMaxH * pct);
+    const x = 12 + i * (barW + gap) + gap;
+    const y = top + barMaxH - barH;
+
+    const color =
+      v.status === "rescued"
+        ? "#5dffb4"
+        : v.status === "dead"
+          ? "#555555"
+          : (() => {
+              const r = Math.round(255 * (1 - pct));
+              const g = Math.round(200 * pct);
+              return `rgb(${r},${g},0)`;
+            })();
+
+    ctx.fillStyle = color;
+    ctx.shadowBlur = 5;
+    ctx.shadowColor = color;
+    ctx.fillRect(x, y, Math.max(1.5, barW - gap * 0.6), barH);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "rgba(130,200,255,0.5)";
+    ctx.font = "8px 'JetBrains Mono', 'Courier New', monospace";
+    ctx.fillText(v.id.replace(/^Victim-?/i, "").slice(0, 4) || v.id, x, top + barMaxH + 11);
+  });
 }
 
 function manhattan(a, b) {
@@ -1099,6 +2349,7 @@ function stopAuto() {
 
 function startAuto() {
   clearInterval(timer);
+  lastCotFeedWallMs = performance.now() - COT_FEED_AUTO_MIN_MS;
   timer = setInterval(step, Math.max(80, MS_PER_TICK / speedMultiplier));
   setRunLabel("PAUSE");
 }
@@ -2549,7 +3800,7 @@ function readConfig() {
     battery: num("cfgBat", 75),
     victims: num("cfgVictim", 5),
     severity: num("cfgSeverity", 50) / 100,
-    survivalWindow: num("cfgWindow", 160),
+    survivalWindow: num("cfgWindow", 200),
     blockades: num("cfgBlock", 2),
     fires: num("cfgFire", 1),
     collapses: num("cfgCollapse", 1),
@@ -2636,23 +3887,23 @@ function synthesizeScenario(base, cfg) {
     mark(loc[0], loc[1], 1);
   }
 
-  // Victims — survival window controls hp/damage ratio
+  // Victims — HP system aligned with demo_player (timeline.json):
+  //   hp_max ∈ [5000, 10000), damage_per_step ∈ [40, 100)
+  //   survival_pct = hp / hp_max × 100  (individual baseline, not cross-victim)
   const victims = [];
   for (let i = 0; i < cfg.victims; i += 1) {
     const loc = pickCell(4);
     const sev = cfg.severity * (0.6 + rng() * 0.8);
-    const damage = Math.round(20 + sev * 80);
-    const window = Math.max(40, cfg.survivalWindow + (rng() - 0.5) * 80);
-    const hp = Math.round(damage * window / 10);
+    const hp_max = VICTIM_HP_MIN + Math.floor(rng() * VICTIM_HP_RANGE);
+    const damage_per_step = Math.round(VICTIM_DMG_MIN + sev * VICTIM_DMG_RANGE);
     victims.push({
       id: `V${i + 1}`,
       location: loc,
-      hp,
-      damage_per_step: damage,
-      buriedness: Math.round(15 + rng() * 60),
+      hp: hp_max,
+      hp_max,
+      survival_pct: 100,
+      damage_per_step,
       thermal_signal: round(0.25 + rng() * 0.7),
-      audio_signal: round(0.2 + rng() * 0.7),
-      vibration_signal: round(0.2 + rng() * 0.7),
       status: rng() < 0.85 ? "trapped" : "unknown"
     });
     mark(loc[0], loc[1], 1);
@@ -2839,11 +4090,23 @@ function teardown3D() {
 
 function rebuildSimulation(cfg) {
   stopAuto();
+
+  // Wipe all runtime per-agent state so stale locks/routes from old fleet don't bleed in
+  if (state?.agents) {
+    state.agents.forEach((a) => { a._rescueTarget = null; });
+  }
+  roadRouteCache.clear();
+
   teardown3D();
   initialScenario = synthesizeScenario(defaultScenario, cfg);
   init3D(initialScenario);
+
+  // reset() now: rebuilds road network → generates fresh plan → renders
   reset();
   updateMissionLabels(cfg);
+
+  // Re-render panels immediately so CoT/Decision Hub reflect the new fleet plan
+  if (state && plan) renderOnce();
 }
 
 /* ── KPI updates ───────────────────────────────────────────────────────── */
@@ -2973,16 +4236,19 @@ function setupCommandCenter() {
     });
   });
 
-  // Copy mission JSON
+  // Copy fleet dialogue transcript (Gemma 4 CoT + mesh)
   const copyBtn = $("copyJson");
   if (copyBtn) copyBtn.addEventListener("click", async () => {
     try {
-      await navigator.clipboard.writeText(missionJson.textContent || "");
-      emitToast("default", "mission JSON copied");
+      await navigator.clipboard.writeText(formatCotTranscript() || "");
+      emitToast("default", "Fleet transcript copied");
     } catch {
       emitToast("default", "clipboard unavailable");
     }
   });
+
+  const jumpCot = $("cotJumpLatest");
+  if (jumpCot) jumpCot.addEventListener("click", () => scrollLatestCotIntoView(true));
 
   // Clear event log
   const clearBtn = $("clearLog");
@@ -3003,6 +4269,10 @@ function setupCommandCenter() {
   const bw = $("bwBar");
   if (bw) bw.className = "bw lvl-5";
 }
+
+initTacticalBasemap();
+wireTacticalBasemapResize();
+requestAnimationFrame(() => syncTacticalBasemapSize());
 
 /* ──────────────────────────────────────────────────────────────────────────
    Onboarding tour

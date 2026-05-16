@@ -59,6 +59,32 @@ function StatCell({
   );
 }
 
+function ModelAssumptionCard({
+  title,
+  items,
+}: {
+  title: string;
+  items: [string, string][];
+}) {
+  return (
+    <div className="rounded-md border border-white/10 bg-[#0e1014] px-5 py-4">
+      <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-arc-accent">
+        {title}
+      </div>
+      <dl className="mt-3 space-y-2">
+        {items.map(([label, value]) => (
+          <div key={label} className="grid gap-1 border-t border-white/5 pt-2 first:border-0 first:pt-0">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.16em] text-arc-muted">
+              {label}
+            </dt>
+            <dd className="text-sm leading-relaxed text-arc-fg/85">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 function HudPanel({
   kicker,
   title,
@@ -206,6 +232,33 @@ export default function CostPage() {
             <StatCell label="Lives saved / disaster" value="~2,000" sub="vs 105 human-only" accent />
             <StatCell label="Cost per life saved" value="$4,900" sub="vs $783K human-only" />
             <StatCell label="Rescue rate uplift" value="×20" sub="1% → 20% rescued" accent />
+          </Reveal>
+
+          <Reveal className="mt-6 grid gap-3 md:grid-cols-3">
+            <ModelAssumptionCard
+              title="Scenario assumptions"
+              items={[
+                ["City model", "1,000,000 people, ~200 km² built area, M7.0 earthquake scenario."],
+                ["Entrapment baseline", "1% trapped population assumption, yielding ~10,000 people needing search and triage."],
+                ["Golden window", "0-72h survival window, with rescue value concentrated in the first 24-48h."],
+              ]}
+            />
+            <ModelAssumptionCard
+              title="Deployment model"
+              items={[
+                ["Warehouse layout", "4 warehouses split the city into 50 km² sectors, keeping far-edge UAV transit under ~5 km."],
+                ["Per warehouse", "15 UAV, 8 UGV, 20 Balloon platforms, and 2 × 50 kW generators."],
+                ["City total", "60 UAV, 32 UGV, 80 Balloon platforms, and 8 generators for full-city coverage."],
+              ]}
+            />
+            <ModelAssumptionCard
+              title="Impact calculation"
+              items={[
+                ["Human-only baseline", "3 heavy USAR teams + 10 light teams search ~10.5 km² and rescue ~105 people in 72h."],
+                ["ARC-assisted result", "ARC completes first full-city scan in ~24h and guides rescue toward confirmed life signals."],
+                ["Main KPI", "1,500-2,500 actual rescues in 72h; page uses ~2,000 midpoint and ~1,900 net additional lives."],
+              ]}
+            />
           </Reveal>
         </div>
       </section>
@@ -683,6 +736,33 @@ export default function CostPage() {
             <div className="shrink-0 font-mono text-5xl font-medium tabular-nums text-arc-accent">
               ×20
             </div>
+          </div>
+        </Reveal>
+
+        <Reveal className="mt-5 rounded-md border border-white/10 bg-[#0e1014] px-5 py-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-arc-accent">
+            Calculation footnotes
+          </div>
+          <div className="mt-3 grid gap-3 text-sm leading-relaxed text-arc-muted md:grid-cols-2">
+            <p>
+              <span className="text-arc-fg">$5.8M total investment</span> comes from
+              ¥42.324M full-city deployment cost: 4 warehouse equipment sets, central
+              control, communications infrastructure, installation, and commissioning.
+            </p>
+            <p>
+              <span className="text-arc-fg">$4,900 per life saved</span> uses a 10-year
+              TCO of ¥68.1M divided by ~1,900 net additional lives in one major disaster.
+            </p>
+            <p>
+              <span className="text-arc-fg">×57 search efficiency</span> compares ARC
+              24h full-city first scan capacity (~200 km²) against human-only 24h search
+              coverage (~3.5 km²).
+            </p>
+            <p>
+              <span className="text-arc-fg">20% rescue rate</span> is modeled as
+              ~2,000 actual rescues out of ~10,000 trapped people, versus ~105 for the
+              human-only baseline.
+            </p>
           </div>
         </Reveal>
 

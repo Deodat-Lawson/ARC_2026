@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "feedMaxBlocks": 28,
+  "feedSlideMax": 6,
+  "ui": {
+    "panel": {
+      "kicker": "Gemma 4 · Mesh agents",
+      "title": "Fleet dialogue & CoT",
+      "toolsAriaLabel": "Transcript",
+      "jumpTitle": "Jump to latest heartbeat (top)",
+      "jumpAriaLabel": "Jump to latest",
+      "copyTitle": "Copy full transcript",
+      "copyAriaLabel": "Copy transcript",
+      "metaSep": "·",
+      "slideLabelDefault": "—",
+      "autoHint": "scroll for history · latest at top"
+    },
+    "feed": {
+      "chainOfThoughtLabel": "Chain-of-thought",
+      "blockHeadTemplate": "${padT} · Gemma 4 fleet heartbeat",
+      "liveBadge": "● LIVE",
+      "radioArrow": "▶"
+    },
+    "transcript": {
+      "sectionHeaderTemplate": "# ${padT} · fleet dialogue",
+      "chunkSeparator": "\n\n---\n\n",
+      "cotBulletPrefix": "  • ",
+      "cotBracketTemplate": "[CoT · ${who}]",
+      "msgLineTemplate": "[${who} → ${to}] ${text}"
+    },
+    "meta": {
+      "latestTemplate": "Latest ${padT} · ${head}"
+    }
+  },
+  "dialogue": {
+    "standby": {
+      "title": "Standby",
+      "who": "Gemma 4 · edge",
+      "lines": ["Waiting for simulation state."]
+    },
+    "orchestrator": {
+      "slideTitleTemplate": "${padT} · Gemma 4 orchestrator · CoT",
+      "who": "Gemma 4 · mesh orchestrator",
+      "heartbeatFused": "${padT}: fused local grid + hazard layers ingested for this heartbeat.",
+      "rankingPrefix": "Surface ranking: ",
+      "rankingSuffix": ".",
+      "rankingItemTemplate": "${id}(${score})",
+      "noHypotheses": "No open hypotheses — patrol and logistics preservation mode.",
+      "leadVictim": "Lead ${id}: survival ${survivalPct}% (${survivalSteps}t), comm ${comm}, suggested mover ${bestAgent}.",
+      "policy": "Policy: emit ${taskCount} bound tasks after Gemma-4 safety gates."
+    },
+    "agentSlide": {
+      "slideTitleTemplate": "${padT} · ${agent} · ${taskHuman}",
+      "whoTemplate": "Gemma 4@${agent}",
+      "goal": "Goal: ${taskHuman} → ${target}.",
+      "nodeUav": "Node ${agent} (UAV): battery ${battery}, cell (${loc}).",
+      "nodeUgv": "Node ${agent} (UGV): battery ${battery}, cell (${loc}).",
+      "riskNote": "Risk note: ${note}",
+      "meshAck": "Require mesh ACK from ${peer} before committing motion.",
+      "peerFallback": "subscribers",
+      "radioToAllCall": "all-call",
+      "radioDroneOut": "${agent} → ${radioTo}: eyes on ${target}; holding safe offset orbit. Request ground corridor status before ingress.",
+      "radioUgvOut": "${agent} → ${radioTo}: advancing on routed cells toward ${target}; need air picture refresh each leg.",
+      "radioInRelay": "${peerId} → ${agent}: acknowledged — extending relay bubble; watch handoff latency.",
+      "radioInOther": "${peerId} → ${agent}: acknowledged — syncing posture; will shadow your vector.",
+      "meshAwait": "${padT} · mesh: await ARQ from ${agent}; no immediate peer on this hop."
+    },
+    "trafficNote": {
+      "slideTitleTemplate": "${padT} · Traffic note",
+      "who": "Gemma 4 · traffic agent",
+      "lineBlock": "${blockId} still blocks ground flow — convoy risk elevated until clearance is allocated.",
+      "lineRecommend": "Recommend re-running allocator when aerial confidence on the lane improves."
+    },
+    "meshStandby": {
+      "slideTitleTemplate": "${padT} · mesh standby",
+      "who": "mesh",
+      "to": "fleet",
+      "text": "No new task edges this heartbeat — autonomous patrol, battery-balanced loiter, and watch dormant thermal tiles."
+    }
+  }
+}

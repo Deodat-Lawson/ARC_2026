@@ -68,7 +68,7 @@ export function TeamSection() {
   return (
     <section
       id="team"
-      className="border-t border-white/5 px-6 py-24 md:px-10 md:py-32"
+      className="arc-home-deck arc-home-deck--team border-t border-white/5 px-6 py-24 md:px-10 md:py-32"
     >
       <div
         ref={ref}

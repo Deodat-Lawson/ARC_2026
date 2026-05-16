@@ -14,7 +14,8 @@ The repository combines the **`Complete-Workflow-v1.0`** Python core (`arc_core`
 | `app/`, `components/` (root) | Next.js 15: marketing (R3F hero) + **`/lite`** (`lib/lite-sim/`) + **`/demo-player`** (`lib/demo-player/`, MapLibre + PMTiles) |
 | `public/lite/` | **`scenario_canvas_lite.json`** for `/lite` |
 | `public/demo-player/` | **`timeline.json`** for `/demo-player` |
-| `ARC_2026-arc-lite-2d-demo/` | **`scenario_canvas_lite.json`**, **`scenario_*.json`**, **`lite_sim/`**, **`demo_player/`** (archived static player files), **`scripts/`**, optional **`public/`** staging |
+| `arc_core/simulation/data/` | Canonical **`scenario_001.json`**, **`scenario_*.json`**, **`scenario_large.json`**, demo outputs (`earthquake_demo.json`, etc.) for Python / `timeline_generator` |
+| `ARC_2026-arc-lite-2d-demo/` | **`lite_sim/`**, archived **`demo_player/`**, **`scripts/`**, optional **`public/`** staging |
 | `demo_player/` (root) | Optional static playback: serve repo root over HTTP with `timeline.json` beside this folder |
 | `requirements.txt` | Python dependencies |
 | `pytest.ini` | Test discovery under `arc_core/tests` |
@@ -98,7 +99,7 @@ Open http://localhost:3000 for the marketing site. **`/lite`** — 2D Lite sim (
 
 The interactive map + FPV view lives on **`/lite`** in the root app (same dev server as above).
 
-The default scenario file is **`public/lite/scenario_canvas_lite.json`** (keep in sync with **`ARC_2026-arc-lite-2d-demo/scenario_canvas_lite.json`** if you edit the demo data). Larger **`scenario_001.json`** and friends remain under **`ARC_2026-arc-lite-2d-demo/`** for Python / timeline tooling.
+The default scenario file is **`public/lite/scenario_canvas_lite.json`**. Larger **`scenario_001.json`** and friends for Python / timeline tooling live under **`arc_core/simulation/data/`** (and copies under **`public/simulation/`** for the Mission Command static page; select via `?scenario=…`).
 
 Do not commit **`node_modules/`** or **`.next/`**.
 

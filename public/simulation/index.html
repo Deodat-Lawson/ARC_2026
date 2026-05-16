@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
     <link rel="stylesheet" href="/simulation/styles.css?v=pov-focus">
     <script type="importmap">
       {
@@ -203,8 +204,8 @@
                 <input type="range" id="cfgSeverity" min="0" max="100" step="5" value="50">
               </label>
               <label class="cfg-row">
-                <span>Avg survival window <b id="cfgWindowLabel">160s</b></span>
-                <input type="range" id="cfgWindow" min="60" max="300" step="10" value="160">
+                <span>Avg survival window <b id="cfgWindowLabel">200s</b></span>
+                <input type="range" id="cfgWindow" min="60" max="300" step="10" value="200">
               </label>
             </div>
           </details>
@@ -275,11 +276,13 @@
               </div>
               <div class="vp-tags">
                 <span class="panel-tag">REPLAY · LIVE</span>
+                <span class="panel-tag" id="geoGridBadge" title="Protomaps vector basemap · Firenze (ODbL)">300M GEO</span>
                 <span class="panel-tag accent" id="gridBadge">30 × 30</span>
               </div>
             </header>
             <div id="toastLayer" class="toast-layer"></div>
             <div class="canvas-frame">
+              <div id="tacticalBasemap" aria-hidden="true"></div>
               <canvas id="simCanvas" width="720" height="720" aria-label="2D rescue simulation map"></canvas>
               <div class="canvas-scanlines" aria-hidden="true"></div>
               <div class="canvas-corners" aria-hidden="true">
@@ -340,13 +343,13 @@
               </div>
               <span class="panel-tag">AUTO</span>
             </header>
-            <p id="briefText" class="brief-body"></p>
+            <div id="briefText" class="brief-body" aria-live="polite"></div>
           </article>
 
           <article class="vp vp-trend panel">
             <header class="vp-head compact">
               <div>
-                <span class="kicker">Trend · 60s window</span>
+                <span class="kicker">Fleet posture · rolling window</span>
                 <h2>Survival Curve</h2>
               </div>
             </header>
@@ -354,21 +357,78 @@
           </article>
 
           <article class="vp vp-mission panel">
-            <header class="vp-head compact">
+            <header class="vp-head compact vp-mission-head">
               <div>
-                <span class="kicker">Output · Plan stream</span>
-                <h2>Mission Plan · JSON</h2>
+                <span class="kicker" id="cotPanelKicker">Gemma 4 · Mesh agents</span>
+                <h2 id="cotPanelTitle">Fleet dialogue &amp; CoT</h2>
               </div>
-              <button type="button" id="copyJson" class="ico" title="Copy to clipboard" aria-label="Copy JSON">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-              </button>
+              <div class="cot-carousel-tools" role="group" aria-label="Transcript">
+                <button type="button" id="cotJumpLatest" class="ico tiny" title="Jump to latest heartbeat (top)" aria-label="Jump to latest">↑</button>
+                <button type="button" id="copyJson" class="ico" title="Copy full transcript" aria-label="Copy transcript">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                </button>
+              </div>
             </header>
-            <pre id="missionJson"></pre>
+            <div
+              class="cot-info-block"
+              id="cotInfoBlock"
+              aria-label="Fleet dialogue and chain-of-thought feed"
+            >
+              <p id="cotSlideMeta" class="cot-slide-meta">
+                <span id="cotSlideLabel">—</span><span class="cot-meta-sep" id="cotMetaSep">·</span
+                ><span id="cotAutoHint" class="cot-auto-hint">scroll for history · latest at top</span>
+              </p>
+              <div
+                class="cot-carousel-viewport"
+                id="cotCarouselViewport"
+                role="region"
+                aria-label="Scrollable dialogue blocks"
+              >
+                <div class="cot-carousel-track cot-feed-stack" id="cotCarouselTrack" aria-live="polite"></div>
+              </div>
+            </div>
           </article>
         </section>
 
         <!-- ──── RIGHT RAIL · OPS BOARD ──── -->
         <aside class="cc-rail cc-rail-r" aria-label="Operations board">
+          <section class="rail-section rail-decision">
+            <header class="rail-section-head">
+              <div>
+                <span class="kicker">Allocator · Chain-of-thought</span>
+                <h2>Decision Hub</h2>
+              </div>
+            </header>
+            <div id="thinkingText" class="thinking-feed" aria-live="polite"></div>
+          </section>
+
+          <section class="rail-section rail-legend">
+            <header class="rail-section-head compact-head">
+              <div>
+                <span class="kicker">Legend</span>
+                <h2>Fleet &amp; sites</h2>
+              </div>
+            </header>
+            <div class="fleet-legend-mini" aria-label="Map legend">
+              <div class="fleet-legend-row">
+                <span class="fleet-dot" style="background:var(--info);box-shadow:0 0 6px rgba(130,200,255,.55)"></span>
+                <span>UAV — scout / relay</span>
+              </div>
+              <div class="fleet-legend-row">
+                <span class="fleet-dot" style="background:var(--accent);box-shadow:0 0 6px var(--accent-glow)"></span>
+                <span>UGV — rescue &amp; clearance</span>
+              </div>
+              <div class="fleet-legend-row">
+                <span class="fleet-dot fleet-dot-square" style="background:#2a3e58"></span>
+                <span>Road corridor (tactical)</span>
+              </div>
+              <div class="fleet-legend-row">
+                <span class="fleet-dot" style="background:#ff8a8a;box-shadow:0 0 5px rgba(255,138,138,.45)"></span>
+                <span>Victim / survivor</span>
+              </div>
+            </div>
+          </section>
+
           <section class="rail-section">
             <header class="rail-section-head">
               <div>
@@ -474,6 +534,8 @@
       </div>
     </aside>
 
+    <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
     <script type="module" src="/simulation/app.js"></script>
   </body>
 </html>

@@ -4,7 +4,7 @@ A.R.C. Scenario Builder — 交互式受灾场景生成器
 用法:
     python -m arc_core.simulation.scenario_builder                  # 交互模式
     python -m arc_core.simulation.scenario_builder --preset flood   # 预设场景
-    python -m arc_core.simulation.scenario_builder --output ARC_2026-arc-lite-2d-demo/scenario_002.json
+    python -m arc_core.simulation.scenario_builder --output arc_core/simulation/data/scenario_002.json
 
 支持的预设: earthquake (默认) | flood | fire | landslide
 """
@@ -16,7 +16,7 @@ import json
 import random
 from pathlib import Path
 
-from arc_core.paths import REPO_ROOT
+from arc_core.paths import SIMULATION_DATA_DIR
 
 # ---------------------------------------------------------------------------
 # 可调参数说明 (所有参数均有默认值，可按需覆盖)
@@ -359,8 +359,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output", type=Path,
-        default=REPO_ROOT
-                / "ARC_2026-arc-lite-2d-demo" / "scenario_002.json",
+        default=SIMULATION_DATA_DIR / "scenario_002.json",
         help="输出路径",
     )
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
