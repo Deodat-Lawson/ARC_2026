@@ -535,8 +535,9 @@ async function fetchRelayGamma(droneMsg, betaMsg, contextMsg, requestId) {
 async function probeLmStudio() {
   setAiStatusBadge(null);
   try {
-    const data = await callGemmaChat("Orchestrator", "Reply with exactly: OK", { stream: false });
-    const ok = !data.fallback && /ok/i.test(data.content || "");
+    const res = await fetch(AI_ENDPOINT, { method: "GET", cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    const ok = res.ok && data.ok === true;
     setAiStatusBadge(ok);
     return ok;
   } catch {

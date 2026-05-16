@@ -2,8 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+/** When set (e.g. http://127.0.0.1:8787/v1), all chat traffic uses LiteRT Gemma 4 E4B (scripts/litert_openai_server.py). */
+const LITERT_OPENAI_BASE_URL = process.env.LITERT_OPENAI_BASE_URL?.replace(/\/$/, "");
+
 const LMSTUDIO_BASE_URL =
   process.env.LMSTUDIO_BASE_URL?.replace(/\/$/, "") || "http://localhost:1234/v1";
+
+function upstreamChatBaseUrl(): string {
+  return LITERT_OPENAI_BASE_URL || LMSTUDIO_BASE_URL;
+}
+
+function litertHealthUrl(): string | null {
+  if (!LITERT_OPENAI_BASE_URL) return null;
+  const root = LITERT_OPENAI_BASE_URL.replace(/\/v1\/?$/i, "");
+  return `${root}/health`;
+}
 
 const AGENT_PROMPTS: Record<string, string> = {
   Drone_Alpha:
@@ -65,18 +78,19 @@ async function upstreamChat(
   messages: ChatMessage[],
   stream: boolean
 ): Promise<Response> {
+  const base = upstreamChatBaseUrl();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
-    const res = await fetch(`${LMSTUDIO_BASE_URL}/chat/completions`, {
+    const res = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer lm-studio",
       },
       body: JSON.stringify({
-        model: "local-model",
+        model: LITERT_OPENAI_BASE_URL ? "gemma-4-E4B-it-litertlm" : "local-model",
         messages,
         temperature: 0.4,
         stream,
@@ -86,6 +100,66 @@ async function upstreamChat(
     return res;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export async function GET(): Promise<NextResponse> {
+  const health = litertHealthUrl();
+  if (health) {
+    try {
+      const r = await fetch(health, { cache: "no-store" });
+      const body = (await r.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        backend?: string;
+        model_path?: string;
+      };
+      if (r.ok && body.ok === true) {
+        return NextResponse.json({
+          ok: true,
+          backend: "litert",
+          model_path: body.model_path,
+        });
+      }
+      return NextResponse.json(
+        { ok: false, backend: "litert", error: body.error || r.statusText },
+        { status: 503 }
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Health check failed";
+      return NextResponse.json({ ok: false, backend: "litert", error: msg }, { status: 503 });
+    }
+  }
+
+  const base = LMSTUDIO_BASE_URL;
+  try {
+    const r = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer lm-studio",
+      },
+      body: JSON.stringify({
+        model: "local-model",
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        temperature: 0,
+        max_tokens: 8,
+        stream: false,
+      }),
+    });
+    if (!r.ok) {
+      return NextResponse.json(
+        { ok: false, backend: "lm-studio", error: `HTTP ${r.status}` },
+        { status: 503 }
+      );
+    }
+    const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = data.choices?.[0]?.message?.content ?? "";
+    const ok = /ok/i.test(text);
+    return NextResponse.json({ ok, backend: "lm-studio" }, { status: ok ? 200 : 503 });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "LM Studio unreachable";
+    return NextResponse.json({ ok: false, backend: "lm-studio", error: msg }, { status: 503 });
   }
 }
 
@@ -123,10 +197,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (!upstream.ok) {
       const errText = await upstream.text().catch(() => "");
+      const label = LITERT_OPENAI_BASE_URL ? "LiteRT bridge" : "LM Studio";
       return NextResponse.json(
         {
           fallback: true,
-          error: `LM Studio error ${upstream.status}`,
+          error: `${label} error ${upstream.status}`,
           detail: errText.slice(0, 200),
         },
         { status: 502 }
