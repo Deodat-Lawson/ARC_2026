@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { TacticalRoadNetwork } from "./road-network.js";
 
 const canvas = document.querySelector("#simCanvas");
@@ -35,6 +36,11 @@ const world = {
   riskMeshes: new Map(),
   baseMesh: null,
   groundGrid: null,
+  horizonSilhouette: null,
+  scenarioBuildingsGroup: null,
+  roadsGroup: null,
+  smokePuffs: [],
+  fireGlows: [],
   initialized: false
 };
 
@@ -3511,6 +3517,577 @@ document.addEventListener("keydown", (e) => {
    3D first-person view
    ────────────────────────────────────────────────────────────────────────── */
 
+function hash01(x, y, salt = 0) {
+  return Math.abs(Math.sin((x + salt * 1.7) * 12.9898 + (y + salt * 0.7) * 78.233) * 43758.5) % 1;
+}
+
+function computeRoadCells(scenario) {
+  const cells = new Set();
+  const roads = scenario?.map?.roads || [];
+  for (const road of roads) {
+    const pts = road.points || [];
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const steps = Math.max(Math.abs(dx), Math.abs(dy));
+      for (let s = 0; s <= steps; s += 1) {
+        const t = steps === 0 ? 0 : s / steps;
+        const cx = Math.round(a[0] + dx * t);
+        const cy = Math.round(a[1] + dy * t);
+        cells.add(`${cx},${cy}`);
+      }
+    }
+  }
+  return cells;
+}
+
+function cellDamageLevel(cellX, cellY, riskZones) {
+  if (!riskZones) return 0;
+  let max = 0;
+  for (const z of riskZones) {
+    const dx = cellX - z.center[0];
+    const dy = cellY - z.center[1];
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d <= z.radius) {
+      const inner = 1 - d / Math.max(0.01, z.radius);
+      max = Math.max(max, 0.5 + inner * 0.5);
+    } else if (d <= z.radius + 2) {
+      const fade = 1 - (d - z.radius) / 2;
+      max = Math.max(max, fade * 0.3);
+    }
+  }
+  return Math.min(1, max);
+}
+
+function makeGradientSkyTexture(size = 512) {
+  const c = document.createElement("canvas");
+  c.width = 16;
+  c.height = size;
+  const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, size);
+  grad.addColorStop(0.0, "#08101a");
+  grad.addColorStop(0.45, "#1a1612");
+  grad.addColorStop(0.72, "#3a2418");
+  grad.addColorStop(0.88, "#5a3a22");
+  grad.addColorStop(1.0, "#1c1610");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 16, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function addTerrainPatches3D(scenario) {
+  const terrain = scenario?.map?.terrain || [];
+  if (!terrain.length) return;
+  const palettes = {
+    grass: { color: 0x2d4a25, roughness: 0.95, metalness: 0.02, emissive: 0x000000 },
+    water: { color: 0x1c3550, roughness: 0.2, metalness: 0.5, emissive: 0x031530 },
+    rubble: { color: 0x3d3a35, roughness: 0.98, metalness: 0.02, emissive: 0x000000 },
+    plaza: { color: 0x3a4250, roughness: 0.92, metalness: 0.05, emissive: 0x000000 }
+  };
+
+  for (const patch of terrain) {
+    const [px, py, pw, ph] = patch.footprint;
+    const palette = palettes[patch.kind] || palettes.plaza;
+    const mat = new THREE.MeshStandardMaterial({
+      color: palette.color,
+      roughness: palette.roughness,
+      metalness: palette.metalness,
+      emissive: palette.emissive,
+      emissiveIntensity: patch.kind === "water" ? 0.3 : 0
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(px + pw / 2, 0.012, py + ph / 2);
+    world.scene.add(mesh);
+
+    if (patch.kind === "rubble") {
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5a4838, roughness: 0.95 });
+      const stoneCount = Math.floor(pw * ph * 3);
+      for (let i = 0; i < stoneCount; i += 1) {
+        const sx = px + 0.1 + hash01(px + i, py, 101) * (pw - 0.2);
+        const sz = py + 0.1 + hash01(px, py + i, 102) * (ph - 0.2);
+        const sw = 0.1 + hash01(sx, sz, 103) * 0.18;
+        const sh = 0.06 + hash01(sx, sz, 104) * 0.12;
+        const sd = 0.1 + hash01(sx, sz, 105) * 0.18;
+        const stone = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, sd), stoneMat);
+        stone.position.set(sx, sh / 2 + 0.02, sz);
+        stone.rotation.y = hash01(sx, sz, 106) * Math.PI * 2;
+        stone.rotation.x = (hash01(sx, sz, 107) - 0.5) * 0.5;
+        world.scene.add(stone);
+      }
+    } else if (patch.kind === "grass") {
+      const tuftMat = new THREE.MeshStandardMaterial({ color: 0x3a5a30, roughness: 0.9 });
+      const tuftCount = Math.floor(pw * ph * 2);
+      for (let i = 0; i < tuftCount; i += 1) {
+        const tx = px + 0.1 + hash01(px + i, py, 111) * (pw - 0.2);
+        const tz = py + 0.1 + hash01(px, py + i, 112) * (ph - 0.2);
+        const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 5), tuftMat);
+        tuft.position.set(tx, 0.09, tz);
+        world.scene.add(tuft);
+      }
+    }
+  }
+}
+
+function buildHorizonSilhouette(scenario) {
+  const [cols, rows] = scenario.map.size;
+  const cx = cols / 2;
+  const cz = rows / 2;
+  const baseRadius = Math.max(cols, rows) * 1.85;
+  const silMat = new THREE.MeshBasicMaterial({
+    color: 0x0a0d13,
+    transparent: true,
+    opacity: 0.46,
+    depthWrite: false,
+    fog: true
+  });
+  const count = 56;
+  const instMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), silMat, count);
+  const dummy = new THREE.Object3D();
+  const lit = new THREE.Color(0x201813);
+  const dark = new THREE.Color(0x070a0f);
+  for (let i = 0; i < count; i += 1) {
+    const angle = (i / count) * Math.PI * 2;
+    const gap = hash01(i, 0, 97) < 0.24;
+    const r = baseRadius + hash01(i, 0, 91) * 18;
+    const x = cx + Math.cos(angle) * r;
+    const z = cz + Math.sin(angle) * r;
+    const w = 1.2 + hash01(i, 0, 92) * 2.1;
+    const d = 1.2 + hash01(i, 0, 93) * 2.1;
+    const h = gap ? 0.01 : 0.8 + hash01(i, 0, 94) * 3.6;
+    dummy.position.set(x, h / 2, z);
+    dummy.rotation.set(0, angle + Math.PI / 2 + (hash01(i, 0, 95) - 0.5) * 0.5, 0);
+    dummy.scale.set(gap ? 0.01 : w, h, gap ? 0.01 : d);
+    dummy.updateMatrix();
+    instMesh.setMatrixAt(i, dummy.matrix);
+    instMesh.setColorAt(i, hash01(i, 0, 96) > 0.9 ? lit : dark);
+  }
+  instMesh.instanceMatrix.needsUpdate = true;
+  if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
+
+  const group = new THREE.Group();
+  group.name = "horizon-silhouette";
+  group.add(instMesh);
+  for (let i = 0; i < 4; i += 1) {
+    const angle = (i / 4 + 0.1) * Math.PI * 2;
+    const r = baseRadius + 9;
+    const x = cx + Math.cos(angle) * r;
+    const z = cz + Math.sin(angle) * r;
+    const phase = i * 1.5;
+    for (let p = 0; p < 6; p += 1) {
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(2.2 + p * 0.3, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0x1e1a17, transparent: true, opacity: 0.25 - p * 0.025, depthWrite: false, fog: true })
+      );
+      sphere.position.set(x + Math.sin(phase + p) * 1.2, 6 + p * 2.5, z + Math.cos(phase + p) * 1.2);
+      group.add(sphere);
+    }
+  }
+  world.scene.add(group);
+  world.horizonSilhouette = group;
+}
+
+function buildRoads3D(scenario) {
+  const roads = scenario?.map?.roads || [];
+  if (!roads.length) return;
+
+  const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x1a1f27, roughness: 0.95, metalness: 0.05 });
+  const curbMat = new THREE.MeshStandardMaterial({ color: 0x586173, roughness: 0.85, metalness: 0.05 });
+  const yellowMat = new THREE.MeshStandardMaterial({ color: 0xffe44d, emissive: 0xffe44d, emissiveIntensity: 0.45, roughness: 0.6 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xd6dde4, emissive: 0xd6dde4, emissiveIntensity: 0.18, roughness: 0.7 });
+
+  const group = new THREE.Group();
+  group.name = "roads3d";
+
+  for (const road of roads) {
+    const isMain = road.kind === "main";
+    const width = isMain ? 1.0 : 0.7;
+    const pts = road.points || [];
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const ax = a[0] + 0.5;
+      const az = a[1] + 0.5;
+      const bx = b[0] + 0.5;
+      const bz = b[1] + 0.5;
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 0.01) continue;
+      const cx = (ax + bx) / 2;
+      const cz = (az + bz) / 2;
+      const yaw = Math.atan2(dz, dx);
+
+      const asphalt = new THREE.Mesh(new THREE.BoxGeometry(len + 0.02, 0.03, width), asphaltMat);
+      asphalt.position.set(cx, 0.018, cz);
+      asphalt.rotation.y = -yaw;
+      group.add(asphalt);
+
+      const perpX = -dz / len;
+      const perpZ = dx / len;
+      const curbW = 0.08;
+      const curbH = 0.07;
+      const curbOffset = width / 2 + curbW / 2;
+      for (const side of [-1, 1]) {
+        const curb = new THREE.Mesh(new THREE.BoxGeometry(len + 0.06, curbH, curbW), curbMat);
+        curb.position.set(cx + perpX * curbOffset * side, curbH / 2 + 0.005, cz + perpZ * curbOffset * side);
+        curb.rotation.y = -yaw;
+        group.add(curb);
+      }
+
+      if (isMain) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(len * 0.96, 0.004, 0.06), yellowMat);
+        stripe.position.set(cx, 0.038, cz);
+        stripe.rotation.y = -yaw;
+        group.add(stripe);
+      } else {
+        const dashLen = 0.45;
+        const gapLen = 0.5;
+        const step = dashLen + gapLen;
+        const count = Math.max(1, Math.floor(len / step));
+        const total = count * step - gapLen;
+        let pos = -total / 2 + dashLen / 2;
+        for (let k = 0; k < count; k += 1) {
+          const dash = new THREE.Mesh(new THREE.BoxGeometry(dashLen, 0.004, 0.045), whiteMat);
+          dash.position.set(cx + (dx / len) * pos, 0.038, cz + (dz / len) * pos);
+          dash.rotation.y = -yaw;
+          group.add(dash);
+          pos += step;
+        }
+      }
+    }
+  }
+
+  world.scene.add(group);
+  world.roadsGroup = group;
+}
+
+function buildingProfile(kind) {
+  const profiles = {
+    apartment: { color: 0x677382, roof: 0x222a32, minH: 1.35, maxH: 2.6, floors: 5 },
+    civic: { color: 0x7d786c, roof: 0x252a2e, minH: 1.1, maxH: 2.1, floors: 4 },
+    warehouse: { color: 0x5c6470, roof: 0x30343a, minH: 0.75, maxH: 1.35, floors: 2 },
+    lowrise: { color: 0x766b5f, roof: 0x2b2927, minH: 0.85, maxH: 1.55, floors: 3 }
+  };
+  return profiles[kind] || profiles.lowrise;
+}
+
+function nearestRiskKind(cellX, cellY, riskZones) {
+  let best = { damage: 0, kind: null };
+  for (const z of riskZones || []) {
+    const dx = cellX - z.center[0];
+    const dy = cellY - z.center[1];
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const reach = Math.max(0.01, z.radius + 1.5);
+    if (d > reach) continue;
+    const damage = Math.max(0, 1 - d / reach);
+    if (damage > best.damage) best = { damage, kind: z.type };
+  }
+  return best;
+}
+
+function addBuildingWindows(group, footprint, height, damage, floors, windowMat) {
+  if (damage > 0.72 || height < 0.55) return;
+  const [x, y, w, d] = footprint;
+  const usableFloors = Math.max(1, Math.min(floors, Math.floor(height / 0.28)));
+  const colsX = Math.max(1, Math.min(5, Math.floor(w * 1.5)));
+  const colsZ = Math.max(1, Math.min(5, Math.floor(d * 1.5)));
+  const addPane = (px, py, pz, rotY, sx = 0.09) => {
+    if (hash01(px * 3, pz * 3, Math.round(py * 10)) < damage * 0.45) return;
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(sx, 0.075), windowMat);
+    pane.position.set(px, py, pz);
+    pane.rotation.y = rotY;
+    group.add(pane);
+  };
+
+  for (let floor = 1; floor <= usableFloors; floor += 1) {
+    const py = Math.min(height - 0.16, 0.22 + floor * (height / (usableFloors + 1)));
+    for (let i = 0; i < colsX; i += 1) {
+      const px = x + ((i + 1) / (colsX + 1)) * w;
+      addPane(px, py, y - 0.006, 0);
+      addPane(px, py, y + d + 0.006, Math.PI);
+    }
+    for (let i = 0; i < colsZ; i += 1) {
+      const pz = y + ((i + 1) / (colsZ + 1)) * d;
+      addPane(x - 0.006, py, pz, Math.PI / 2);
+      addPane(x + w + 0.006, py, pz, -Math.PI / 2);
+    }
+  }
+}
+
+function addBuildingRubble(group, footprint, damage, rubbleMat) {
+  if (damage < 0.28) return;
+  const [x, y, w, d] = footprint;
+  const count = Math.min(18, Math.max(4, Math.floor(w * d * (3 + damage * 3))));
+  for (let i = 0; i < count; i += 1) {
+    const sideBias = hash01(x + i, y, 170);
+    const rx = x + hash01(x + i, y, 171) * w + (sideBias < 0.25 ? -0.18 : sideBias > 0.75 ? 0.18 : 0);
+    const rz = y + hash01(x, y + i, 172) * d + (sideBias > 0.35 && sideBias < 0.6 ? -0.18 : sideBias > 0.6 && sideBias < 0.85 ? 0.18 : 0);
+    const rw = 0.08 + hash01(rx, rz, 173) * 0.22;
+    const rh = 0.04 + hash01(rx, rz, 174) * 0.14;
+    const rd = 0.08 + hash01(rx, rz, 175) * 0.22;
+    const chunk = new THREE.Mesh(new THREE.BoxGeometry(rw, rh, rd), rubbleMat);
+    chunk.position.set(rx, rh / 2 + 0.035, rz);
+    chunk.rotation.set((hash01(rx, rz, 176) - 0.5) * 0.8, hash01(rx, rz, 177) * Math.PI * 2, (hash01(rx, rz, 178) - 0.5) * 0.8);
+    group.add(chunk);
+  }
+}
+
+function buildScenarioBuildings3D(scenario) {
+  const buildings = scenario?.map?.buildings || [];
+  if (!buildings.length) return;
+
+  const group = new THREE.Group();
+  group.name = "scenario-buildings";
+  const riskZones = scenario.map.risk_zones || [];
+  const windowMat = new THREE.MeshBasicMaterial({ color: 0xa9d6e5, transparent: true, opacity: 0.34, depthWrite: false, side: THREE.DoubleSide });
+  const sootMat = new THREE.MeshBasicMaterial({ color: 0x050404, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide });
+  const rubbleMat = new THREE.MeshStandardMaterial({ color: 0x51483e, roughness: 0.98, metalness: 0.03 });
+  const roofMatCache = new Map();
+  const wallMatCache = new Map();
+
+  const matFor = (key, color, damage, fire) => {
+    const cacheKey = `${key}-${color}-${Math.round(damage * 10)}-${fire ? 1 : 0}`;
+    const cache = key === "roof" ? roofMatCache : wallMatCache;
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+    const c = new THREE.Color(color);
+    c.multiplyScalar(fire ? 0.45 : damage > 0.55 ? 0.58 : damage > 0.25 ? 0.75 : 1);
+    const mat = new THREE.MeshStandardMaterial({
+      color: c,
+      roughness: 0.92,
+      metalness: 0.04,
+      emissive: fire ? 0x1a0803 : 0x000000,
+      emissiveIntensity: fire ? 0.25 : 0
+    });
+    cache.set(cacheKey, mat);
+    return mat;
+  };
+
+  for (const b of buildings) {
+    const [x, y, w, d] = b.footprint;
+    if (w <= 0 || d <= 0) continue;
+    const profile = buildingProfile(b.kind);
+    const cx = x + w / 2;
+    const cz = y + d / 2;
+    const risk = nearestRiskKind(cx, cz, riskZones);
+    const damage = risk.damage;
+    const fire = risk.kind === "fire" && damage > 0.18;
+    const collapsed = risk.kind === "collapse" && damage > 0.58;
+    const heightSeed = hash01(x, y, 130);
+    let height = profile.minH + heightSeed * (profile.maxH - profile.minH);
+    if (collapsed) height *= 0.32 + hash01(x, y, 131) * 0.22;
+    else if (damage > 0.35) height *= 0.72 + hash01(x, y, 132) * 0.16;
+
+    const footprint = [x + 0.08, y + 0.08, Math.max(0.2, w - 0.16), Math.max(0.2, d - 0.16)];
+    const shell = new THREE.Mesh(
+      new THREE.BoxGeometry(footprint[2], height, footprint[3]),
+      matFor("wall", profile.color, damage, fire)
+    );
+    shell.position.set(cx, height / 2 + 0.025, cz);
+    if (damage > 0.32 && !collapsed) {
+      shell.rotation.x = (hash01(x, y, 133) - 0.5) * damage * 0.18;
+      shell.rotation.z = (hash01(x, y, 134) - 0.5) * damage * 0.18;
+    }
+    group.add(shell);
+
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(footprint[2] * 1.02, 0.045, footprint[3] * 1.02),
+      matFor("roof", profile.roof, damage, fire)
+    );
+    roof.position.set(cx, height + 0.055, cz);
+    roof.rotation.copy(shell.rotation);
+    group.add(roof);
+
+    addBuildingWindows(group, footprint, height, damage, profile.floors, windowMat);
+    addBuildingRubble(group, footprint, Math.max(damage, collapsed ? 0.8 : 0), rubbleMat);
+
+    if (fire) {
+      const soot = new THREE.Mesh(new THREE.PlaneGeometry(footprint[2] * 0.65, Math.max(0.35, height * 0.65)), sootMat);
+      soot.position.set(cx, Math.max(0.25, height * 0.55), y + 0.07);
+      soot.rotation.x = 0;
+      group.add(soot);
+    }
+  }
+
+  world.scene.add(group);
+  world.scenarioBuildingsGroup = group;
+}
+
+function addFireSmoke(scenario) {
+  const fireZones = (scenario?.map?.risk_zones || []).filter((z) => z.type === "fire");
+  if (!fireZones.length) return;
+  world.smokePuffs = world.smokePuffs || [];
+  world.fireGlows = world.fireGlows || [];
+
+  for (const z of fireZones) {
+    const baseX = z.center[0] + 0.5;
+    const baseZ = z.center[1] + 0.5;
+
+    const glow = new THREE.PointLight(0xff6020, 2.0, 9, 1.8);
+    glow.position.set(baseX, 0.6, baseZ);
+    world.scene.add(glow);
+    world.fireGlows.push(glow);
+
+    const ember = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff8c30, transparent: true, opacity: 0.85, depthWrite: false, fog: false })
+    );
+    ember.position.set(baseX, 0.25, baseZ);
+    world.scene.add(ember);
+    world.fireGlows.push({ ember, _isEmber: true, x: baseX, z: baseZ });
+
+    const puffCount = 12;
+    const plumeHeight = 14;
+    for (let i = 0; i < puffCount; i += 1) {
+      const phase = i / puffCount;
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.38, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0x1f1c19, transparent: true, opacity: 0.7, depthWrite: false, fog: true })
+      );
+      sphere.position.set(baseX, 0.6 + phase * plumeHeight, baseZ);
+      world.scene.add(sphere);
+      world.smokePuffs.push({ mesh: sphere, baseX, baseZ, baseY: 0.6, height: plumeHeight, phase, zoneId: z.id });
+    }
+  }
+}
+
+function updateSmokeAndGlows(t) {
+  if (world.smokePuffs) {
+    const ageNorm = (t * 0.045) % 1;
+    for (const p of world.smokePuffs) {
+      const localT = (p.phase + ageNorm) % 1;
+      p.mesh.position.y = p.baseY + localT * p.height;
+      p.mesh.scale.setScalar(0.65 + localT * 1.8);
+      p.mesh.position.x = p.baseX + Math.sin(t * 0.6 + p.phase * 6) * localT * 0.7;
+      p.mesh.position.z = p.baseZ + Math.cos(t * 0.55 + p.phase * 5) * localT * 0.7;
+      const mat = p.mesh.material;
+      if (mat) {
+        const dark = 0.12 - localT * 0.04;
+        mat.color.setRGB(Math.max(0.04, dark + 0.04), Math.max(0.03, dark + 0.02), Math.max(0.03, dark));
+        mat.opacity = Math.max(0, 0.75 - localT * 0.7);
+      }
+    }
+  }
+  if (world.fireGlows) {
+    for (const g of world.fireGlows) {
+      if (g._isEmber) {
+        const flicker = 0.7 + Math.sin(t * 9 + g.x) * 0.3 + Math.sin(t * 14 + g.z) * 0.2;
+        g.ember.scale.setScalar(Math.max(0.4, flicker));
+        const mat = g.ember.material;
+        if (mat) mat.opacity = 0.6 + Math.sin(t * 11) * 0.25;
+      } else if (g.intensity !== undefined) {
+        g.intensity = 1.6 + Math.sin(t * 8 + g.position.x) * 0.5 + Math.sin(t * 13 + g.position.z) * 0.3;
+      }
+    }
+  }
+}
+
+function addStreetFurniture(scenario) {
+  const [cols, rows] = scenario.map.size;
+  const roadCells = computeRoadCells(scenario);
+  const riskZones = scenario.map.risk_zones || [];
+  const hLines = new Set();
+  const vLines = new Set();
+
+  for (const road of scenario.map.roads || []) {
+    const pts = road.points || [];
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      if (a[1] === b[1]) hLines.add(a[1]);
+      if (a[0] === b[0]) vLines.add(a[0]);
+    }
+  }
+
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x2a2e34, roughness: 0.85, metalness: 0.3 });
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x32363c, roughness: 0.8, metalness: 0.4 });
+  for (const y of hLines) {
+    for (const x of vLines) {
+      if (x === 0 || x === cols - 1 || y === 0 || y === rows - 1) continue;
+      const damage = cellDamageLevel(x, y, riskZones);
+      for (const ox of [-1, 1]) {
+        for (const oz of [-1, 1]) {
+          const lamp = new THREE.Group();
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.4, 8), postMat);
+          post.position.y = 0.7;
+          lamp.add(post);
+          const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.25, 6), armMat);
+          arm.rotation.z = Math.PI / 2;
+          arm.position.set(-ox * 0.12, 1.35, 0);
+          lamp.add(arm);
+          const isLit = damage < 0.4 && hash01(x, y, 50 + ox + oz * 2) > 0.15;
+          const lampMat = new THREE.MeshStandardMaterial({
+            color: isLit ? 0xffe9b0 : 0x1a1614,
+            emissive: isLit ? 0xffd080 : 0x000000,
+            emissiveIntensity: isLit ? 0.9 : 0,
+            roughness: 0.7
+          });
+          const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.18), lampMat);
+          head.position.set(-ox * 0.24, 1.32, 0);
+          lamp.add(head);
+          if (isLit) {
+            const light = new THREE.PointLight(0xffd080, 0.6, 4.5);
+            light.position.set(-ox * 0.24, 1.32, 0);
+            lamp.add(light);
+          }
+          lamp.position.set(x + 0.5 + ox * 0.55, 0, y + 0.5 + oz * 0.55);
+          if (damage > 0.45) {
+            lamp.rotation.z = (hash01(x, y, 51 + ox + oz * 2) - 0.5) * 0.6;
+            lamp.rotation.x = (hash01(x, y, 52 + ox + oz * 2) - 0.5) * 0.3;
+          }
+          world.scene.add(lamp);
+        }
+      }
+    }
+  }
+
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.95 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2d4a25, roughness: 0.9 });
+  const fallenLeafMat = new THREE.MeshStandardMaterial({ color: 0x4a3522, roughness: 0.95 });
+  for (const patch of scenario.map.terrain || []) {
+    if (patch.kind !== "grass") continue;
+    const [px, py, pw, ph] = patch.footprint;
+    const treeCount = Math.max(1, Math.floor(pw * ph * 0.5));
+    for (let i = 0; i < treeCount; i += 1) {
+      const tx = px + 0.3 + hash01(px + i, py, 41) * (pw - 0.6);
+      const tz = py + 0.3 + hash01(px, py + i, 42) * (ph - 0.6);
+      const damage = cellDamageLevel(Math.floor(tx), Math.floor(tz), riskZones);
+      const fallen = damage > 0.4 && hash01(tx, tz, 44) > 0.4;
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.5, 6), trunkMat);
+      trunk.position.y = 0.25;
+      tree.add(trunk);
+      const leaves = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 8), fallen ? fallenLeafMat : leafMat);
+      leaves.position.y = 0.7;
+      tree.add(leaves);
+      tree.position.set(tx, 0, tz);
+      tree.scale.setScalar(0.8 + hash01(tx, tz, 43) * 0.6);
+      if (fallen) tree.rotation.z = (Math.PI / 2) * (hash01(tx, tz, 45) > 0.5 ? 1 : -1) * 0.85;
+      world.scene.add(tree);
+    }
+  }
+
+  const hydrantMat = new THREE.MeshStandardMaterial({ color: 0x9a2820, roughness: 0.6, metalness: 0.2 });
+  for (let i = 0; i < 14; i += 1) {
+    const cx = Math.floor(hash01(i, 7, 61) * cols);
+    const cz = Math.floor(hash01(i, 11, 62) * rows);
+    if (!roadCells.has(`${cx},${cz}`)) continue;
+    const hydrant = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.28, 8), hydrantMat);
+    body.position.y = 0.14;
+    hydrant.add(body);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.07, 8), hydrantMat);
+    top.position.y = 0.32;
+    hydrant.add(top);
+    hydrant.position.set(cx + 0.92, 0, cz + 0.92);
+    world.scene.add(hydrant);
+  }
+}
+
 function init3D(scenario) {
   if (world.initialized || povCols.length === 0) return;
   const [cols, rows] = scenario.map.size;
@@ -3554,12 +4131,19 @@ function init3D(scenario) {
   world.scene.add(ground);
   world.groundGrid = ground;
 
-  // Sky-dome
+  // Sky-dome — smoky disaster gradient for the FPV horizon
+  const skyTex = makeGradientSkyTexture(512);
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(120, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0x05101f, side: THREE.BackSide, fog: false })
+    new THREE.SphereGeometry(120, 32, 16),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })
   );
   world.scene.add(sky);
+
+  // Scenario-driven world detail. These helpers are guarded so legacy
+  // scenarios without terrain/roads still render the base FPV scene.
+  buildHorizonSilhouette(scenario);
+  addTerrainPatches3D(scenario);
+  buildScenarioBuildings3D(scenario);
 
   // Base marker
   const [bx, by] = scenario.map.base;
@@ -3659,6 +4243,10 @@ function init3D(scenario) {
     world.scene.add(grp);
     world.victimMeshes.set(v.id, { group: grp, post, arm, flare });
   }
+
+  buildRoads3D(scenario);
+  addFireSmoke(scenario);
+  addStreetFurniture(scenario);
 
   // Agents — detailed primitive build matching the marketing hero aesthetic
   for (const a of scenario.agents) {
@@ -4378,13 +4966,20 @@ async function upgradeToAssets(scenario) {
   const M = "/models/";
   const T = "/textures/";
 
+  const fbxLoader = new FBXLoader();
+
   const [
     aptGlb, facadeGlb, mansionGlb, multiGlb,
     rubbleGlb, signsGlb, survivorGlb, taxiGlb,
     cBase, cNorm, cRough,
     bBase, bNorm, bRough,
     pBase, pNorm, pRough,
-    dBase, dNorm, dRough
+    dBase, dNorm, dRough,
+    c2Base, c2Norm, c2Rough,
+    rBase, rNorm, rRough,
+    wBase, wNorm, wRough,
+    mBase, mMetal, mNorm, mRough,
+    heroFbx, heroColor, heroBumpNm
   ] = await Promise.all([
     loader.loadAsync(`${M}building-apartment.glb`),
     loader.loadAsync(`${M}building-facade.glb`),
@@ -4405,7 +5000,23 @@ async function upgradeToAssets(scenario) {
     texLoader.loadAsync(`${T}plaster-a_roughness.jpg`),
     texLoader.loadAsync(`${T}damage-a_basecolor.jpg`),
     texLoader.loadAsync(`${T}damage-a_normal.jpg`),
-    texLoader.loadAsync(`${T}damage-a_roughness.jpg`)
+    texLoader.loadAsync(`${T}damage-a_roughness.jpg`),
+    texLoader.loadAsync(`${T}concrete-b_basecolor.jpg`),
+    texLoader.loadAsync(`${T}concrete-b_normal.jpg`),
+    texLoader.loadAsync(`${T}concrete-b_roughness.jpg`),
+    texLoader.loadAsync(`${T}rubble-a_basecolor.jpg`),
+    texLoader.loadAsync(`${T}rubble-a_normal.jpg`),
+    texLoader.loadAsync(`${T}rubble-a_roughness.jpg`),
+    texLoader.loadAsync(`${T}wood-a_basecolor.jpg`),
+    texLoader.loadAsync(`${T}wood-a_normal.jpg`),
+    texLoader.loadAsync(`${T}wood-a_roughness.jpg`),
+    texLoader.loadAsync(`${T}metal-rust_basecolor.jpg`),
+    texLoader.loadAsync(`${T}metal-rust_metallic.jpg`),
+    texLoader.loadAsync(`${T}metal-rust_normal.jpg`),
+    texLoader.loadAsync(`${T}metal-rust_roughness.jpg`),
+    fbxLoader.loadAsync("/models-fbx/AM165_001_VRay.fbx").catch((err) => { console.warn("[hero FBX] load failed:", err); return null; }),
+    texLoader.loadAsync("/models-fbx/AM165_001_color.jpg").catch(() => null),
+    texLoader.loadAsync("/models-fbx/AM165_001_bump_nm.jpg").catch(() => null)
   ]);
 
   const prepTexSet = (base, norm, rough, repeat = 2) => {
@@ -4420,6 +5031,16 @@ async function upgradeToAssets(scenario) {
   prepTexSet(bBase, bNorm, bRough);
   prepTexSet(pBase, pNorm, pRough);
   prepTexSet(dBase, dNorm, dRough);
+  prepTexSet(c2Base, c2Norm, c2Rough);
+  prepTexSet(rBase, rNorm, rRough);
+  prepTexSet(wBase, wNorm, wRough);
+  // Metal-rust set carries an extra metallic map; same wrap/repeat settings
+  for (const tex of [mBase, mMetal, mNorm, mRough]) {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2, 2);
+    tex.anisotropy = 4;
+  }
+  mBase.colorSpace = THREE.SRGBColorSpace;
 
   const makeMat = (base, norm, rough, tint) => new THREE.MeshStandardMaterial({
     map: base,
@@ -4433,8 +5054,20 @@ async function upgradeToAssets(scenario) {
   const brickMat = makeMat(bBase, bNorm, bRough, 0xa17560);
   const plasterMat = makeMat(pBase, pNorm, pRough, 0xb2a48a);
   const damageMat = makeMat(dBase, dNorm, dRough, 0x6f6256);
+  const concreteBMat = makeMat(c2Base, c2Norm, c2Rough, 0x8c97a2);
+  const rubbleMat = makeMat(rBase, rNorm, rRough, 0x7a6450);
+  const woodMat = makeMat(wBase, wNorm, wRough, 0x8a6a44);
+  const rustMat = new THREE.MeshStandardMaterial({
+    map: mBase,
+    normalMap: mNorm,
+    roughnessMap: mRough,
+    metalnessMap: mMetal,
+    color: 0x6b554a,
+    roughness: 0.6,
+    metalness: 0.85
+  });
 
-  const buildingMats = [concreteMat, brickMat, plasterMat, damageMat];
+  const buildingMats = [concreteMat, brickMat, plasterMat, damageMat, concreteBMat];
 
   // Pre-bake building templates — assign a material variant per building family.
   // Target max dim ~1.3 so most buildings sit at 1.0–1.3u tall (≈10–13m in sim
@@ -4460,12 +5093,7 @@ async function upgradeToAssets(scenario) {
     }
     const rubble = rubbleGlb.scene.clone(true);
     rubble.traverse((obj) => {
-      if (obj.isMesh) {
-        obj.material = obj.material.clone();
-        if (obj.material.color) obj.material.color.setHex(0x6b4a2b);
-        obj.material.roughness = 0.95;
-        obj.material.metalness = 0.05;
-      }
+      if (obj.isMesh) obj.material = rubbleMat;
     });
     fitToSize(rubble, 1.4);
     rubble.position.set(blk.location[0] + 0.5, groundedY(rubble), blk.location[1] + 0.5);
@@ -4505,13 +5133,16 @@ async function upgradeToAssets(scenario) {
   }
 
   // Scatter scenery — also reuse the rubble GLB for small debris piles
-  scatterScenery(scenario, buildingTemplates, taxiGlb.scene, signsGlb.scene, rubbleGlb.scene);
+  scatterScenery(scenario, buildingTemplates, taxiGlb.scene, signsGlb.scene, rubbleGlb.scene, { rubbleMat, woodMat, rustMat });
 
-  // Texture the ground
+  // Single hero landmark from the AM165 FBX at city center
+  placeHeroProp(scenario, heroFbx, heroColor, heroBumpNm);
+
+  // Texture the ground — use the second concrete variant so it reads distinct from building walls
   if (world.groundGrid) {
-    const groundBase = cBase.clone();
-    const groundNorm = cNorm.clone();
-    const groundRough = cRough.clone();
+    const groundBase = c2Base.clone();
+    const groundNorm = c2Norm.clone();
+    const groundRough = c2Rough.clone();
     for (const tex of [groundBase, groundNorm, groundRough]) {
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       tex.repeat.set(12, 12);
@@ -4532,7 +5163,30 @@ async function upgradeToAssets(scenario) {
   }
 }
 
-function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSrc) {
+function placeHeroProp(scenario, fbx, colorTex, bumpTex) {
+  if (!fbx) return;
+  if (colorTex) colorTex.colorSpace = THREE.SRGBColorSpace;
+  fbx.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const next = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.85,
+      metalness: 0.05
+    });
+    if (colorTex) next.map = colorTex;
+    if (bumpTex) next.normalMap = bumpTex;
+    obj.material = next;
+  });
+  fitToSize(fbx, 3.5);
+  const [cols, rows] = scenario.map.size;
+  fbx.position.set(cols / 2, groundedY(fbx), rows / 2);
+  fbx.rotation.y = Math.PI / 4;
+  world.scene.add(fbx);
+  world.heroProp = fbx;
+}
+
+function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSrc, palette = {}) {
+  const { rubbleMat, woodMat, rustMat } = palette;
   const [cols, rows] = scenario.map.size;
   const occupied = new Set();
   const mark = (x, y, r = 1) => {
@@ -4545,6 +5199,14 @@ function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSr
   mark(scenario.map.base[0], scenario.map.base[1], 2);
   for (const v of scenario.victims) mark(v.location[0], v.location[1], 2);
   for (const b of scenario.map.blocked_cells) mark(b.location[0], b.location[1], 1);
+  for (const b of scenario.map.buildings || []) {
+    const [bx, by, bw, bh] = b.footprint;
+    for (let dx = 0; dx < bw; dx += 1) {
+      for (let dy = 0; dy < bh; dy += 1) {
+        mark(bx + dx, by + dy, 0);
+      }
+    }
+  }
   for (const z of scenario.map.risk_zones) {
     const r = Math.ceil(z.radius);
     for (let dx = -r; dx <= r; dx += 1) {
@@ -4573,18 +5235,26 @@ function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSr
           fitToSize(taxi, 0.7);
           taxi.position.set(x + 0.5, groundedY(taxi), y + 0.5);
           taxi.rotation.y = cardinalRot(x + 1, y);
+          // Burned/abandoned hulks get the rust material; ~40% chance
+          if (rustMat && hash(x + 11, y - 1) < 0.4) {
+            taxi.traverse((obj) => { if (obj.isMesh) obj.material = rustMat; });
+          }
           world.scene.add(taxi);
         } else if (rr < 0.07 && signsSrc) {
           const sign = signsSrc.clone(true);
           fitToSize(sign, 0.5);
           sign.position.set(x + 0.5, groundedY(sign), y + 0.5);
           sign.rotation.y = cardinalRot(x + 2, y);
+          // Weathered signs: ~30% rusted
+          if (rustMat && hash(x + 13, y - 2) < 0.3) {
+            sign.traverse((obj) => { if (obj.isMesh) obj.material = rustMat; });
+          }
           world.scene.add(sign);
         }
         continue;
       }
       const r = hash(x, y);
-      if (r < 0.32) {
+      if (r < 0.32 && !(scenario.map.buildings || []).length) {
         const idx = Math.floor(hash(x + 3, y - 2) * buildingTemplates.length);
         const b = buildingTemplates[idx].clone(true);
         b.position.set(x + 0.5, groundedY(b), y + 0.5);
@@ -4597,13 +5267,17 @@ function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSr
         fitToSize(debris, 0.6 + hash(x, y + 8) * 0.4);
         debris.position.set(x + 0.5, groundedY(debris), y + 0.5);
         debris.rotation.y = hash(x + 5, y) * Math.PI * 2;
-        debris.traverse((obj) => {
-          if (obj.isMesh) {
-            obj.material = obj.material.clone();
-            if (obj.material.color) obj.material.color.setHex(0x554840);
-            obj.material.roughness = 0.95;
-          }
-        });
+        if (rubbleMat) {
+          debris.traverse((obj) => { if (obj.isMesh) obj.material = rubbleMat; });
+        } else {
+          debris.traverse((obj) => {
+            if (obj.isMesh) {
+              obj.material = obj.material.clone();
+              if (obj.material.color) obj.material.color.setHex(0x554840);
+              obj.material.roughness = 0.95;
+            }
+          });
+        }
         world.scene.add(debris);
       } else if (r < 0.45 && signsSrc) {
         const sign = signsSrc.clone(true);
@@ -4612,6 +5286,73 @@ function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSr
         sign.rotation.y = cardinalRot(x + 2, y);
         world.scene.add(sign);
       }
+    }
+  }
+
+  if (woodMat) addWoodenScaffolding(scenario, woodMat);
+}
+
+function addWoodenScaffolding(scenario, woodMat) {
+  const buildings = state?.tacticalBuildings;
+  const hash = (x, y) => Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5) % 1;
+  const placed = new Set();
+
+  const placeScaffoldAt = (cx, cz, salt) => {
+    const key = `${Math.round(cx * 4)},${Math.round(cz * 4)}`;
+    if (placed.has(key)) return;
+    placed.add(key);
+    const scaffold = new THREE.Group();
+    const postH = 1.5;
+    const span = 0.45;
+    for (const [ox, oz] of [[-span, -span], [span, -span], [span, span], [-span, span]]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, postH, 0.05), woodMat);
+      post.position.set(ox, postH / 2, oz);
+      scaffold.add(post);
+    }
+    for (const yy of [postH * 0.35, postH * 0.7]) {
+      const railA = new THREE.Mesh(new THREE.BoxGeometry(span * 2 + 0.05, 0.04, 0.04), woodMat);
+      railA.position.set(0, yy, -span);
+      scaffold.add(railA);
+      const railB = new THREE.Mesh(new THREE.BoxGeometry(span * 2 + 0.05, 0.04, 0.04), woodMat);
+      railB.position.set(0, yy, span);
+      scaffold.add(railB);
+    }
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(span * 2 + 0.05, 0.04, 0.04), woodMat);
+    brace.position.set(0, postH * 0.5, -span);
+    brace.rotation.z = Math.PI / 5;
+    scaffold.add(brace);
+    scaffold.position.set(cx, 0, cz);
+    scaffold.rotation.y = hash(cx + salt, cz) * Math.PI * 2;
+    world.scene.add(scaffold);
+  };
+
+  if (buildings && buildings.length) {
+    const cellSize = scenario?.map?.cell_size_m ? 1 : 1;
+    let count = 0;
+    for (const b of buildings) {
+      if (!(b.damage > 0.4)) continue;
+      const cx = (b.centerX ?? b.x ?? 0) * cellSize;
+      const cz = (b.centerY ?? b.y ?? 0) * cellSize;
+      if (!Number.isFinite(cx) || !Number.isFinite(cz)) continue;
+      const offset = 0.7;
+      const angle = hash(cx, cz) * Math.PI * 2;
+      placeScaffoldAt(cx + Math.cos(angle) * offset, cz + Math.sin(angle) * offset, 1);
+      count += 1;
+      if (count >= 24) break;
+    }
+    if (count > 0) return;
+  }
+
+  const [cols, rows] = scenario.map.size;
+  for (const z of (scenario.map.risk_zones || [])) {
+    const samples = 4;
+    for (let i = 0; i < samples; i += 1) {
+      const a = (i / samples) * Math.PI * 2;
+      const r = z.radius + 0.4;
+      const cx = z.center[0] + 0.5 + Math.cos(a) * r;
+      const cz = z.center[1] + 0.5 + Math.sin(a) * r;
+      if (cx < 0.5 || cz < 0.5 || cx > cols - 0.5 || cz > rows - 0.5) continue;
+      placeScaffoldAt(cx, cz, i * 3);
     }
   }
 }
@@ -4656,6 +5397,8 @@ function update3D(t) {
   const frac = Math.min(1, Math.max(0, (performance.now() - lastTickAt) / MS_PER_TICK));
 
   // ── Shared scene updates ────────────────────────────────────────────────
+  updateSmokeAndGlows(t);
+
   for (const a of state.agents) {
     const mesh = world.agentMeshes.get(a.id);
     if (!mesh) continue;
@@ -5202,6 +5945,24 @@ function synthesizeScenario(base, cfg) {
     agents.push(JSON.parse(JSON.stringify(agentTemplates[0])));
   }
 
+  const baseMap = base?.map || {};
+  const baseSize = baseMap.size?.[0] || G;
+  const scale = G / Math.max(1, baseSize);
+  const clampCell = (v) => Math.max(0, Math.min(G - 1, Math.round(v * scale)));
+  const scaleFootprint = ([x, y, w, h]) => {
+    const sx = clampCell(x);
+    const sy = clampCell(y);
+    const ex = Math.max(sx + 1, clampCell(x + w));
+    const ey = Math.max(sy + 1, clampCell(y + h));
+    return [sx, sy, Math.max(1, Math.min(G - sx, ex - sx)), Math.max(1, Math.min(G - sy, ey - sy))];
+  };
+  const terrain = (baseMap.terrain || []).map((t) => ({ ...t, footprint: scaleFootprint(t.footprint) }));
+  const buildings = (baseMap.buildings || []).map((b) => ({ ...b, footprint: scaleFootprint(b.footprint) }));
+  const roads = (baseMap.roads || []).map((r) => ({
+    ...r,
+    points: (r.points || []).map(([x, y]) => [clampCell(x), clampCell(y)])
+  }));
+
   return {
     scenario_id: cfg.missionId.toLowerCase().replace(/[^a-z0-9]+/g, "_") || "msn_synth",
     description: base?.description ||
@@ -5213,7 +5974,10 @@ function synthesizeScenario(base, cfg) {
       refuges: [{ id: "R0", location: baseCell }],
       blocked_cells: blockades,
       risk_zones: riskZones,
-      communication_dead_zones: deadZones
+      communication_dead_zones: deadZones,
+      terrain,
+      roads,
+      buildings
     },
     victims,
     agents,
@@ -5274,6 +6038,11 @@ function teardown3D() {
   world.riskMeshes.clear();
   world.baseMesh = null;
   world.groundGrid = null;
+  world.horizonSilhouette = null;
+  world.scenarioBuildingsGroup = null;
+  world.roadsGroup = null;
+  world.smokePuffs = [];
+  world.fireGlows = [];
   world.initialized = false;
 }
 

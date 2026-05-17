@@ -59,6 +59,7 @@ let rafId = null;
 let lastTickAt = 0;
 const T0 = performance.now();
 const trails = new Map();
+const seenCells = new Set<string>();
 const TRAIL_LEN = 10;
 const MS_PER_TICK = 900;
 const MAX_EVENT_LOG = 20;
@@ -90,6 +91,7 @@ function reset() {
   state.rescued = 0;
   lastTickAt = performance.now();
   trails.clear();
+  seenCells.clear();
   for (const agent of state.agents) {
     agent.prevLocation = [...agent.location];
     trails.set(agent.id, [{ x: agent.location[0], y: agent.location[1] }]);
@@ -383,19 +385,143 @@ function drawMap(t) {
   const cell = canvas.width / cols;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  drawGrid(cols, rows, cell);
+  drawBackground();
+  drawTerrain(cell);
+  drawGridLines(cols, rows, cell);
+  drawRoads(cell, t);
+  drawBuildings(cell);
   drawCommunication(cell, t);
   drawRiskZones(cell, t);
+  drawBuildingDamage(cell, t);
   drawBlockades(cell);
   drawVictims(cell, t);
   drawBase(cell);
   drawAgents(cell, t);
+  drawFogOfWar(cols, rows, cell);
+  drawVignette();
 }
 
-function drawGrid(cols, rows, cell) {
-  ctx.fillStyle = "#142235";
+function updateSeenCells(cols, rows) {
+  for (const agent of state.agents) {
+    const [ax, ay] = agent.location;
+    const r = Math.max(1, agent.perception_range || 3);
+    const r2 = r * r;
+    const minX = Math.max(0, Math.floor(ax - r));
+    const maxX = Math.min(cols - 1, Math.ceil(ax + r));
+    const minY = Math.max(0, Math.floor(ay - r));
+    const maxY = Math.min(rows - 1, Math.ceil(ay + r));
+    for (let cy = minY; cy <= maxY; cy += 1) {
+      for (let cx = minX; cx <= maxX; cx += 1) {
+        const dx = cx - ax;
+        const dy = cy - ay;
+        if (dx * dx + dy * dy <= r2) seenCells.add(`${cx},${cy}`);
+      }
+    }
+  }
+}
+
+function drawFogOfWar(cols, rows, cell) {
+  updateSeenCells(cols, rows);
+  ctx.save();
+  ctx.fillStyle = "rgba(6,10,20,0.55)";
+  for (let cy = 0; cy < rows; cy += 1) {
+    for (let cx = 0; cx < cols; cx += 1) {
+      if (!seenCells.has(`${cx},${cy}`)) {
+        ctx.fillRect(cx * cell, cy * cell, cell, cell);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawVignette() {
+  const w = canvas.width;
+  const h = canvas.height;
+  const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.7);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(0.7, "rgba(0,0,0,0.25)");
+  grad.addColorStop(1, "rgba(0,0,0,0.7)");
+  ctx.save();
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
+
+const BUILDING_KINDS = {
+  apartment: { base: "#2c3a52", roof: "#3d4e6c", trim: "#5b7196", windowOn: "rgba(255,210,120,0.85)", windowOff: "rgba(120,140,180,0.18)", litChance: 0.55 },
+  civic:     { base: "#384455", roof: "#4a5970", trim: "#728aae", windowOn: "rgba(180,220,255,0.78)", windowOff: "rgba(140,160,190,0.15)", litChance: 0.35 },
+  lowrise:   { base: "#4a3a30", roof: "#5d4a3c", trim: "#7c6452", windowOn: "rgba(255,180,90,0.7)",  windowOff: "rgba(150,120,90,0.18)", litChance: 0.25 },
+  warehouse: { base: "#2f3438", roof: "#3f464b", trim: "#5a636a", windowOn: "rgba(160,200,230,0.55)", windowOff: "rgba(110,120,130,0.18)", litChance: 0.15 }
+};
+
+function buildingSeed(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function drawBuildings(cell) {
+  if (!state.map.buildings) return;
+  for (const b of state.map.buildings) {
+    const [bx, by, bw, bh] = b.footprint;
+    const palette = BUILDING_KINDS[b.kind] || BUILDING_KINDS.lowrise;
+    const x = bx * cell;
+    const y = by * cell;
+    const w = bw * cell;
+    const h = bh * cell;
+    const inset = Math.max(1, cell * 0.08);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(x + inset * 1.5, y + inset * 1.5, w - inset, h - inset);
+
+    ctx.fillStyle = palette.base;
+    ctx.fillRect(x + inset, y + inset, w - inset * 2, h - inset * 2);
+
+    const roofInset = inset * 2.2;
+    ctx.fillStyle = palette.roof;
+    ctx.fillRect(x + roofInset, y + roofInset, w - roofInset * 2, h - roofInset * 2);
+
+    ctx.strokeStyle = palette.trim;
+    ctx.lineWidth = 0.75;
+    ctx.strokeRect(x + inset + 0.5, y + inset + 0.5, w - inset * 2 - 1, h - inset * 2 - 1);
+
+    const seed = buildingSeed(b.id);
+    if (b.kind === "warehouse") {
+      ctx.fillStyle = "rgba(120,140,160,0.35)";
+      const stripeStep = cell * 0.55;
+      for (let sx = x + roofInset + stripeStep * 0.4; sx < x + w - roofInset; sx += stripeStep) {
+        ctx.fillRect(sx, y + roofInset + 2, stripeStep * 0.45, h - roofInset * 2 - 4);
+      }
+    } else {
+      const winCols = Math.max(1, Math.floor(bw * 2));
+      const winRows = Math.max(1, Math.floor(bh * 2));
+      const cellW = (w - inset * 4) / winCols;
+      const cellH = (h - inset * 4) / winRows;
+      const winW = Math.max(1, cellW * 0.55);
+      const winH = Math.max(1, cellH * 0.5);
+      for (let cy = 0; cy < winRows; cy += 1) {
+        for (let cx = 0; cx < winCols; cx += 1) {
+          const bit = ((seed >>> ((cy * winCols + cx) % 31)) & 1) === 1;
+          const lit = bit && (((seed * (cx + 1) * (cy + 3)) >>> 0) % 1000) / 1000 < palette.litChance;
+          ctx.fillStyle = lit ? palette.windowOn : palette.windowOff;
+          const wx = x + inset * 2 + cx * cellW + (cellW - winW) / 2;
+          const wy = y + inset * 2 + cy * cellH + (cellH - winH) / 2;
+          ctx.fillRect(wx, wy, winW, winH);
+        }
+      }
+    }
+    ctx.restore();
+  }
+}
+
+function drawBackground() {
+  ctx.fillStyle = "#1a2433";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "rgba(120, 180, 230, 0.22)";
+}
+
+function drawGridLines(cols, rows, cell) {
+  ctx.strokeStyle = "rgba(120, 180, 230, 0.16)";
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
     ctx.beginPath();
@@ -409,9 +535,219 @@ function drawGrid(cols, rows, cell) {
     ctx.lineTo(canvas.width, i * cell);
     ctx.stroke();
   }
-  ctx.fillStyle = "rgba(95, 130, 165, 0.75)";
-  for (let y = 2; y < rows; y += 5) ctx.fillRect(0, y * cell + cell * 0.28, canvas.width, cell * 0.44);
-  for (let x = 2; x < cols; x += 6) ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, canvas.height);
+}
+
+const TERRAIN_KINDS = {
+  plaza:  { base: "#3a4250", accent: "rgba(90,105,125,0.35)" },
+  grass:  { base: "#2c4a2a", accent: "rgba(60,90,55,0.55)" },
+  water:  { base: "#1c3550", accent: "rgba(120,180,220,0.18)" },
+  rubble: { base: "#3d3a35", accent: "rgba(80,72,62,0.85)" }
+};
+
+function drawTerrain(cell) {
+  if (!state.map.terrain) return;
+  for (const patch of state.map.terrain) {
+    const [px, py, pw, ph] = patch.footprint;
+    const palette = TERRAIN_KINDS[patch.kind] || TERRAIN_KINDS.plaza;
+    const x = px * cell;
+    const y = py * cell;
+    const w = pw * cell;
+    const h = ph * cell;
+
+    ctx.fillStyle = palette.base;
+    ctx.fillRect(x, y, w, h);
+
+    if (patch.kind === "grass") {
+      ctx.fillStyle = palette.accent;
+      const step = Math.max(3, cell * 0.45);
+      let seed = (px * 73856093) ^ (py * 19349663);
+      for (let yy = y + step / 2; yy < y + h; yy += step) {
+        for (let xx = x + step / 2; xx < x + w; xx += step) {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          const jx = ((seed & 0xff) / 255 - 0.5) * step * 0.4;
+          const jy = (((seed >>> 8) & 0xff) / 255 - 0.5) * step * 0.4;
+          ctx.fillRect(xx + jx, yy + jy, 1.2, 1.2);
+        }
+      }
+    } else if (patch.kind === "water") {
+      ctx.strokeStyle = palette.accent;
+      ctx.lineWidth = 0.6;
+      for (let yy = y + cell * 0.4; yy < y + h; yy += cell * 0.6) {
+        ctx.beginPath();
+        ctx.moveTo(x + cell * 0.15, yy);
+        ctx.bezierCurveTo(x + w * 0.35, yy - cell * 0.18, x + w * 0.65, yy + cell * 0.18, x + w - cell * 0.15, yy);
+        ctx.stroke();
+      }
+    } else if (patch.kind === "rubble") {
+      let seed = (px * 374761393) ^ (py * 668265263);
+      for (let i = 0; i < pw * ph * 14; i += 1) {
+        seed = (seed * 1103515245 + 12345) >>> 0;
+        const rx = x + ((seed & 0xffff) / 0xffff) * w;
+        const ry = y + (((seed >>> 16) & 0xffff) / 0xffff) * h;
+        const sz = 1 + ((seed >>> 4) & 3);
+        ctx.fillStyle = palette.accent;
+        ctx.fillRect(rx, ry, sz, sz);
+      }
+    } else if (patch.kind === "plaza") {
+      ctx.strokeStyle = palette.accent;
+      ctx.lineWidth = 0.4;
+      for (let xx = x + cell; xx < x + w; xx += cell) {
+        ctx.beginPath();
+        ctx.moveTo(xx, y);
+        ctx.lineTo(xx, y + h);
+        ctx.stroke();
+      }
+      for (let yy = y + cell; yy < y + h; yy += cell) {
+        ctx.beginPath();
+        ctx.moveTo(x, yy);
+        ctx.lineTo(x + w, yy);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function drawRoads(cell, t) {
+  if (!state.map.roads) return;
+  const asphalt = "#1a1f27";
+  const curb = "rgba(70,82,98,0.6)";
+  const mainCenter = "rgba(255,228,77,0.85)";
+  const sideCenter = "rgba(180,190,205,0.45)";
+  const widthMain = cell * 0.78;
+  const widthSide = cell * 0.62;
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  for (const road of state.map.roads) {
+    const w = road.kind === "main" ? widthMain : widthSide;
+    ctx.strokeStyle = asphalt;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    const pts = road.points;
+    ctx.moveTo((pts[0][0] + 0.5) * cell, (pts[0][1] + 0.5) * cell);
+    for (let i = 1; i < pts.length; i += 1) {
+      ctx.lineTo((pts[i][0] + 0.5) * cell, (pts[i][1] + 0.5) * cell);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = curb;
+    ctx.lineWidth = Math.max(0.5, w * 0.06);
+    ctx.stroke();
+  }
+
+  for (const road of state.map.roads) {
+    const pts = road.points;
+    if (road.kind === "main") {
+      ctx.strokeStyle = mainCenter;
+      ctx.lineWidth = Math.max(1, cell * 0.07);
+      ctx.setLineDash([cell * 0.5, cell * 0.4]);
+      ctx.lineDashOffset = -t * 4;
+    } else {
+      ctx.strokeStyle = sideCenter;
+      ctx.lineWidth = Math.max(0.5, cell * 0.04);
+      ctx.setLineDash([cell * 0.25, cell * 0.35]);
+      ctx.lineDashOffset = 0;
+    }
+    ctx.beginPath();
+    ctx.moveTo((pts[0][0] + 0.5) * cell, (pts[0][1] + 0.5) * cell);
+    for (let i = 1; i < pts.length; i += 1) {
+      ctx.lineTo((pts[i][0] + 0.5) * cell, (pts[i][1] + 0.5) * cell);
+    }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function pointInZone(cx, cy, zone) {
+  const dx = cx - zone.center[0];
+  const dy = cy - zone.center[1];
+  return dx * dx + dy * dy <= zone.radius * zone.radius;
+}
+
+function drawBuildingDamage(cell, t) {
+  if (!state.map.buildings || !state.map.risk_zones) return;
+  const collapseZones = state.map.risk_zones.filter((z) => z.type === "collapse");
+  const fireZones = state.map.risk_zones.filter((z) => z.type === "fire");
+  if (!collapseZones.length && !fireZones.length) return;
+
+  for (const b of state.map.buildings) {
+    const [bx, by, bw, bh] = b.footprint;
+    const ccx = bx + bw / 2;
+    const ccy = by + bh / 2;
+    const x = bx * cell;
+    const y = by * cell;
+    const w = bw * cell;
+    const h = bh * cell;
+    const inCollapse = collapseZones.some((z) => pointInZone(ccx, ccy, z));
+    const inFire = fireZones.some((z) => pointInZone(ccx, ccy, z));
+    if (!inCollapse && !inFire) continue;
+
+    let seed = buildingSeed(b.id);
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return (seed & 0xffff) / 0xffff;
+    };
+
+    if (inCollapse) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(15,18,25,0.9)";
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 3; i += 1) {
+        let sx = x + rand() * w;
+        let sy = y + rand() * h;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        for (let j = 0; j < 4; j += 1) {
+          sx += (rand() - 0.5) * w * 0.35;
+          sy += (rand() - 0.5) * h * 0.35;
+          ctx.lineTo(sx, sy);
+        }
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(70,62,52,0.95)";
+      for (let i = 0; i < 8; i += 1) {
+        const cxp = x + rand() * w;
+        const cyp = y + rand() * h;
+        const sz = 1.5 + rand() * 2.5;
+        ctx.fillRect(cxp, cyp, sz, sz);
+      }
+      ctx.restore();
+    }
+
+    if (inFire) {
+      ctx.save();
+      const plumes = 2 + (b.footprint[2] >= 3 ? 1 : 0);
+      for (let i = 0; i < plumes; i += 1) {
+        const baseX = x + (0.25 + (i / plumes) * 0.5 + rand() * 0.1) * w;
+        const baseY = y + h * 0.15;
+        const phase = i * 1.7 + rand() * 6;
+        for (let p = 0; p < 4; p += 1) {
+          const tt = ((t * 0.9 + phase + p * 0.7) % 3);
+          const alpha = Math.max(0, 0.42 - tt * 0.12);
+          const rise = tt * cell * 1.1;
+          const drift = Math.sin(t * 1.2 + p + i) * cell * 0.35;
+          const size = cell * (0.45 + tt * 0.3);
+          ctx.fillStyle = `rgba(75,68,62,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(baseX + drift, baseY - rise, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      for (let i = 0; i < 5; i += 1) {
+        const phase = rand() * 6;
+        const tt = ((t * 2 + phase) % 2);
+        const alpha = Math.max(0, 0.85 - tt * 0.45);
+        const ex = x + rand() * w;
+        const ey = y + h * 0.2 - tt * cell * 0.9;
+        ctx.fillStyle = `rgba(255,${130 + Math.floor(tt * 60)},40,${alpha})`;
+        ctx.fillRect(ex, ey, 1.6, 1.6);
+      }
+      ctx.restore();
+    }
+  }
 }
 
 function drawCommunication(cell, t) {
@@ -521,31 +857,62 @@ function drawVictims(cell, t) {
     const [x, y] = victim.location;
     const px = (x + 0.5) * cell;
     const py = (y + 0.5) * cell;
-    const color = victim.status === "rescued"
-      ? "#39ff14"
-      : victim.status === "dead"
-        ? "#555555"
-        : "#ff6666";
+    const buriedness = victim.buriedness || 0;
+    const tier = buriedness >= 55 ? "buried" : buriedness >= 30 ? "sitting" : "standing";
+    const status = victim.status;
+    const color = status === "rescued" ? "#39ff14"
+      : status === "dead" ? "#555555"
+      : status === "unknown" ? "#c8b4ff"
+      : "#ff6666";
 
-    if (victim.status === "trapped") {
+    if (status === "trapped" || status === "unknown") {
       const halo = 0.5 + 0.5 * (Math.sin(t * 3) * 0.5 + 0.5);
       ctx.save();
-      ctx.globalAlpha = 0.18 * halo;
+      ctx.globalAlpha = (tier === "buried" ? 0.10 : 0.18) * halo;
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(px, py, cell * 0.55, 0, Math.PI * 2);
+      ctx.arc(px, py, cell * (tier === "buried" ? 0.42 : 0.55), 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+    }
+
+    if (tier === "buried" && status !== "rescued" && status !== "dead") {
+      let seed = (x * 374761393) ^ (y * 668265263);
+      ctx.save();
+      ctx.fillStyle = "rgba(80,72,62,0.9)";
+      for (let i = 0; i < 10; i += 1) {
+        seed = (seed * 1103515245 + 12345) >>> 0;
+        const rx = px - cell * 0.4 + ((seed & 0xffff) / 0xffff) * cell * 0.8;
+        const ry = py - cell * 0.35 + (((seed >>> 16) & 0xffff) / 0xffff) * cell * 0.7;
+        const sz = 1.5 + ((seed >>> 4) & 3);
+        ctx.fillRect(rx, ry, sz, sz);
+      }
       ctx.restore();
     }
 
     ctx.save();
     ctx.fillStyle = color;
-    ctx.shadowBlur = victim.status === "trapped" ? 8 : 3;
+    ctx.shadowBlur = status === "trapped" ? 8 : 3;
     ctx.shadowColor = color;
-    const armW = Math.max(2, cell * 0.1);
-    const armL = Math.max(8, cell * 0.4);
-    ctx.fillRect(px - armW / 2, py - armL / 2, armW, armL);
-    ctx.fillRect(px - armL / 2, py - armW / 2, armL, armW);
+    if (tier === "standing") {
+      const armW = Math.max(2, cell * 0.1);
+      const armL = Math.max(8, cell * 0.42);
+      ctx.fillRect(px - armW / 2, py - armL / 2, armW, armL);
+      ctx.fillRect(px - armL / 2, py - armW / 2, armL, armW);
+    } else if (tier === "sitting") {
+      const r = Math.max(3, cell * 0.18);
+      ctx.beginPath();
+      ctx.arc(px, py - cell * 0.08, r, 0, Math.PI * 2);
+      ctx.fill();
+      const armW = Math.max(1.5, cell * 0.08);
+      const armL = Math.max(5, cell * 0.28);
+      ctx.fillRect(px - armW / 2, py - cell * 0.05, armW, armL);
+    } else {
+      const r = Math.max(2, cell * 0.13);
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.shadowBlur = 0;
     ctx.restore();
 
@@ -553,7 +920,7 @@ function drawVictims(cell, t) {
     ctx.font = "9px 'Courier New', monospace";
     ctx.fillText(victim.id, px - 8, py - cell * 0.42);
 
-    if (victim.status === "trapped" || victim.status === "unknown") {
+    if (status === "trapped" || status === "unknown") {
       const maxHp = 10000;
       const pct = Math.max(0, Math.min(1, victim.hp / maxHp));
       const barW = cell * 0.7;
@@ -597,11 +964,11 @@ function drawAgents(cell, t) {
     const trail = trails.get(agent.id);
 
     if (agent.type === "drone") {
-      drawUAV(px, py, cell, battery, agent.perception_range || 4, t, trail);
+      drawUAV(agent, px, py, cell, battery, agent.perception_range || 4, t, trail);
     } else {
-      drawUGV(px, py, cell, battery, t, trail);
+      drawUGV(agent, px, py, cell, battery, t, trail);
     }
-    drawAgentLabel(agent.id, px, py, agent.type === "drone" ? "#00bfff" : "#39ff14");
+    drawAgentLabel(agent.id, px, py, agentAccentColor(agent));
   }
 }
 
@@ -620,34 +987,52 @@ function drawTrail(trail, cell, color) {
   }
 }
 
-function drawUAV(px, py, cell, battery, scanRange, t, trail) {
-  const color = "rgb(0,191,255)";
+const AGENT_PALETTE = {
+  scout:          { rgb: "0,191,255",  hex: "#00bfff" },
+  relay:          { rgb: "180,140,255", hex: "#b48cff" },
+  rescue:         { rgb: "57,255,20",  hex: "#39ff14" },
+  clear_blockade: { rgb: "255,160,40", hex: "#ffa028" }
+};
+
+function agentAccent(agent) {
+  return AGENT_PALETTE[agent.role] || (agent.type === "drone" ? AGENT_PALETTE.scout : AGENT_PALETTE.rescue);
+}
+
+function agentAccentColor(agent) {
+  return agentAccent(agent).hex;
+}
+
+function drawUAV(agent, px, py, cell, battery, scanRange, t, trail) {
+  const accent = agentAccent(agent);
+  const color = `rgb(${accent.rgb})`;
   drawTrail(trail, cell, color);
 
   ctx.save();
   ctx.beginPath();
   ctx.arc(px, py, scanRange * cell, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(0,191,255,0.25)";
+  ctx.strokeStyle = `rgba(${accent.rgb},0.25)`;
   ctx.setLineDash([4, 4]);
   ctx.lineDashOffset = -t * 10;
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = "rgba(0,191,255,0.04)";
+  ctx.fillStyle = `rgba(${accent.rgb},0.04)`;
   ctx.fill();
   ctx.restore();
 
+  const arms = agent.role === "relay" ? 6 : 4;
   ctx.save();
   ctx.translate(px, py);
   ctx.rotate(t * 8);
-  ctx.strokeStyle = "#00bfff";
+  ctx.strokeStyle = accent.hex;
   ctx.lineWidth = 1.5;
   ctx.shadowBlur = 10;
-  ctx.shadowColor = "#00bfff";
+  ctx.shadowColor = accent.hex;
   const arm = Math.min(8, cell * 0.4);
   const rotor = Math.max(2, cell * 0.13);
-  for (let i = 0; i < 4; i += 1) {
-    ctx.rotate(Math.PI / 2);
+  const sweep = (Math.PI * 2) / arms;
+  for (let i = 0; i < arms; i += 1) {
+    ctx.rotate(sweep);
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(arm, 0);
@@ -659,17 +1044,55 @@ function drawUAV(px, py, cell, battery, scanRange, t, trail) {
   ctx.shadowBlur = 0;
   ctx.beginPath();
   ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = "#00bfff";
+  ctx.fillStyle = accent.hex;
   ctx.fill();
   ctx.restore();
 
-  ctx.fillStyle = battery < 0.15 ? "#ff4444" : battery < 0.3 ? "#ff8c00" : "#00bfff";
+  if (agent.role === "relay") {
+    ctx.save();
+    ctx.strokeStyle = accent.hex;
+    ctx.lineWidth = 1.2;
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = accent.hex;
+    const mast = cell * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(px, py - 2);
+    ctx.lineTo(px, py - mast);
+    ctx.stroke();
+    ctx.beginPath();
+    const tipR = Math.max(2.5, cell * 0.11);
+    ctx.arc(px, py - mast, tipR, 0, Math.PI * 2);
+    ctx.stroke();
+    const pulse = 0.4 + 0.6 * (Math.sin(t * 4) * 0.5 + 0.5);
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = accent.hex;
+    ctx.fill();
+    ctx.restore();
+  } else if (agent.role === "scout") {
+    ctx.save();
+    ctx.strokeStyle = accent.hex;
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = accent.hex;
+    const lensR = Math.max(2, cell * 0.1);
+    ctx.beginPath();
+    ctx.arc(px, py + cell * 0.18, lensR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(px, py + cell * 0.18, lensR * 0.45, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${accent.rgb},0.7)`;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = battery < 0.15 ? "#ff4444" : battery < 0.3 ? "#ff8c00" : accent.hex;
   ctx.font = "9px 'Courier New', monospace";
   ctx.fillText(`${Math.round(battery * 100)}%`, px + 10, py - 10);
 }
 
-function drawUGV(px, py, cell, battery, t, trail) {
-  const color = "rgb(57,255,20)";
+function drawUGV(agent, px, py, cell, battery, t, trail) {
+  const accent = agentAccent(agent);
+  const color = `rgb(${accent.rgb})`;
 
   if (trail && trail.length > 1) {
     ctx.save();
@@ -679,7 +1102,7 @@ function drawUGV(px, py, cell, battery, t, trail) {
       const a = trail[i - 1];
       const b = trail[i];
       const alpha = (i / trail.length) * 0.45;
-      ctx.strokeStyle = `rgba(57,255,20,${alpha})`;
+      ctx.strokeStyle = `rgba(${accent.rgb},${alpha})`;
       ctx.lineWidth = lerp(0.5, 1.5, i / trail.length);
       ctx.beginPath();
       ctx.moveTo((a.x + 0.5) * cell, (a.y + 0.5) * cell);
@@ -694,21 +1117,59 @@ function drawUGV(px, py, cell, battery, t, trail) {
   ctx.shadowColor = color;
   const body = cell * 0.5;
   const half = body / 2;
-  ctx.strokeStyle = "#39ff14";
+  ctx.strokeStyle = accent.hex;
   ctx.lineWidth = 1.2;
   ctx.strokeRect(px - half, py - half, body, body);
-  ctx.fillStyle = "rgba(57,255,20,0.18)";
+  ctx.fillStyle = `rgba(${accent.rgb},0.18)`;
   ctx.fillRect(px - half, py - half, body, body);
-  ctx.fillStyle = "#39ff14";
-  const trackW = Math.max(2, body * 0.18);
-  ctx.fillRect(px - half - trackW - 1, py - half + 1, trackW, body - 2);
-  ctx.fillRect(px + half + 1, py - half + 1, trackW, body - 2);
-  ctx.beginPath();
-  ctx.arc(px, py, Math.max(1.5, body * 0.16), 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillStyle = accent.hex;
+
+  if (agent.role === "clear_blockade") {
+    const trackW = Math.max(2.5, body * 0.22);
+    ctx.fillRect(px - half - trackW - 1, py - half, trackW, body);
+    ctx.fillRect(px + half + 1, py - half, trackW, body);
+    ctx.fillStyle = `rgba(${accent.rgb},0.55)`;
+    const treadStep = Math.max(2, body * 0.18);
+    for (let yy = py - half + 1; yy < py + half; yy += treadStep) {
+      ctx.fillRect(px - half - trackW - 1, yy, trackW, 1);
+      ctx.fillRect(px + half + 1, yy, trackW, 1);
+    }
+    ctx.save();
+    ctx.strokeStyle = accent.hex;
+    ctx.lineWidth = 1.4;
+    const claw = cell * 0.32;
+    const reach = Math.sin(t * 2.2) * 0.25 + 0.55;
+    const ax = px;
+    const ay = py - half - 1;
+    const bx = ax;
+    const by = ay - claw * reach;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bx - 2.5, by);
+    ctx.lineTo(bx, by - 3);
+    ctx.lineTo(bx + 2.5, by);
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    const wheelR = Math.max(1.5, body * 0.18);
+    ctx.beginPath();
+    ctx.arc(px - half - 1, py - half + wheelR, wheelR, 0, Math.PI * 2);
+    ctx.arc(px - half - 1, py + half - wheelR, wheelR, 0, Math.PI * 2);
+    ctx.arc(px + half + 1, py - half + wheelR, wheelR, 0, Math.PI * 2);
+    ctx.arc(px + half + 1, py + half - wheelR, wheelR, 0, Math.PI * 2);
+    ctx.fill();
+    const crossArm = body * 0.55;
+    const crossW = Math.max(1.5, body * 0.14);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(px - crossArm / 2, py - crossW / 2, crossArm, crossW);
+    ctx.fillRect(px - crossW / 2, py - crossArm / 2, crossW, crossArm);
+  }
   ctx.restore();
 
-  ctx.fillStyle = battery < 0.15 ? "#ff4444" : battery < 0.3 ? "#ff8c00" : "#39ff14";
+  ctx.fillStyle = battery < 0.15 ? "#ff4444" : battery < 0.3 ? "#ff8c00" : accent.hex;
   ctx.font = "9px 'Courier New', monospace";
   ctx.fillText(`${Math.round(battery * 100)}%`, px + 10, py - 10);
 }
@@ -940,6 +1401,410 @@ autoBtn.addEventListener("click", onAutoToggle);
    3D first-person view
    ────────────────────────────────────────────────────────────────────────── */
 
+function computeRoadCells(scenario) {
+  const cells = new Set<string>();
+  if (!scenario.map.roads) return cells;
+  for (const road of scenario.map.roads) {
+    const pts = road.points;
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const steps = Math.max(Math.abs(dx), Math.abs(dy));
+      for (let s = 0; s <= steps; s += 1) {
+        const t = steps === 0 ? 0 : s / steps;
+        const cx = Math.round(a[0] + dx * t);
+        const cy = Math.round(a[1] + dy * t);
+        cells.add(`${cx},${cy}`);
+      }
+    }
+  }
+  return cells;
+}
+
+function addTerrainPatches3D(scenario) {
+  if (!scenario.map.terrain) return;
+  const palettes = {
+    grass:  { color: 0x2d4a25, roughness: 0.95, metalness: 0.02, emissive: 0x000000 },
+    water:  { color: 0x1c3550, roughness: 0.2,  metalness: 0.5,  emissive: 0x031530 },
+    rubble: { color: 0x3d3a35, roughness: 0.98, metalness: 0.02, emissive: 0x000000 },
+    plaza:  { color: 0x3a4250, roughness: 0.92, metalness: 0.05, emissive: 0x000000 }
+  };
+
+  for (const patch of scenario.map.terrain) {
+    const [px, py, pw, ph] = patch.footprint;
+    const palette = palettes[patch.kind] || palettes.plaza;
+    const mat = new THREE.MeshStandardMaterial({
+      color: palette.color,
+      roughness: palette.roughness,
+      metalness: palette.metalness,
+      emissive: palette.emissive,
+      emissiveIntensity: patch.kind === "water" ? 0.3 : 0.0
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(px + pw / 2, 0.012, py + ph / 2);
+    world.scene.add(mesh);
+
+    if (patch.kind === "rubble") {
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5a4838, roughness: 0.95 });
+      const stoneCount = Math.floor(pw * ph * 3);
+      for (let i = 0; i < stoneCount; i += 1) {
+        const sx = px + 0.1 + hash01(px + i, py, 101) * (pw - 0.2);
+        const sz = py + 0.1 + hash01(px, py + i, 102) * (ph - 0.2);
+        const sw = 0.1 + hash01(sx, sz, 103) * 0.18;
+        const sh = 0.06 + hash01(sx, sz, 104) * 0.12;
+        const sd = 0.1 + hash01(sx, sz, 105) * 0.18;
+        const stone = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, sd), stoneMat);
+        stone.position.set(sx, sh / 2 + 0.02, sz);
+        stone.rotation.y = hash01(sx, sz, 106) * Math.PI * 2;
+        stone.rotation.x = (hash01(sx, sz, 107) - 0.5) * 0.5;
+        world.scene.add(stone);
+      }
+    } else if (patch.kind === "grass") {
+      const tuftMat = new THREE.MeshStandardMaterial({ color: 0x3a5a30, roughness: 0.9 });
+      const tuftCount = Math.floor(pw * ph * 2);
+      for (let i = 0; i < tuftCount; i += 1) {
+        const tx = px + 0.1 + hash01(px + i, py, 111) * (pw - 0.2);
+        const tz = py + 0.1 + hash01(px, py + i, 112) * (ph - 0.2);
+        const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 5), tuftMat);
+        tuft.position.set(tx, 0.09, tz);
+        world.scene.add(tuft);
+      }
+    }
+  }
+}
+
+function makeGradientSkyTexture(size = 512) {
+  const c = document.createElement("canvas");
+  c.width = 16;
+  c.height = size;
+  const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, size);
+  grad.addColorStop(0.0,  "#08101a");
+  grad.addColorStop(0.45, "#1a1612");
+  grad.addColorStop(0.72, "#3a2418");
+  grad.addColorStop(0.88, "#5a3a22");
+  grad.addColorStop(1.0,  "#1c1610");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 16, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function buildHorizonSilhouette(scenario) {
+  const [cols, rows] = scenario.map.size;
+  const cx = cols / 2;
+  const cz = rows / 2;
+  const baseRadius = Math.max(cols, rows) * 1.35;
+  const silMat = new THREE.MeshBasicMaterial({ color: 0x0a0d13, fog: false });
+  const COUNT = 96;
+  const baseGeom = new THREE.BoxGeometry(1, 1, 1);
+  const instMesh = new THREE.InstancedMesh(baseGeom, silMat, COUNT);
+  const dummy = new THREE.Object3D();
+  const lit = new THREE.Color(0x261c14);
+  for (let i = 0; i < COUNT; i += 1) {
+    const angle = (i / COUNT) * Math.PI * 2;
+    const r = baseRadius + hash01(i, 0, 91) * 10;
+    const x = cx + Math.cos(angle) * r;
+    const z = cz + Math.sin(angle) * r;
+    const w = 1.6 + hash01(i, 0, 92) * 3.0;
+    const d = 1.6 + hash01(i, 0, 93) * 3.0;
+    const h = 1.8 + hash01(i, 0, 94) * 6.5;
+    dummy.position.set(x, h / 2, z);
+    dummy.rotation.set(0, angle + Math.PI / 2 + (hash01(i, 0, 95) - 0.5) * 0.5, 0);
+    dummy.scale.set(w, h, d);
+    dummy.updateMatrix();
+    instMesh.setMatrixAt(i, dummy.matrix);
+    if (hash01(i, 0, 96) > 0.85) instMesh.setColorAt(i, lit);
+    else instMesh.setColorAt(i, new THREE.Color(0x0a0d13));
+  }
+  instMesh.instanceMatrix.needsUpdate = true;
+  if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
+  const group = new THREE.Group();
+  group.name = "horizon-silhouette";
+  group.add(instMesh);
+  for (let i = 0; i < 4; i += 1) {
+    const angle = (i / 4 + 0.1) * Math.PI * 2;
+    const r = baseRadius + 4;
+    const x = cx + Math.cos(angle) * r;
+    const z = cz + Math.sin(angle) * r;
+    const phase = i * 1.5;
+    for (let p = 0; p < 6; p += 1) {
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(2.2 + p * 0.3, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0x1e1a17, transparent: true, opacity: 0.5 - p * 0.06, depthWrite: false, fog: false })
+      );
+      sphere.position.set(x + Math.sin(phase + p) * 1.2, 6 + p * 2.5, z + Math.cos(phase + p) * 1.2);
+      group.add(sphere);
+    }
+  }
+  world.scene.add(group);
+  world.horizonSilhouette = group;
+}
+
+function addStreetFurniture(scenario) {
+  const [cols, rows] = scenario.map.size;
+  const roadCells = computeRoadCells(scenario);
+  const riskZones = scenario.map.risk_zones || [];
+
+  const hLines = new Set<number>();
+  const vLines = new Set<number>();
+  for (const road of scenario.map.roads || []) {
+    const pts = road.points;
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      if (a[1] === b[1]) hLines.add(a[1]);
+      if (a[0] === b[0]) vLines.add(a[0]);
+    }
+  }
+
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x2a2e34, roughness: 0.85, metalness: 0.3 });
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x32363c, roughness: 0.8, metalness: 0.4 });
+
+  for (const y of hLines) {
+    for (const x of vLines) {
+      if (x === 0 || x === cols - 1 || y === 0 || y === rows - 1) continue;
+      const damage = cellDamageLevel(x, y, riskZones);
+      for (const ox of [-1, 1]) {
+        for (const oz of [-1, 1]) {
+          const px = x + 0.5 + ox * 0.55;
+          const pz = y + 0.5 + oz * 0.55;
+          const lamp = new THREE.Group();
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.4, 8), postMat);
+          post.position.y = 0.7;
+          lamp.add(post);
+          const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.25, 6), armMat);
+          arm.rotation.z = Math.PI / 2;
+          arm.position.set(-ox * 0.12, 1.35, 0);
+          lamp.add(arm);
+          const isLit = damage < 0.4 && hash01(x, y, 50 + ox + oz * 2) > 0.15;
+          const lampMat = new THREE.MeshStandardMaterial({
+            color: isLit ? 0xffe9b0 : 0x1a1614,
+            emissive: isLit ? 0xffd080 : 0x000000,
+            emissiveIntensity: isLit ? 0.9 : 0,
+            roughness: 0.7
+          });
+          const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.18), lampMat);
+          head.position.set(-ox * 0.24, 1.32, 0);
+          lamp.add(head);
+          if (isLit) {
+            const light = new THREE.PointLight(0xffd080, 0.6, 4.5);
+            light.position.set(-ox * 0.24, 1.32, 0);
+            lamp.add(light);
+          }
+          lamp.position.set(px, 0, pz);
+          if (damage > 0.45) {
+            lamp.rotation.z = (hash01(x, y, 51 + ox + oz * 2) - 0.5) * 0.6;
+            lamp.rotation.x = (hash01(x, y, 52 + ox + oz * 2) - 0.5) * 0.3;
+          }
+          world.scene.add(lamp);
+        }
+      }
+    }
+  }
+
+  if (scenario.map.terrain) {
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.95 });
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x2d4a25, roughness: 0.9 });
+    const fallenLeafMat = new THREE.MeshStandardMaterial({ color: 0x4a3522, roughness: 0.95 });
+    for (const patch of scenario.map.terrain) {
+      if (patch.kind !== "grass") continue;
+      const [px, py, pw, ph] = patch.footprint;
+      const treeCount = Math.max(1, Math.floor(pw * ph * 0.5));
+      for (let i = 0; i < treeCount; i += 1) {
+        const tx = px + 0.3 + hash01(px + i, py, 41) * (pw - 0.6);
+        const tz = py + 0.3 + hash01(px, py + i, 42) * (ph - 0.6);
+        const damage = cellDamageLevel(Math.floor(tx), Math.floor(tz), riskZones);
+        const fallen = damage > 0.4 && hash01(tx, tz, 44) > 0.4;
+        const tree = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.5, 6), trunkMat);
+        trunk.position.y = 0.25;
+        tree.add(trunk);
+        const leaves = new THREE.Mesh(
+          new THREE.ConeGeometry(0.35, 0.7, 8),
+          fallen ? fallenLeafMat : leafMat
+        );
+        leaves.position.y = 0.7;
+        tree.add(leaves);
+        tree.position.set(tx, 0, tz);
+        tree.scale.setScalar(0.8 + hash01(tx, tz, 43) * 0.6);
+        if (fallen) {
+          tree.rotation.z = Math.PI / 2 * (hash01(tx, tz, 45) > 0.5 ? 1 : -1) * 0.85;
+        }
+        world.scene.add(tree);
+      }
+    }
+  }
+
+  const hydrantMat = new THREE.MeshStandardMaterial({ color: 0x9a2820, roughness: 0.6, metalness: 0.2 });
+  for (let i = 0; i < 14; i += 1) {
+    const cx = Math.floor(hash01(i, 7, 61) * cols);
+    const cz = Math.floor(hash01(i, 11, 62) * rows);
+    if (!roadCells.has(`${cx},${cz}`)) continue;
+    const hydrant = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.28, 8), hydrantMat);
+    body.position.y = 0.14;
+    hydrant.add(body);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.07, 8), hydrantMat);
+    top.position.y = 0.32;
+    hydrant.add(top);
+    hydrant.position.set(cx + 0.5 + 0.42, 0, cz + 0.5 + 0.42);
+    world.scene.add(hydrant);
+  }
+}
+
+function addFireSmoke(scenario) {
+  const fireZones = (scenario.map.risk_zones || []).filter((z) => z.type === "fire");
+  if (!fireZones.length) return;
+  world.smokePuffs = world.smokePuffs || [];
+  world.fireGlows = world.fireGlows || [];
+
+  for (const z of fireZones) {
+    const baseX = z.center[0] + 0.5;
+    const baseZ = z.center[1] + 0.5;
+
+    const glow = new THREE.PointLight(0xff6020, 2.0, 9, 1.8);
+    glow.position.set(baseX, 0.6, baseZ);
+    world.scene.add(glow);
+    world.fireGlows.push(glow);
+
+    const emberMat = new THREE.MeshBasicMaterial({ color: 0xff8c30, transparent: true, opacity: 0.85, depthWrite: false, fog: false });
+    const ember = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), emberMat);
+    ember.position.set(baseX, 0.25, baseZ);
+    world.scene.add(ember);
+    world.fireGlows.push({ ember, _isEmber: true, x: baseX, z: baseZ });
+
+    const PUFF_COUNT = 12;
+    const PLUME_HEIGHT = 14;
+    for (let i = 0; i < PUFF_COUNT; i += 1) {
+      const phase = i / PUFF_COUNT;
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.38, 10, 8),
+        new THREE.MeshBasicMaterial({
+          color: 0x1f1c19,
+          transparent: true,
+          opacity: 0.7,
+          depthWrite: false,
+          fog: true
+        })
+      );
+      sphere.position.set(baseX, 0.6 + phase * PLUME_HEIGHT, baseZ);
+      world.scene.add(sphere);
+      world.smokePuffs.push({ mesh: sphere, baseX, baseZ, baseY: 0.6, height: PLUME_HEIGHT, phase, zoneId: z.id });
+    }
+  }
+}
+
+function updateSmokeAndGlows(t) {
+  if (world.smokePuffs) {
+    const ageNorm = (t * 0.045) % 1;
+    for (const p of world.smokePuffs) {
+      const localT = (p.phase + ageNorm) % 1;
+      p.mesh.position.y = p.baseY + localT * p.height;
+      const sizeFactor = 0.65 + localT * 1.8;
+      p.mesh.scale.setScalar(sizeFactor);
+      p.mesh.position.x = p.baseX + Math.sin(t * 0.6 + p.phase * 6) * localT * 0.7;
+      p.mesh.position.z = p.baseZ + Math.cos(t * 0.55 + p.phase * 5) * localT * 0.7;
+      const mat = p.mesh.material;
+      if (mat) {
+        const dark = 0.12 - localT * 0.04;
+        mat.color.setRGB(Math.max(0.04, dark + 0.04), Math.max(0.03, dark + 0.02), Math.max(0.03, dark));
+        mat.opacity = Math.max(0, 0.75 - localT * 0.7);
+      }
+    }
+  }
+  if (world.fireGlows) {
+    for (const g of world.fireGlows) {
+      if (g._isEmber) {
+        const flicker = 0.7 + Math.sin(t * 9 + g.x) * 0.3 + Math.sin(t * 14 + g.z) * 0.2;
+        g.ember.scale.setScalar(Math.max(0.4, flicker));
+        const mat = g.ember.material;
+        if (mat) mat.opacity = 0.6 + Math.sin(t * 11) * 0.25;
+      } else if (g.intensity !== undefined) {
+        g.intensity = 1.6 + Math.sin(t * 8 + g.position.x) * 0.5 + Math.sin(t * 13 + g.position.z) * 0.3;
+      }
+    }
+  }
+}
+
+function buildRoads3D(scenario) {
+  if (!scenario.map.roads) return;
+
+  const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x1a1f27, roughness: 0.95, metalness: 0.05 });
+  const curbMat    = new THREE.MeshStandardMaterial({ color: 0x586173, roughness: 0.85, metalness: 0.05 });
+  const yellowMat  = new THREE.MeshStandardMaterial({ color: 0xffe44d, emissive: 0xffe44d, emissiveIntensity: 0.45, roughness: 0.6 });
+  const whiteMat   = new THREE.MeshStandardMaterial({ color: 0xd6dde4, emissive: 0xd6dde4, emissiveIntensity: 0.18, roughness: 0.7 });
+
+  const group = new THREE.Group();
+  group.name = "roads3d";
+
+  for (const road of scenario.map.roads) {
+    const isMain = road.kind === "main";
+    const width = isMain ? 1.0 : 0.7;
+    const pts = road.points;
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const ax = a[0] + 0.5;
+      const az = a[1] + 0.5;
+      const bx = b[0] + 0.5;
+      const bz = b[1] + 0.5;
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 0.01) continue;
+      const cx = (ax + bx) / 2;
+      const cz = (az + bz) / 2;
+      const yaw = Math.atan2(dz, dx);
+
+      const asphalt = new THREE.Mesh(new THREE.BoxGeometry(len + 0.02, 0.03, width), asphaltMat);
+      asphalt.position.set(cx, 0.018, cz);
+      asphalt.rotation.y = -yaw;
+      group.add(asphalt);
+
+      const perpX = -dz / len;
+      const perpZ = dx / len;
+      const curbW = 0.08;
+      const curbH = 0.07;
+      const curbOffset = width / 2 + curbW / 2;
+      for (const side of [-1, 1]) {
+        const curb = new THREE.Mesh(new THREE.BoxGeometry(len + 0.06, curbH, curbW), curbMat);
+        curb.position.set(cx + perpX * curbOffset * side, curbH / 2 + 0.005, cz + perpZ * curbOffset * side);
+        curb.rotation.y = -yaw;
+        group.add(curb);
+      }
+
+      if (isMain) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(len * 0.96, 0.004, 0.06), yellowMat);
+        stripe.position.set(cx, 0.038, cz);
+        stripe.rotation.y = -yaw;
+        group.add(stripe);
+      } else {
+        const dashLen = 0.45;
+        const gapLen = 0.5;
+        const step = dashLen + gapLen;
+        const count = Math.max(1, Math.floor(len / step));
+        const total = count * step - gapLen;
+        let pos = -total / 2 + dashLen / 2;
+        for (let k = 0; k < count; k += 1) {
+          const dash = new THREE.Mesh(new THREE.BoxGeometry(dashLen, 0.004, 0.045), whiteMat);
+          dash.position.set(cx + (dx / len) * pos, 0.038, cz + (dz / len) * pos);
+          dash.rotation.y = -yaw;
+          group.add(dash);
+          pos += step;
+        }
+      }
+    }
+  }
+
+  world.scene.add(group);
+  world.roadsGroup = group;
+}
+
 function init3D(scenario) {
   if (world.initialized || povCols.length === 0) return;
   const [cols, rows] = scenario.map.size;
@@ -980,12 +1845,19 @@ function init3D(scenario) {
   world.scene.add(ground);
   world.groundGrid = ground;
 
-  // Sky-dome
+  // Sky-dome — disaster gradient (smoky orange near horizon, dark zenith)
+  const skyTex = makeGradientSkyTexture(512);
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(120, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0x05101f, side: THREE.BackSide, fog: false })
+    new THREE.SphereGeometry(120, 32, 16),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })
   );
   world.scene.add(sky);
+
+  // Distant city silhouette ring — implies the destroyed city extends beyond the map
+  buildHorizonSilhouette(scenario);
+
+  // Terrain patches — grass parks, water canal, rubble fields, plaza tile
+  addTerrainPatches3D(scenario);
 
   // Base marker
   const [bx, by] = scenario.map.base;
@@ -1085,6 +1957,15 @@ function init3D(scenario) {
     world.scene.add(grp);
     world.victimMeshes.set(v.id, { group: grp, post, arm, flare });
   }
+
+  // Real 3D road network — asphalt strips + curbs + lane markings
+  buildRoads3D(scenario);
+
+  // Fire smoke plumes + flickering glow — visible from anywhere in the city
+  addFireSmoke(scenario);
+
+  // Street furniture: lampposts at intersections, trees in parks, hydrants
+  addStreetFurniture(scenario);
 
   // Agents — detailed primitive build matching the marketing hero aesthetic
   for (const a of scenario.agents) {
@@ -1738,48 +2619,347 @@ async function upgradeToAssets(scenario) {
 }
 
 function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSrc) {
-  const [cols, rows] = scenario.map.size;
-  const occupied = new Set();
-  const mark = (x, y, r = 1) => {
+  const { buildingCells, damagedCells } = buildCityBlocks(scenario, buildingTemplates);
+  spillRubbleFromDamaged(scenario, damagedCells, rubbleSrc);
+  addBurnedVehicles(scenario, taxiSrc);
+  addCrackedRoadSlabs(scenario);
+  addDustHaze(scenario);
+  scatterStreetProps(scenario, taxiSrc, signsSrc, rubbleSrc, buildingCells);
+}
+
+function cellDamageLevel(cellX, cellY, riskZones) {
+  if (!riskZones) return 0;
+  let max = 0;
+  for (const z of riskZones) {
+    const dx = cellX - z.center[0];
+    const dy = cellY - z.center[1];
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d <= z.radius) {
+      const inner = 1 - d / Math.max(0.01, z.radius);
+      max = Math.max(max, 0.5 + inner * 0.5);
+    } else if (d <= z.radius + 2) {
+      const fade = 1 - (d - z.radius) / 2;
+      max = Math.max(max, fade * 0.3);
+    }
+  }
+  return Math.min(1, max);
+}
+
+function cityOccupiedCells(scenario) {
+  const occupied = new Set<string>();
+  const mark = (x, y, r = 0) => {
     for (let dx = -r; dx <= r; dx += 1) {
       for (let dy = -r; dy <= r; dy += 1) {
         occupied.add(`${x + dx},${y + dy}`);
       }
     }
   };
-  mark(scenario.map.base[0], scenario.map.base[1], 2);
-  for (const v of scenario.victims) mark(v.location[0], v.location[1], 2);
-  for (const b of scenario.map.blocked_cells) mark(b.location[0], b.location[1], 1);
-  for (const z of scenario.map.risk_zones) {
-    const r = Math.ceil(z.radius);
-    for (let dx = -r; dx <= r; dx += 1) {
-      for (let dy = -r; dy <= r; dy += 1) {
-        if (dx * dx + dy * dy <= z.radius * z.radius) {
-          occupied.add(`${z.center[0] + dx},${z.center[1] + dy}`);
+  mark(scenario.map.base[0], scenario.map.base[1], 1);
+  for (const v of scenario.victims) mark(v.location[0], v.location[1], 0);
+  for (const b of scenario.map.blocked_cells) mark(b.location[0], b.location[1], 0);
+  return occupied;
+}
+
+function hash01(x, y, salt = 0) {
+  return Math.abs(Math.sin((x + salt * 1.7) * 12.9898 + (y + salt * 0.7) * 78.233) * 43758.5) % 1;
+}
+
+function placeRowBuilding(cellX, cellY, yaw, templates, damage = 0) {
+  const tIdx = Math.floor(hash01(cellX, cellY, 0) * templates.length) % templates.length;
+  const template = templates[tIdx];
+  const b = template.clone(true);
+  const bbox = new THREE.Box3().setFromObject(b);
+  const size = new THREE.Vector3();
+  bbox.getSize(size);
+  const targetW = 0.98;
+  const targetD = 0.98;
+  let heightVar = 0.9 + hash01(cellX, cellY, 1) * 1.1;
+  if (damage > 0.5) heightVar *= 0.3 + hash01(cellX, cellY, 3) * 0.4;
+  b.scale.x *= targetW / Math.max(0.01, size.x);
+  b.scale.z *= targetD / Math.max(0.01, size.z);
+  b.scale.y *= heightVar / Math.max(0.01, size.y);
+  b.rotation.y = yaw;
+  if (damage > 0.5) {
+    b.rotation.x = (hash01(cellX, cellY, 4) - 0.5) * 0.35;
+    b.rotation.z = (hash01(cellX, cellY, 5) - 0.5) * 0.35;
+  } else if (damage > 0.25) {
+    const lean = 0.08 + hash01(cellX, cellY, 6) * 0.18;
+    const sign = hash01(cellX, cellY, 7) > 0.5 ? 1 : -1;
+    if (hash01(cellX, cellY, 8) > 0.5) b.rotation.x = lean * sign;
+    else b.rotation.z = lean * sign;
+  }
+  b.position.set(cellX + 0.5, groundedY(b), cellY + 0.5);
+  const baseTint = 0.85 + hash01(cellX, cellY, 2) * 0.25;
+  const damageMul = damage > 0.5 ? 0.5 : damage > 0.25 ? 0.72 : 1.0;
+  b.traverse((obj) => {
+    if (obj.isMesh && obj.material) {
+      obj.material = obj.material.clone();
+      if (obj.material.color) obj.material.color.multiplyScalar(baseTint * damageMul);
+      if (damage > 0.5 && obj.material.roughness !== undefined) obj.material.roughness = Math.min(1, obj.material.roughness + 0.15);
+    }
+  });
+  world.scene.add(b);
+  if (damage < 0.25) addRoofGreebles(b, cellX, cellY);
+}
+
+function addRoofGreebles(building, cellX, cellY) {
+  const bbox = new THREE.Box3().setFromObject(building);
+  const top = bbox.max.y;
+  const cx = (bbox.min.x + bbox.max.x) / 2;
+  const cz = (bbox.min.z + bbox.max.z) / 2;
+  const halfX = (bbox.max.x - bbox.min.x) / 2;
+  const halfZ = (bbox.max.z - bbox.min.z) / 2;
+
+  if (top < 0.7) return;
+
+  const hvacMat = new THREE.MeshStandardMaterial({ color: 0x3a3e44, roughness: 0.85, metalness: 0.25 });
+  const hvac = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.22), hvacMat);
+  hvac.position.set(
+    cx + (hash01(cellX, cellY, 70) - 0.5) * halfX * 0.8,
+    top + 0.05,
+    cz + (hash01(cellX, cellY, 71) - 0.5) * halfZ * 0.8
+  );
+  hvac.rotation.y = Math.floor(hash01(cellX, cellY, 79) * 4) * (Math.PI / 2);
+  world.scene.add(hvac);
+
+  if (hash01(cellX, cellY, 72) > 0.45) {
+    const tankMat = new THREE.MeshStandardMaterial({ color: 0x6a5e52, roughness: 0.8, metalness: 0.1 });
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.2, 10), tankMat);
+    tank.position.set(
+      cx + (hash01(cellX, cellY, 73) - 0.5) * halfX * 0.7,
+      top + 0.1,
+      cz + (hash01(cellX, cellY, 74) - 0.5) * halfZ * 0.7
+    );
+    world.scene.add(tank);
+  }
+
+  if (hash01(cellX, cellY, 75) > 0.6) {
+    const antMat = new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 0.6, metalness: 0.6 });
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.45, 5), antMat);
+    ant.position.set(
+      cx + (hash01(cellX, cellY, 76) - 0.5) * halfX * 0.7,
+      top + 0.225,
+      cz + (hash01(cellX, cellY, 77) - 0.5) * halfZ * 0.7
+    );
+    world.scene.add(ant);
+  }
+
+  if (hash01(cellX, cellY, 78) > 0.7) {
+    const chimMat = new THREE.MeshStandardMaterial({ color: 0x4a3a32, roughness: 0.95 });
+    const chim = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.1), chimMat);
+    chim.position.set(
+      cx + (hash01(cellX, cellY, 80) - 0.5) * halfX * 0.8,
+      top + 0.09,
+      cz + (hash01(cellX, cellY, 81) - 0.5) * halfZ * 0.8
+    );
+    world.scene.add(chim);
+  }
+}
+
+function buildCityBlocks(scenario, buildingTemplates) {
+  const [cols, rows] = scenario.map.size;
+  const occupied = cityOccupiedCells(scenario);
+  const roadCells = computeRoadCells(scenario);
+  const buildingCells = new Set<string>();
+  const damagedCells = new Set<string>();
+  const riskZones = scenario.map.risk_zones || [];
+
+  const hLines = new Set<number>([0, rows - 1]);
+  const vLines = new Set<number>([0, cols - 1]);
+  for (const road of scenario.map.roads || []) {
+    const pts = road.points;
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      if (a[1] === b[1]) hLines.add(a[1]);
+      if (a[0] === b[0]) vLines.add(a[0]);
+    }
+  }
+  const ys = Array.from(hLines).sort((a, b) => a - b);
+  const xs = Array.from(vLines).sort((a, b) => a - b);
+
+  for (let bi = 0; bi < ys.length - 1; bi += 1) {
+    for (let bj = 0; bj < xs.length - 1; bj += 1) {
+      const y0 = ys[bi];
+      const y1 = ys[bi + 1];
+      const x0 = xs[bj];
+      const x1 = xs[bj + 1];
+      const iy0 = y0 === 0 ? 0 : y0 + 1;
+      const iy1 = y1 === rows - 1 ? rows - 1 : y1 - 1;
+      const ix0 = x0 === 0 ? 0 : x0 + 1;
+      const ix1 = x1 === cols - 1 ? cols - 1 : x1 - 1;
+      if (ix1 < ix0 || iy1 < iy0) continue;
+
+      for (let y = iy0; y <= iy1; y += 1) {
+        for (let x = ix0; x <= ix1; x += 1) {
+          const onTop = y === iy0;
+          const onBot = y === iy1;
+          const onLeft = x === ix0;
+          const onRight = x === ix1;
+          if (!(onTop || onBot || onLeft || onRight)) continue;
+          if (occupied.has(`${x},${y}`)) continue;
+          if (roadCells.has(`${x},${y}`)) continue;
+          let yaw = 0;
+          if (onTop) yaw = 0;
+          else if (onBot) yaw = Math.PI;
+          else if (onLeft) yaw = -Math.PI / 2;
+          else yaw = Math.PI / 2;
+          const damage = cellDamageLevel(x, y, riskZones);
+          placeRowBuilding(x, y, yaw, buildingTemplates, damage);
+          buildingCells.add(`${x},${y}`);
+          if (damage > 0.25) damagedCells.add(`${x},${y}`);
         }
       }
     }
   }
+  return { buildingCells, damagedCells };
+}
 
-  const hash = (x, y) => Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5) % 1;
-  const cardinalRot = (x, y) => Math.floor(hash(x, y + 5) * 4) * (Math.PI / 2);
+function spillRubbleFromDamaged(scenario, damagedCells, rubbleSrc) {
+  if (!rubbleSrc || damagedCells.size === 0) return;
+  const [cols, rows] = scenario.map.size;
+  const roadCells = computeRoadCells(scenario);
+  const placed = new Set<string>();
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (const key of damagedCells) {
+    const [cxStr, cyStr] = key.split(",");
+    const cx = Number(cxStr);
+    const cy = Number(cyStr);
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const nkey = `${nx},${ny}`;
+      if (!roadCells.has(nkey)) continue;
+      if (placed.has(nkey)) continue;
+      if (hash01(nx, ny, 11) > 0.55) continue;
+      const debris = rubbleSrc.clone(true);
+      fitToSize(debris, 0.5 + hash01(nx, ny, 12) * 0.4);
+      const jitterX = (hash01(nx, ny, 13) - 0.5) * 0.5;
+      const jitterZ = (hash01(nx, ny, 14) - 0.5) * 0.5;
+      debris.position.set(nx + 0.5 + jitterX, groundedY(debris), ny + 0.5 + jitterZ);
+      debris.rotation.y = hash01(nx, ny, 15) * Math.PI * 2;
+      debris.rotation.z = (hash01(nx, ny, 16) - 0.5) * 0.3;
+      debris.traverse((obj) => {
+        if (obj.isMesh) {
+          obj.material = obj.material.clone();
+          if (obj.material.color) obj.material.color.setHex(0x5a4838);
+          obj.material.roughness = 0.95;
+        }
+      });
+      world.scene.add(debris);
+      placed.add(nkey);
+    }
+  }
+}
 
-  // Road cells (open spine every 5th row / 6th col) — skip placement here so streets stay clear
-  const isRoad = (x, y) => (y % 5 === 2) || (x % 6 === 2);
+function addBurnedVehicles(scenario, taxiSrc) {
+  if (!taxiSrc) return;
+  const fireZones = (scenario.map.risk_zones || []).filter((z) => z.type === "fire");
+  if (fireZones.length === 0) return;
+  const roadCells = computeRoadCells(scenario);
+  const placed = new Set<string>();
+  for (const z of fireZones) {
+    const r = Math.ceil(z.radius + 1);
+    for (let dx = -r; dx <= r; dx += 1) {
+      for (let dy = -r; dy <= r; dy += 1) {
+        const cx = z.center[0] + dx;
+        const cy = z.center[1] + dy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > z.radius + 1.5) continue;
+        const key = `${cx},${cy}`;
+        if (!roadCells.has(key)) continue;
+        if (placed.has(key)) continue;
+        if (hash01(cx, cy, 21) > 0.4) continue;
+        const taxi = taxiSrc.clone(true);
+        fitToSize(taxi, 0.7);
+        taxi.rotation.y = hash01(cx, cy, 22) * Math.PI * 2;
+        if (hash01(cx, cy, 23) > 0.55) taxi.rotation.z = Math.PI / 2 + (hash01(cx, cy, 24) - 0.5) * 0.4;
+        taxi.position.set(cx + 0.5, groundedY(taxi), cy + 0.5);
+        taxi.traverse((obj) => {
+          if (obj.isMesh && obj.material) {
+            obj.material = obj.material.clone();
+            if (obj.material.color) obj.material.color.setHex(0x1c1612);
+            obj.material.roughness = 0.95;
+            obj.material.metalness = 0.2;
+          }
+        });
+        world.scene.add(taxi);
+        placed.add(key);
+      }
+    }
+  }
+}
+
+function addCrackedRoadSlabs(scenario) {
+  const collapseZones = (scenario.map.risk_zones || []).filter((z) => z.type === "collapse");
+  if (collapseZones.length === 0) return;
+  const roadCells = computeRoadCells(scenario);
+  const slabMat = new THREE.MeshStandardMaterial({ color: 0x2c2a28, roughness: 0.95, metalness: 0.05 });
+  for (const z of collapseZones) {
+    const r = Math.ceil(z.radius);
+    for (let dx = -r; dx <= r; dx += 1) {
+      for (let dy = -r; dy <= r; dy += 1) {
+        const cx = z.center[0] + dx;
+        const cy = z.center[1] + dy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > z.radius) continue;
+        if (!roadCells.has(`${cx},${cy}`)) continue;
+        if (hash01(cx, cy, 31) > 0.45) continue;
+        const slab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.4), slabMat);
+        const jx = (hash01(cx, cy, 32) - 0.5) * 0.5;
+        const jz = (hash01(cx, cy, 33) - 0.5) * 0.5;
+        slab.position.set(cx + 0.5 + jx, 0.18, cy + 0.5 + jz);
+        slab.rotation.x = (hash01(cx, cy, 34) - 0.5) * 0.8;
+        slab.rotation.y = hash01(cx, cy, 35) * Math.PI * 2;
+        slab.rotation.z = (hash01(cx, cy, 36) - 0.5) * 0.8;
+        world.scene.add(slab);
+      }
+    }
+  }
+}
+
+function addDustHaze(scenario) {
+  const zones = scenario.map.risk_zones || [];
+  for (const z of zones) {
+    const isFire = z.type === "fire";
+    const color = isFire ? 0x5a3a1a : 0x4a4035;
+    const haze = new THREE.Mesh(
+      new THREE.CylinderGeometry(z.radius + 0.6, z.radius + 0.6, 0.6, 24, 1, true),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, fog: true })
+    );
+    haze.position.set(z.center[0] + 0.5, 0.3, z.center[1] + 0.5);
+    world.scene.add(haze);
+    const cap = new THREE.Mesh(
+      new THREE.CircleGeometry(z.radius + 0.6, 24),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide, fog: true })
+    );
+    cap.rotation.x = -Math.PI / 2;
+    cap.position.set(z.center[0] + 0.5, 0.6, z.center[1] + 0.5);
+    world.scene.add(cap);
+  }
+}
+
+function scatterStreetProps(scenario, taxiSrc, signsSrc, rubbleSrc, buildingCells) {
+  const [cols, rows] = scenario.map.size;
+  const occupied = cityOccupiedCells(scenario);
+  const roadCells = computeRoadCells(scenario);
+  const cardinalRot = (x, y) => Math.floor(hash01(x, y + 5) * 4) * (Math.PI / 2);
 
   for (let x = 1; x < cols - 1; x += 1) {
     for (let y = 1; y < rows - 1; y += 1) {
-      if (occupied.has(`${x},${y}`)) continue;
-      if (isRoad(x, y)) {
-        // Street props: lower-frequency taxis and signs in roads
-        const rr = hash(x + 7, y - 3);
-        if (rr < 0.04 && taxiSrc) {
+      const key = `${x},${y}`;
+      if (occupied.has(key)) continue;
+      if (buildingCells.has(key)) continue;
+      if (roadCells.has(key)) {
+        const rr = hash01(x + 7, y - 3);
+        if (rr < 0.05 && taxiSrc) {
           const taxi = taxiSrc.clone(true);
           fitToSize(taxi, 0.7);
           taxi.position.set(x + 0.5, groundedY(taxi), y + 0.5);
           taxi.rotation.y = cardinalRot(x + 1, y);
           world.scene.add(taxi);
-        } else if (rr < 0.07 && signsSrc) {
+        } else if (rr < 0.09 && signsSrc) {
           const sign = signsSrc.clone(true);
           fitToSize(sign, 0.5);
           sign.position.set(x + 0.5, groundedY(sign), y + 0.5);
@@ -1788,20 +2968,12 @@ function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSr
         }
         continue;
       }
-      const r = hash(x, y);
-      if (r < 0.32) {
-        const idx = Math.floor(hash(x + 3, y - 2) * buildingTemplates.length);
-        const b = buildingTemplates[idx].clone(true);
-        b.position.set(x + 0.5, groundedY(b), y + 0.5);
-        b.rotation.y = cardinalRot(x, y);
-        world.scene.add(b);
-        mark(x, y, 1);
-      } else if (r < 0.42 && rubbleSrc) {
-        // Small debris pile in vacant lots
+      const r = hash01(x, y);
+      if (r < 0.35 && rubbleSrc) {
         const debris = rubbleSrc.clone(true);
-        fitToSize(debris, 0.6 + hash(x, y + 8) * 0.4);
+        fitToSize(debris, 0.55 + hash01(x, y + 8) * 0.4);
         debris.position.set(x + 0.5, groundedY(debris), y + 0.5);
-        debris.rotation.y = hash(x + 5, y) * Math.PI * 2;
+        debris.rotation.y = hash01(x + 5, y) * Math.PI * 2;
         debris.traverse((obj) => {
           if (obj.isMesh) {
             obj.material = obj.material.clone();
@@ -1810,7 +2982,7 @@ function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSr
           }
         });
         world.scene.add(debris);
-      } else if (r < 0.45 && signsSrc) {
+      } else if (r < 0.5 && signsSrc) {
         const sign = signsSrc.clone(true);
         fitToSize(sign, 0.5);
         sign.position.set(x + 0.5, groundedY(sign), y + 0.5);
@@ -1859,6 +3031,7 @@ function makeGridTexture(size, cols, rows) {
 function update3D(t) {
   if (!world.initialized || !state) return;
   const frac = Math.min(1, Math.max(0, (performance.now() - lastTickAt) / MS_PER_TICK));
+  updateSmokeAndGlows(t);
 
   // ── Shared scene updates ────────────────────────────────────────────────
   for (const a of state.agents) {

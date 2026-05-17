@@ -16,6 +16,53 @@
     ],
     "communication_dead_zones": [
       { "id": "C1", "center": [18, 5], "radius": 4, "dropout_addition": 0.35 }
+    ],
+    "terrain": [
+      { "id": "T1", "kind": "plaza",  "footprint": [1, 1, 4, 4] },
+      { "id": "T2", "kind": "grass",  "footprint": [3, 18, 4, 3] },
+      { "id": "T3", "kind": "grass",  "footprint": [24, 2, 4, 3] },
+      { "id": "T4", "kind": "water",  "footprint": [29, 0, 1, 30] },
+      { "id": "T5", "kind": "rubble", "footprint": [16, 3, 4, 4] },
+      { "id": "T6", "kind": "rubble", "footprint": [14, 17, 4, 3] }
+    ],
+    "roads": [
+      { "id": "RH-2",  "kind": "main", "points": [[0, 2], [29, 2]] },
+      { "id": "RH-8",  "kind": "main", "points": [[0, 8], [29, 8]] },
+      { "id": "RH-12", "kind": "side", "points": [[0, 12], [29, 12]] },
+      { "id": "RH-20", "kind": "main", "points": [[0, 20], [29, 20]] },
+      { "id": "RH-28", "kind": "side", "points": [[0, 28], [29, 28]] },
+      { "id": "RV-2",  "kind": "main", "points": [[2, 0], [2, 29]] },
+      { "id": "RV-7",  "kind": "side", "points": [[7, 0], [7, 29]] },
+      { "id": "RV-12", "kind": "main", "points": [[12, 0], [12, 29]] },
+      { "id": "RV-21", "kind": "main", "points": [[21, 0], [21, 29]] },
+      { "id": "RV-28", "kind": "side", "points": [[28, 0], [28, 29]] }
+    ],
+    "buildings": [
+      { "id": "B1",  "footprint": [5, 5, 2, 3],  "kind": "apartment" },
+      { "id": "B2",  "footprint": [8, 4, 3, 2],  "kind": "civic" },
+      { "id": "B3",  "footprint": [13, 3, 2, 3], "kind": "apartment" },
+      { "id": "B4",  "footprint": [15, 4, 3, 3], "kind": "civic" },
+      { "id": "B5",  "footprint": [22, 5, 3, 2], "kind": "lowrise" },
+      { "id": "B6",  "footprint": [24, 9, 2, 3], "kind": "apartment" },
+      { "id": "B7",  "footprint": [6, 10, 3, 2], "kind": "lowrise" },
+      { "id": "B8",  "footprint": [10, 9, 2, 3], "kind": "apartment" },
+      { "id": "B9",  "footprint": [14, 10, 3, 2], "kind": "civic" },
+      { "id": "B10", "footprint": [18, 11, 3, 3], "kind": "civic" },
+      { "id": "B11", "footprint": [22, 13, 3, 3], "kind": "warehouse" },
+      { "id": "B12", "footprint": [3, 14, 3, 2],  "kind": "apartment" },
+      { "id": "B13", "footprint": [8, 15, 2, 3],  "kind": "lowrise" },
+      { "id": "B14", "footprint": [11, 16, 3, 2], "kind": "lowrise" },
+      { "id": "B15", "footprint": [15, 15, 3, 2], "kind": "civic" },
+      { "id": "B16", "footprint": [19, 16, 4, 4], "kind": "warehouse" },
+      { "id": "B17", "footprint": [25, 17, 2, 3], "kind": "lowrise" },
+      { "id": "B18", "footprint": [5, 21, 3, 3],  "kind": "civic" },
+      { "id": "B19", "footprint": [10, 21, 3, 2], "kind": "apartment" },
+      { "id": "B20", "footprint": [14, 22, 3, 3], "kind": "civic" },
+      { "id": "B21", "footprint": [19, 22, 4, 3], "kind": "warehouse" },
+      { "id": "B22", "footprint": [25, 22, 3, 3], "kind": "apartment" },
+      { "id": "B23", "footprint": [3, 25, 3, 3],  "kind": "lowrise" },
+      { "id": "B24", "footprint": [15, 26, 4, 2], "kind": "warehouse" },
+      { "id": "B25", "footprint": [21, 26, 3, 3], "kind": "civic" }
     ]
   },
   "victims": [
