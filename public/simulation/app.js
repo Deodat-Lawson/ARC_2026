@@ -1153,8 +1153,8 @@ function getBlockedCellCentersForRoads() {
 function agentUsesRoadRouting(agent) {
   if (!ugvRoadNetwork?.available) return false;
   const t = String(agent.type || "").toLowerCase();
-  if (t === "drone") return false;
-  return t === "ground_rescue" || t === "ground_clear" || t === "ugv";
+  if (t === "drone" || t === "balloon") return false;
+  return t === "ground_rescue" || t === "ground_clear" || t === "ground_armored" || t === "ugv";
 }
 
 function moveAgentOnRoad(agent, targetCell, targetKey) {
@@ -1740,7 +1740,45 @@ function moveAgentToward(agent, target) {
   // Old formula used speed/Chebyshev_steps which made agents ~10× too slow.
   const speed = agent.speed || 1;
   const scale = Math.min(speed, dist) / dist;
-  agent.location = [roundCoord(x + dx * scale), roundCoord(y + dy * scale)];
+  let next = [roundCoord(x + dx * scale), roundCoord(y + dy * scale)];
+  if (isGroundAgentType(agent.type)) {
+    next = avoidBuildingStep(agent.location, next, target, speed);
+  }
+  agent.location = next;
+}
+
+function isGroundAgentType(type) {
+  const t = String(type || "").toLowerCase();
+  return t === "ground_rescue" || t === "ground_clear" || t === "ground_armored" || t === "ugv";
+}
+
+function avoidBuildingStep(from, proposed, target, speed = 1) {
+  if (!state?.map) return proposed;
+  const rects = buildingAvoidanceRects(state);
+  if (!pointNearBuilding(proposed[0], proposed[1], rects, 0.36)) return proposed;
+  const [x, y] = from;
+  const candidates = [
+    [x + speed, y],
+    [x - speed, y],
+    [x, y + speed],
+    [x, y - speed],
+    [x + speed * 0.7, y + speed * 0.7],
+    [x + speed * 0.7, y - speed * 0.7],
+    [x - speed * 0.7, y + speed * 0.7],
+    [x - speed * 0.7, y - speed * 0.7]
+  ]
+    .map(([cx, cy]) => [roundCoord(cx), roundCoord(cy)])
+    .filter(([cx, cy]) => {
+      const [cols, rows] = state.map.size;
+      return cx >= 0 && cy >= 0 && cx <= cols - 1 && cy <= rows - 1 && !pointNearBuilding(cx, cy, rects, 0.36);
+    });
+  if (!candidates.length) return from;
+  candidates.sort((a, b) => {
+    const da = Math.hypot(a[0] - target[0], a[1] - target[1]);
+    const db = Math.hypot(b[0] - target[0], b[1] - target[1]);
+    return da - db;
+  });
+  return candidates[0];
 }
 
 function roundCoord(value) {
@@ -3521,9 +3559,93 @@ function hash01(x, y, salt = 0) {
   return Math.abs(Math.sin((x + salt * 1.7) * 12.9898 + (y + salt * 0.7) * 78.233) * 43758.5) % 1;
 }
 
+const DEFAULT_3D_TERRAIN = [
+  { id: "T1", kind: "plaza", footprint: [1, 1, 4, 4] },
+  { id: "T2", kind: "grass", footprint: [3, 18, 4, 3] },
+  { id: "T3", kind: "grass", footprint: [24, 2, 4, 3] },
+  { id: "T4", kind: "water", footprint: [29, 0, 1, 30] },
+  { id: "T5", kind: "rubble", footprint: [16, 3, 4, 4] },
+  { id: "T6", kind: "rubble", footprint: [14, 17, 4, 3] }
+];
+
+const DEFAULT_3D_ROADS = [
+  { id: "RH-2", kind: "main", points: [[0, 2], [29, 2]] },
+  { id: "RH-8", kind: "main", points: [[0, 8], [29, 8]] },
+  { id: "RH-12", kind: "side", points: [[0, 12], [29, 12]] },
+  { id: "RH-20", kind: "main", points: [[0, 20], [29, 20]] },
+  { id: "RH-28", kind: "side", points: [[0, 28], [29, 28]] },
+  { id: "RV-2", kind: "main", points: [[2, 0], [2, 29]] },
+  { id: "RV-7", kind: "side", points: [[7, 0], [7, 29]] },
+  { id: "RV-12", kind: "main", points: [[12, 0], [12, 29]] },
+  { id: "RV-21", kind: "main", points: [[21, 0], [21, 29]] },
+  { id: "RV-28", kind: "side", points: [[28, 0], [28, 29]] }
+];
+
+const DEFAULT_3D_BUILDINGS = [
+  { id: "B1", footprint: [5, 5, 2, 3], kind: "apartment" },
+  { id: "B2", footprint: [8, 4, 3, 2], kind: "civic" },
+  { id: "B3", footprint: [13, 3, 2, 3], kind: "apartment" },
+  { id: "B4", footprint: [15, 4, 3, 3], kind: "civic" },
+  { id: "B5", footprint: [22, 5, 3, 2], kind: "lowrise" },
+  { id: "B6", footprint: [24, 9, 2, 3], kind: "apartment" },
+  { id: "B7", footprint: [6, 10, 3, 2], kind: "lowrise" },
+  { id: "B8", footprint: [10, 9, 2, 3], kind: "apartment" },
+  { id: "B9", footprint: [14, 10, 3, 2], kind: "civic" },
+  { id: "B10", footprint: [18, 11, 3, 3], kind: "civic" },
+  { id: "B11", footprint: [22, 13, 3, 3], kind: "warehouse" },
+  { id: "B12", footprint: [3, 14, 3, 2], kind: "apartment" },
+  { id: "B13", footprint: [8, 15, 2, 3], kind: "lowrise" },
+  { id: "B14", footprint: [11, 16, 3, 2], kind: "lowrise" },
+  { id: "B15", footprint: [15, 15, 3, 2], kind: "civic" },
+  { id: "B16", footprint: [19, 16, 4, 4], kind: "warehouse" },
+  { id: "B17", footprint: [25, 17, 2, 3], kind: "lowrise" },
+  { id: "B18", footprint: [5, 21, 3, 3], kind: "civic" },
+  { id: "B19", footprint: [10, 21, 3, 2], kind: "apartment" },
+  { id: "B20", footprint: [14, 22, 3, 3], kind: "civic" },
+  { id: "B21", footprint: [19, 22, 4, 3], kind: "warehouse" },
+  { id: "B22", footprint: [25, 22, 3, 3], kind: "apartment" },
+  { id: "B23", footprint: [3, 25, 3, 3], kind: "lowrise" },
+  { id: "B24", footprint: [15, 26, 4, 2], kind: "warehouse" },
+  { id: "B25", footprint: [21, 26, 3, 3], kind: "civic" }
+];
+
+function scale3DFootprint([x, y, w, h], scenario) {
+  const [cols, rows] = scenario.map.size || [30, 30];
+  const sx = cols / 30;
+  const sy = rows / 30;
+  const nx = Math.max(0, Math.min(cols - 1, Math.round(x * sx)));
+  const ny = Math.max(0, Math.min(rows - 1, Math.round(y * sy)));
+  const nw = Math.max(1, Math.min(cols - nx, Math.round(w * sx)));
+  const nh = Math.max(1, Math.min(rows - ny, Math.round(h * sy)));
+  return [nx, ny, nw, nh];
+}
+
+function get3DTerrain(scenario) {
+  return (scenario?.map?.terrain?.length ? scenario.map.terrain : DEFAULT_3D_TERRAIN)
+    .map((t) => ({ ...t, footprint: scale3DFootprint(t.footprint, scenario) }));
+}
+
+function get3DRoads(scenario) {
+  const [cols, rows] = scenario.map.size || [30, 30];
+  const sx = cols / 30;
+  const sy = rows / 30;
+  return (scenario?.map?.roads?.length ? scenario.map.roads : DEFAULT_3D_ROADS).map((r) => ({
+    ...r,
+    points: (r.points || []).map(([x, y]) => [
+      Math.max(0, Math.min(cols - 1, Math.round(x * sx))),
+      Math.max(0, Math.min(rows - 1, Math.round(y * sy)))
+    ])
+  }));
+}
+
+function get3DBuildings(scenario) {
+  return (scenario?.map?.buildings?.length ? scenario.map.buildings : DEFAULT_3D_BUILDINGS)
+    .map((b) => ({ ...b, footprint: scale3DFootprint(b.footprint, scenario) }));
+}
+
 function computeRoadCells(scenario) {
   const cells = new Set();
-  const roads = scenario?.map?.roads || [];
+  const roads = get3DRoads(scenario);
   for (const road of roads) {
     const pts = road.points || [];
     for (let i = 1; i < pts.length; i += 1) {
@@ -3580,7 +3702,7 @@ function makeGradientSkyTexture(size = 512) {
 }
 
 function addTerrainPatches3D(scenario) {
-  const terrain = scenario?.map?.terrain || [];
+  const terrain = get3DTerrain(scenario);
   if (!terrain.length) return;
   const palettes = {
     grass: { color: 0x2d4a25, roughness: 0.95, metalness: 0.02, emissive: 0x000000 },
@@ -3692,7 +3814,7 @@ function buildHorizonSilhouette(scenario) {
 }
 
 function buildRoads3D(scenario) {
-  const roads = scenario?.map?.roads || [];
+  const roads = get3DRoads(scenario);
   if (!roads.length) return;
 
   const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x1a1f27, roughness: 0.95, metalness: 0.05 });
@@ -3766,14 +3888,123 @@ function buildRoads3D(scenario) {
   world.roadsGroup = group;
 }
 
+function addCityGroundDetail(scenario) {
+  const roads = get3DRoads(scenario);
+  if (!roads.length) return;
+
+  const group = new THREE.Group();
+  group.name = "city-ground-detail";
+  const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x3c4652, roughness: 0.96, metalness: 0.02 });
+  const seamMat = new THREE.MeshStandardMaterial({ color: 0x252b33, roughness: 0.98, metalness: 0.02 });
+  const crosswalkMat = new THREE.MeshStandardMaterial({ color: 0xc8d1d8, roughness: 0.88, metalness: 0.02, emissive: 0xc8d1d8, emissiveIntensity: 0.06 });
+  const hLines = new Set();
+  const vLines = new Set();
+
+  for (const road of roads) {
+    const isMain = road.kind === "main";
+    const width = isMain ? 1.0 : 0.7;
+    const sidewalkW = isMain ? 0.34 : 0.26;
+    const pts = road.points || [];
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      if (a[1] === b[1]) hLines.add(a[1]);
+      if (a[0] === b[0]) vLines.add(a[0]);
+
+      const ax = a[0] + 0.5;
+      const az = a[1] + 0.5;
+      const bx = b[0] + 0.5;
+      const bz = b[1] + 0.5;
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 0.01) continue;
+      const cx = (ax + bx) / 2;
+      const cz = (az + bz) / 2;
+      const yaw = Math.atan2(dz, dx);
+      const perpX = -dz / len;
+      const perpZ = dx / len;
+      const offset = width / 2 + 0.11 + sidewalkW / 2;
+
+      for (const side of [-1, 1]) {
+        const walk = new THREE.Mesh(new THREE.BoxGeometry(len + 0.04, 0.025, sidewalkW), sidewalkMat);
+        walk.position.set(cx + perpX * offset * side, 0.018, cz + perpZ * offset * side);
+        walk.rotation.y = -yaw;
+        group.add(walk);
+
+        const seamCount = Math.min(32, Math.max(2, Math.floor(len / 1.1)));
+        for (let s = 1; s < seamCount; s += 1) {
+          if (s % 2 === 0) continue;
+          const pos = -len / 2 + (s / seamCount) * len;
+          const seam = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.004, sidewalkW * 0.92), seamMat);
+          seam.position.set(cx + (dx / len) * pos + perpX * offset * side, 0.034, cz + (dz / len) * pos + perpZ * offset * side);
+          seam.rotation.y = -yaw;
+          group.add(seam);
+        }
+      }
+    }
+  }
+
+  for (const y of hLines) {
+    for (const x of vLines) {
+      if (hash01(x, y, 240) < 0.25) continue;
+      for (let i = -2; i <= 2; i += 1) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.006, 0.62), crosswalkMat);
+        stripe.position.set(x + 0.5 + i * 0.15, 0.042, y + 0.5);
+        group.add(stripe);
+      }
+    }
+  }
+
+  world.scene.add(group);
+}
+
 function buildingProfile(kind) {
   const profiles = {
-    apartment: { color: 0x677382, roof: 0x222a32, minH: 1.35, maxH: 2.6, floors: 5 },
-    civic: { color: 0x7d786c, roof: 0x252a2e, minH: 1.1, maxH: 2.1, floors: 4 },
-    warehouse: { color: 0x5c6470, roof: 0x30343a, minH: 0.75, maxH: 1.35, floors: 2 },
-    lowrise: { color: 0x766b5f, roof: 0x2b2927, minH: 0.85, maxH: 1.55, floors: 3 }
+    apartment: { color: 0x677382, roof: 0x222a32, minH: 3.2, maxH: 5.8, floors: 8 },
+    civic: { color: 0x7d786c, roof: 0x252a2e, minH: 2.4, maxH: 4.4, floors: 6 },
+    warehouse: { color: 0x5c6470, roof: 0x30343a, minH: 1.6, maxH: 2.6, floors: 3 },
+    lowrise: { color: 0x766b5f, roof: 0x2b2927, minH: 2.0, maxH: 3.4, floors: 4 }
   };
   return profiles[kind] || profiles.lowrise;
+}
+
+function makeFacadeTexture(kind, fire = false) {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const g = c.getContext("2d");
+  const palettes = {
+    apartment: ["#596777", "#6d7a86", "#46515d"],
+    civic: ["#777064", "#8a8274", "#5d584f"],
+    warehouse: ["#4e5965", "#687480", "#303841"],
+    lowrise: ["#725f52", "#876f5f", "#4d4038"]
+  };
+  const p = palettes[kind] || palettes.lowrise;
+  g.fillStyle = fire ? "#27211d" : p[0];
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = fire ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.055)";
+  for (let y = 0; y < 128; y += kind === "warehouse" ? 18 : 14) g.fillRect(0, y, 128, 1);
+  for (let x = 0; x < 128; x += kind === "warehouse" ? 22 : 16) g.fillRect(x, 0, 1, 128);
+  g.fillStyle = fire ? "rgba(0,0,0,0.38)" : p[1];
+  for (let y = 10; y < 128; y += 22) {
+    for (let x = 8; x < 128; x += 24) {
+      if (kind === "warehouse") g.fillRect(x, y, 14, 4);
+      else g.fillRect(x, y, 8, 9);
+    }
+  }
+  g.fillStyle = fire ? "rgba(20,10,4,0.45)" : "rgba(0,0,0,0.13)";
+  for (let i = 0; i < 48; i += 1) {
+    const x = Math.floor(hash01(i, 0, 280) * 128);
+    const y = Math.floor(hash01(i, 0, 281) * 128);
+    g.fillRect(x, y, 1 + Math.floor(hash01(i, 0, 282) * 3), 1);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(kind === "warehouse" ? 1.2 : 1.6, 2.4);
+  tex.anisotropy = 4;
+  return tex;
 }
 
 function nearestRiskKind(cellX, cellY, riskZones) {
@@ -3790,6 +4021,37 @@ function nearestRiskKind(cellX, cellY, riskZones) {
   return best;
 }
 
+function buildingRenderFootprint(x, y, w, d, height) {
+  const cx = x + w / 2;
+  const cz = y + d / 2;
+  const heightSpan = height > 4.5 ? 1.55 : height > 3.1 ? 1.32 : 1.05;
+  const targetW = Math.min(w + 0.34, Math.max(w * 0.96, heightSpan));
+  const targetD = Math.min(d + 0.34, Math.max(d * 0.96, heightSpan));
+  return [cx - targetW / 2, cz - targetD / 2, targetW, targetD];
+}
+
+function buildingAvoidanceRects(scenario) {
+  return scenarioBuildingEntries(scenario).map((b) => {
+    const [x, y, w, d] = b.footprint;
+    const profile = buildingProfile(b.kind);
+    const h = profile.minH + hash01(x, y, 130) * (profile.maxH - profile.minH);
+    const [rx, rz, rw, rd] = buildingRenderFootprint(x, y, w, d, h);
+    return { x: rx, z: rz, w: rw, d: rd };
+  });
+}
+
+function pointNearBuilding(x, z, rects, radius = 0.34) {
+  for (const r of rects) {
+    if (
+      x >= r.x - radius &&
+      x <= r.x + r.w + radius &&
+      z >= r.z - radius &&
+      z <= r.z + r.d + radius
+    ) return true;
+  }
+  return false;
+}
+
 function addBuildingWindows(group, footprint, height, damage, floors, windowMat) {
   if (damage > 0.72 || height < 0.55) return;
   const [x, y, w, d] = footprint;
@@ -3798,7 +4060,7 @@ function addBuildingWindows(group, footprint, height, damage, floors, windowMat)
   const colsZ = Math.max(1, Math.min(5, Math.floor(d * 1.5)));
   const addPane = (px, py, pz, rotY, sx = 0.09) => {
     if (hash01(px * 3, pz * 3, Math.round(py * 10)) < damage * 0.45) return;
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(sx, 0.075), windowMat);
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(sx * 1.15, 0.12), windowMat);
     pane.position.set(px, py, pz);
     pane.rotation.y = rotY;
     group.add(pane);
@@ -3837,8 +4099,156 @@ function addBuildingRubble(group, footprint, damage, rubbleMat) {
   }
 }
 
+function addRooftopDetails(group, footprint, height, damage, mats) {
+  if (height < 1.1 || damage > 0.82) return;
+  const [x, y, w, d] = footprint;
+  const cx = x + w / 2;
+  const cz = y + d / 2;
+  const roofY = height + 0.12;
+  const ventMat = mats.vent;
+  const railMat = mats.rail;
+  const tankMat = mats.tank;
+
+  const units = Math.min(3, Math.max(1, Math.floor(w * d * 0.25)));
+  for (let i = 0; i < units; i += 1) {
+    if (hash01(cx + i, cz, 250) < damage * 0.35) continue;
+    const ux = x + 0.25 + hash01(x + i, y, 251) * Math.max(0.1, w - 0.5);
+    const uz = y + 0.25 + hash01(x, y + i, 252) * Math.max(0.1, d - 0.5);
+    const unit = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.18), ventMat);
+    unit.position.set(ux, roofY + 0.06, uz);
+    unit.rotation.y = Math.floor(hash01(ux, uz, 253) * 4) * (Math.PI / 2);
+    group.add(unit);
+  }
+
+  if (height > 3.1 && w > 1.2 && d > 1.2 && hash01(cx, cz, 254) > 0.45) {
+    const tank = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.28, 10), tankMat);
+    body.position.y = 0.22;
+    tank.add(body);
+    for (const ox of [-0.11, 0.11]) {
+      for (const oz of [-0.11, 0.11]) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 5), railMat);
+        leg.position.set(ox, 0.06, oz);
+        tank.add(leg);
+      }
+    }
+    tank.position.set(x + w * 0.72, roofY, y + d * 0.72);
+    group.add(tank);
+  }
+
+  if (w > 1.5 && d > 1.5 && damage < 0.5) {
+    const railH = 0.14;
+    const railY = height + 0.16;
+    const railA = new THREE.Mesh(new THREE.BoxGeometry(w * 0.92, railH, 0.025), railMat);
+    railA.position.set(cx, railY, y + 0.08);
+    group.add(railA);
+    const railB = railA.clone();
+    railB.position.z = y + d - 0.08;
+    group.add(railB);
+  }
+}
+
+function addStreetLevelDetails(group, footprint, height, damage, kind, mats) {
+  if (damage > 0.65 || height < 1.4) return;
+  const [x, y, w, d] = footprint;
+  if (kind !== "lowrise" && kind !== "civic" && hash01(x, y, 260) < 0.55) return;
+  const frontZ = y - 0.012;
+  const bayCount = Math.max(1, Math.min(3, Math.floor(w)));
+  for (let i = 0; i < bayCount; i += 1) {
+    const bx = x + ((i + 0.5) / bayCount) * w;
+    const shop = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(0.42, w / bayCount * 0.72), 0.26), mats.shop);
+    shop.position.set(bx, 0.34, frontZ);
+    group.add(shop);
+    const awning = new THREE.Mesh(new THREE.BoxGeometry(Math.min(0.5, w / bayCount * 0.82), 0.035, 0.16), mats.awning);
+    awning.position.set(bx, 0.52, y - 0.08);
+    group.add(awning);
+  }
+}
+
+function addDamageDecals(group, footprint, height, damage, fire, mats) {
+  if (damage < 0.18 && !fire) return;
+  const [x, y, w, d] = footprint;
+  const cx = x + w / 2;
+  const frontZ = y - 0.014;
+  const count = fire ? 3 : Math.max(1, Math.floor(damage * 3));
+  for (let i = 0; i < count; i += 1) {
+    const px = x + 0.2 + hash01(x + i, y, 290) * Math.max(0.1, w - 0.4);
+    const py = Math.min(height - 0.25, 0.5 + hash01(x, y + i, 291) * height * 0.62);
+    const decal = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.18 + damage * 0.25, 0.35 + damage * 0.45),
+      fire ? mats.soot : mats.crack
+    );
+    decal.position.set(px, py, frontZ);
+    decal.rotation.z = (hash01(px, py, 292) - 0.5) * 0.35;
+    group.add(decal);
+  }
+
+  if (fire) {
+    const scorch = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(0.4, w * 0.72), Math.max(0.6, height * 0.72)), mats.soot);
+    scorch.position.set(cx, Math.max(0.35, height * 0.45), y + d + 0.014);
+    scorch.rotation.y = Math.PI;
+    group.add(scorch);
+  }
+}
+
+function scenarioBuildingEntries(scenario) {
+  const explicit = get3DBuildings(scenario).map((b) => ({ ...b, synthetic: false }));
+  const [cols, rows] = scenario.map.size;
+  const occupied = new Set();
+  const markRect = (x, y, w = 1, h = 1, pad = 0) => {
+    for (let dx = -pad; dx < w + pad; dx += 1) {
+      for (let dy = -pad; dy < h + pad; dy += 1) {
+        occupied.add(`${x + dx},${y + dy}`);
+      }
+    }
+  };
+
+  const roadCells = computeRoadCells(scenario);
+  for (const key of roadCells) occupied.add(key);
+  if (scenario.map.base) markRect(scenario.map.base[0], scenario.map.base[1], 1, 1, 2);
+  for (const v of scenario.victims || []) markRect(v.location[0], v.location[1], 1, 1, 1);
+  for (const b of scenario.map.blocked_cells || []) markRect(b.location[0], b.location[1], 1, 1, 1);
+  for (const t of get3DTerrain(scenario)) {
+    if (t.kind === "water" || t.kind === "grass" || t.kind === "plaza") {
+      const [x, y, w, h] = t.footprint;
+      markRect(x, y, w, h, 0);
+    }
+  }
+  for (const b of explicit) {
+    const [x, y, w, h] = b.footprint;
+    markRect(x, y, w, h, 1);
+  }
+
+  const infill = [];
+  const target = Math.min(36, Math.max(10, Math.floor((cols * rows) / 42)));
+  for (let y = 1; y < rows - 1 && infill.length < target; y += 1) {
+    for (let x = 1; x < cols - 1 && infill.length < target; x += 1) {
+      if (occupied.has(`${x},${y}`)) continue;
+      const r = hash01(x, y, 210);
+      if (r > 0.2) continue;
+      const wider = x < cols - 2 && !occupied.has(`${x + 1},${y}`) && hash01(x, y, 211) > 0.58;
+      const deeper = y < rows - 2 && !occupied.has(`${x},${y + 1}`) && !wider && hash01(x, y, 212) > 0.62;
+      const w = wider ? 2 : 1;
+      const h = deeper ? 2 : 1;
+      if (wider && occupied.has(`${x + 1},${y}`)) continue;
+      if (deeper && occupied.has(`${x},${y + 1}`)) continue;
+      const kindRoll = hash01(x, y, 213);
+      const kind = kindRoll < 0.34 ? "lowrise" : kindRoll < 0.62 ? "apartment" : kindRoll < 0.82 ? "civic" : "warehouse";
+      infill.push({
+        id: `INF-${x}-${y}`,
+        kind,
+        footprint: [x, y, w, h],
+        synthetic: true
+      });
+      markRect(x, y, w, h, 1);
+    }
+  }
+
+  return explicit.concat(infill);
+}
+
 function buildScenarioBuildings3D(scenario) {
-  const buildings = scenario?.map?.buildings || [];
+  const buildings = scenarioBuildingEntries(scenario);
   if (!buildings.length) return;
 
   const group = new THREE.Group();
@@ -3847,10 +4257,20 @@ function buildScenarioBuildings3D(scenario) {
   const windowMat = new THREE.MeshBasicMaterial({ color: 0xa9d6e5, transparent: true, opacity: 0.34, depthWrite: false, side: THREE.DoubleSide });
   const sootMat = new THREE.MeshBasicMaterial({ color: 0x050404, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide });
   const rubbleMat = new THREE.MeshStandardMaterial({ color: 0x51483e, roughness: 0.98, metalness: 0.03 });
+  const detailMats = {
+    vent: new THREE.MeshStandardMaterial({ color: 0x303841, roughness: 0.78, metalness: 0.35 }),
+    rail: new THREE.MeshStandardMaterial({ color: 0x20262c, roughness: 0.7, metalness: 0.45 }),
+    tank: new THREE.MeshStandardMaterial({ color: 0x48525d, roughness: 0.62, metalness: 0.55 }),
+    shop: new THREE.MeshBasicMaterial({ color: 0x8fb6c8, transparent: true, opacity: 0.38, side: THREE.DoubleSide }),
+    awning: new THREE.MeshStandardMaterial({ color: 0x6d2b2b, roughness: 0.82, metalness: 0.04 }),
+    crack: new THREE.MeshBasicMaterial({ color: 0x090909, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide }),
+    soot: new THREE.MeshBasicMaterial({ color: 0x040302, transparent: true, opacity: 0.48, depthWrite: false, side: THREE.DoubleSide })
+  };
+  const facadeTexCache = new Map();
   const roofMatCache = new Map();
   const wallMatCache = new Map();
 
-  const matFor = (key, color, damage, fire) => {
+  const matFor = (key, color, damage, fire, kind = "lowrise") => {
     const cacheKey = `${key}-${color}-${Math.round(damage * 10)}-${fire ? 1 : 0}`;
     const cache = key === "roof" ? roofMatCache : wallMatCache;
     if (cache.has(cacheKey)) return cache.get(cacheKey);
@@ -3863,6 +4283,11 @@ function buildScenarioBuildings3D(scenario) {
       emissive: fire ? 0x1a0803 : 0x000000,
       emissiveIntensity: fire ? 0.25 : 0
     });
+    if (key === "wall") {
+      const texKey = `${kind}-${fire ? "fire" : "base"}`;
+      if (!facadeTexCache.has(texKey)) facadeTexCache.set(texKey, makeFacadeTexture(kind, fire));
+      mat.map = facadeTexCache.get(texKey);
+    }
     cache.set(cacheKey, mat);
     return mat;
   };
@@ -3882,10 +4307,10 @@ function buildScenarioBuildings3D(scenario) {
     if (collapsed) height *= 0.32 + hash01(x, y, 131) * 0.22;
     else if (damage > 0.35) height *= 0.72 + hash01(x, y, 132) * 0.16;
 
-    const footprint = [x + 0.08, y + 0.08, Math.max(0.2, w - 0.16), Math.max(0.2, d - 0.16)];
+    const footprint = buildingRenderFootprint(x, y, w, d, height);
     const shell = new THREE.Mesh(
       new THREE.BoxGeometry(footprint[2], height, footprint[3]),
-      matFor("wall", profile.color, damage, fire)
+      matFor("wall", profile.color, damage, fire, b.kind)
     );
     shell.position.set(cx, height / 2 + 0.025, cz);
     if (damage > 0.32 && !collapsed) {
@@ -3896,13 +4321,16 @@ function buildScenarioBuildings3D(scenario) {
 
     const roof = new THREE.Mesh(
       new THREE.BoxGeometry(footprint[2] * 1.02, 0.045, footprint[3] * 1.02),
-      matFor("roof", profile.roof, damage, fire)
+      matFor("roof", profile.roof, damage, fire, b.kind)
     );
     roof.position.set(cx, height + 0.055, cz);
     roof.rotation.copy(shell.rotation);
     group.add(roof);
 
     addBuildingWindows(group, footprint, height, damage, profile.floors, windowMat);
+    addRooftopDetails(group, footprint, height, damage, detailMats);
+    addStreetLevelDetails(group, footprint, height, damage, b.kind, detailMats);
+    addDamageDecals(group, footprint, height, damage, fire, detailMats);
     addBuildingRubble(group, footprint, Math.max(damage, collapsed ? 0.8 : 0), rubbleMat);
 
     if (fire) {
@@ -3993,7 +4421,7 @@ function addStreetFurniture(scenario) {
   const hLines = new Set();
   const vLines = new Set();
 
-  for (const road of scenario.map.roads || []) {
+  for (const road of get3DRoads(scenario)) {
     const pts = road.points || [];
     for (let i = 1; i < pts.length; i += 1) {
       const a = pts[i - 1];
@@ -4048,7 +4476,7 @@ function addStreetFurniture(scenario) {
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.95 });
   const leafMat = new THREE.MeshStandardMaterial({ color: 0x2d4a25, roughness: 0.9 });
   const fallenLeafMat = new THREE.MeshStandardMaterial({ color: 0x4a3522, roughness: 0.95 });
-  for (const patch of scenario.map.terrain || []) {
+  for (const patch of get3DTerrain(scenario)) {
     if (patch.kind !== "grass") continue;
     const [px, py, pw, ph] = patch.footprint;
     const treeCount = Math.max(1, Math.floor(pw * ph * 0.5));
@@ -4086,6 +4514,100 @@ function addStreetFurniture(scenario) {
     hydrant.position.set(cx + 0.92, 0, cz + 0.92);
     world.scene.add(hydrant);
   }
+}
+
+function addUrbanStreetProps(scenario) {
+  const roads = get3DRoads(scenario);
+  if (!roads.length) return;
+
+  const group = new THREE.Group();
+  group.name = "urban-street-props";
+  const carBodyMats = [
+    new THREE.MeshStandardMaterial({ color: 0x26384a, roughness: 0.72, metalness: 0.24 }),
+    new THREE.MeshStandardMaterial({ color: 0x3b342f, roughness: 0.8, metalness: 0.18 }),
+    new THREE.MeshStandardMaterial({ color: 0x5b2b25, roughness: 0.82, metalness: 0.14 }),
+    new THREE.MeshStandardMaterial({ color: 0x6f6b5a, roughness: 0.78, metalness: 0.16 })
+  ];
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x101820, roughness: 0.45, metalness: 0.2, emissive: 0x031018, emissiveIntensity: 0.1 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.92, metalness: 0.02 });
+  const debrisMat = new THREE.MeshStandardMaterial({ color: 0x554c41, roughness: 0.98, metalness: 0.02 });
+  const buildingRects = buildingAvoidanceRects(scenario);
+  let parked = 0;
+  let debris = 0;
+
+  const placeCar = (x, z, yaw, seed) => {
+    const car = new THREE.Group();
+    const bodyMat = carBodyMats[Math.floor(hash01(seed, z, 270) * carBodyMats.length) % carBodyMats.length];
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.58), bodyMat);
+    body.position.y = 0.12;
+    car.add(body);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.26), glassMat);
+    cabin.position.set(0, 0.25, -0.03);
+    car.add(cabin);
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.035, 8), tireMat);
+        tire.rotation.z = Math.PI / 2;
+        tire.position.set(sx * 0.18, 0.055, sz * 0.22);
+        car.add(tire);
+      }
+    }
+    car.position.set(x, 0, z);
+    car.rotation.y = yaw;
+    if (hash01(seed, z, 271) < 0.22) {
+      car.rotation.z = (hash01(seed, z, 272) - 0.5) * 0.22;
+    }
+    group.add(car);
+  };
+
+  for (const road of roads) {
+    if (parked > 34 && debris > 40) break;
+    const isMain = road.kind === "main";
+    const width = isMain ? 1.0 : 0.7;
+    const pts = road.points || [];
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const ax = a[0] + 0.5;
+      const az = a[1] + 0.5;
+      const bx = b[0] + 0.5;
+      const bz = b[1] + 0.5;
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 2) continue;
+      const yaw = Math.atan2(dx, dz);
+      const perpX = -dz / len;
+      const perpZ = dx / len;
+      const step = 2.2;
+      const count = Math.floor(len / step);
+      for (let k = 1; k < count; k += 1) {
+        const t = k / count;
+        const px = ax + dx * t;
+        const pz = az + dz * t;
+        const side = hash01(px, pz, 273) > 0.5 ? 1 : -1;
+        const curbOffset = width / 2 + 0.28;
+        const propX = px + perpX * curbOffset * side;
+        const propZ = pz + perpZ * curbOffset * side;
+        if (pointNearBuilding(propX, propZ, buildingRects, 0.42)) continue;
+        if (parked < 34 && hash01(px, pz, 274) < 0.26) {
+          placeCar(propX, propZ, yaw, px + pz);
+          parked += 1;
+        } else if (debris < 40 && hash01(px, pz, 275) < 0.18) {
+          const chunk = new THREE.Mesh(
+            new THREE.BoxGeometry(0.08 + hash01(px, pz, 276) * 0.16, 0.035 + hash01(px, pz, 277) * 0.06, 0.08 + hash01(px, pz, 278) * 0.16),
+            debrisMat
+          );
+          chunk.position.set(propX, 0.055, propZ);
+          chunk.rotation.y = hash01(px, pz, 279) * Math.PI * 2;
+          group.add(chunk);
+          debris += 1;
+        }
+      }
+    }
+  }
+
+  world.scene.add(group);
 }
 
 function init3D(scenario) {
@@ -4141,8 +4663,8 @@ function init3D(scenario) {
 
   // Scenario-driven world detail. These helpers are guarded so legacy
   // scenarios without terrain/roads still render the base FPV scene.
-  buildHorizonSilhouette(scenario);
   addTerrainPatches3D(scenario);
+  addCityGroundDetail(scenario);
   buildScenarioBuildings3D(scenario);
 
   // Base marker
@@ -4247,6 +4769,7 @@ function init3D(scenario) {
   buildRoads3D(scenario);
   addFireSmoke(scenario);
   addStreetFurniture(scenario);
+  addUrbanStreetProps(scenario);
 
   // Agents — detailed primitive build matching the marketing hero aesthetic
   for (const a of scenario.agents) {
@@ -4334,8 +4857,8 @@ function init3D(scenario) {
 
 function createDroneMesh() {
   // Ported from components/hero/Drone.tsx — chunky utility quadcopter
-  // Scaled down to ~0.6 world-units across to fit the 1-cell sim grid
-  const SCALE = 0.42;
+  // One grid cell is roughly a city block; keep robots small against buildings.
+  const SCALE = 0.24;
   const grp = new THREE.Group();
   grp.scale.setScalar(SCALE);
 
@@ -4470,6 +4993,7 @@ function createDroneMesh() {
 function createUgvMesh() {
   // Tracked rescue rover — sloped armor, light bar, segmented tracks
   const grp = new THREE.Group();
+  grp.scale.setScalar(0.58);
   const chassisColor = 0x222a22;
   const trimColor = 0x3a4a3a;
 
@@ -4556,6 +5080,7 @@ function createUgvMesh() {
 function createBalloonMesh() {
   // Aerostat — translucent envelope, gondola, tethered comm relay halo
   const grp = new THREE.Group();
+  grp.scale.setScalar(0.68);
 
   const envelopeMat = new THREE.MeshStandardMaterial({
     color: 0xc8b4ff,
@@ -4615,6 +5140,7 @@ function createArmoredMesh() {
   // Heavy armored ground rescuer — wide tracked chassis, sloped armor wedges,
   // amber light bar, six road wheels (visual; not driven by physics).
   const grp = new THREE.Group();
+  grp.scale.setScalar(0.62);
   const chassisColor = 0x6a3b18;
   const trimColor = 0x8a4a20;
 
@@ -4956,6 +5482,110 @@ function groundedY(obj) {
   return -bbox.min.y;
 }
 
+function templateForBuildingKind(kind, buildingTemplates) {
+  const byKind = {
+    apartment: 0,
+    civic: 1,
+    lowrise: 2,
+    warehouse: 3
+  };
+  const idx = byKind[kind] ?? 0;
+  return buildingTemplates[idx % buildingTemplates.length] || buildingTemplates[0];
+}
+
+function scaleAssetBuildingToFootprint(obj, footprint, targetHeight) {
+  const [, , w, d] = footprint;
+  obj.updateMatrixWorld(true);
+  const bbox = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3();
+  bbox.getSize(size);
+  const sx = Math.max(0.01, (w - 0.14) / Math.max(size.x, 0.01));
+  const sz = Math.max(0.01, (d - 0.14) / Math.max(size.z, 0.01));
+  const sy = Math.max(0.01, targetHeight / Math.max(size.y, 0.01));
+  obj.scale.x *= sx;
+  obj.scale.y *= sy;
+  obj.scale.z *= sz;
+}
+
+function upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, palette = {}) {
+  const buildings = scenarioBuildingEntries(scenario);
+  if (!buildings.length || !buildingTemplates?.length) return;
+
+  if (world.scenarioBuildingsGroup) {
+    world.scene.remove(world.scenarioBuildingsGroup);
+    disposeObject(world.scenarioBuildingsGroup);
+    world.scenarioBuildingsGroup = null;
+  }
+
+  const group = new THREE.Group();
+  group.name = "scenario-buildings-assets";
+  const riskZones = scenario.map.risk_zones || [];
+  const rubbleMat = palette.rubbleMat || new THREE.MeshStandardMaterial({ color: 0x51483e, roughness: 0.98, metalness: 0.03 });
+  const detailMats = {
+    vent: new THREE.MeshStandardMaterial({ color: 0x303841, roughness: 0.78, metalness: 0.35 }),
+    rail: new THREE.MeshStandardMaterial({ color: 0x20262c, roughness: 0.7, metalness: 0.45 }),
+    tank: new THREE.MeshStandardMaterial({ color: 0x48525d, roughness: 0.62, metalness: 0.55 }),
+    shop: new THREE.MeshBasicMaterial({ color: 0x8fb6c8, transparent: true, opacity: 0.38, side: THREE.DoubleSide }),
+    awning: new THREE.MeshStandardMaterial({ color: 0x6d2b2b, roughness: 0.82, metalness: 0.04 }),
+    crack: new THREE.MeshBasicMaterial({ color: 0x090909, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide }),
+    soot: new THREE.MeshBasicMaterial({ color: 0x040302, transparent: true, opacity: 0.48, depthWrite: false, side: THREE.DoubleSide })
+  };
+
+  for (const b of buildings) {
+    const [x, y, w, d] = b.footprint;
+    if (w <= 0 || d <= 0) continue;
+    const profile = buildingProfile(b.kind);
+    const cx = x + w / 2;
+    const cz = y + d / 2;
+    const risk = nearestRiskKind(cx, cz, riskZones);
+    const damage = risk.damage;
+    const fire = risk.kind === "fire" && damage > 0.18;
+    const collapsed = risk.kind === "collapse" && damage > 0.58;
+    let targetHeight = profile.minH + hash01(x, y, 130) * (profile.maxH - profile.minH);
+    if (collapsed) targetHeight *= 0.34 + hash01(x, y, 131) * 0.2;
+    else if (damage > 0.35) targetHeight *= 0.74 + hash01(x, y, 132) * 0.14;
+
+    const footprint = buildingRenderFootprint(x, y, w, d, targetHeight);
+    const template = templateForBuildingKind(b.kind, buildingTemplates);
+    const asset = template.clone(true);
+    scaleAssetBuildingToFootprint(asset, footprint, targetHeight);
+    asset.position.set(cx, groundedY(asset) + 0.025, cz);
+    asset.rotation.y = Math.floor(hash01(x, y, 136) * 4) * (Math.PI / 2);
+    if (damage > 0.32 && !collapsed) {
+      asset.rotation.x = (hash01(x, y, 133) - 0.5) * damage * 0.16;
+      asset.rotation.z = (hash01(x, y, 134) - 0.5) * damage * 0.16;
+    }
+
+    asset.traverse((node) => {
+      if (!node.isMesh || !node.material) return;
+      const mats = Array.isArray(node.material) ? node.material : [node.material];
+      node.material = mats.map((mat) => {
+        const next = mat.clone();
+        if (next.color) {
+          const tint = fire ? 0.45 : damage > 0.55 ? 0.62 : damage > 0.25 ? 0.78 : 1;
+          next.color.multiplyScalar(tint);
+        }
+        if (next.emissive && fire) {
+          next.emissive.setHex(0x1a0803);
+          next.emissiveIntensity = 0.18;
+        }
+        return next;
+      });
+      if (mats.length === 1) node.material = node.material[0];
+    });
+
+    group.add(asset);
+
+    addRooftopDetails(group, footprint, targetHeight, damage, detailMats);
+    addStreetLevelDetails(group, footprint, targetHeight, damage, b.kind, detailMats);
+    addDamageDecals(group, footprint, targetHeight, damage, fire, detailMats);
+    addBuildingRubble(group, footprint, Math.max(damage, collapsed ? 0.8 : 0), rubbleMat);
+  }
+
+  world.scene.add(group);
+  world.scenarioBuildingsGroup = group;
+}
+
 async function upgradeToAssets(scenario) {
   const loader = new GLTFLoader();
   const draco = new DRACOLoader();
@@ -5081,6 +5711,8 @@ async function upgradeToAssets(scenario) {
     fitToSize(root, 1.3);
     return root;
   });
+
+  upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, { rubbleMat });
 
   // Swap blockades for rubble GLB
   for (const blk of scenario.map.blocked_cells) {
@@ -5540,23 +6172,28 @@ function update3D(t) {
     const targetPos = new THREE.Vector3(ix + 0.5 + headBobX, altitude + headBobY, iy + 0.5);
 
     const target = currentTargetFor(driver);
-    // Drones / balloons look strongly down at the ground (surveying for survivors).
-    // Ground vehicles look slightly forward-down (mid-distance path scanning).
-    const pitch = driver.type === "drone" ? -0.45 : driver.type === "balloon" ? -0.65 : -0.1;
+    // FPV should read like forward navigation through the city. Keep only a
+    // shallow downward bias so the feed does not stare at the disaster marker.
+    const pitch = driver.type === "drone" ? -0.08 : driver.type === "balloon" ? -0.05 : 0.02;
     const fwd = new THREE.Vector3();
-    if (target) {
-      fwd.set(target[0] + 0.5 - (ix + 0.5), pitch, target[1] + 0.5 - (iy + 0.5));
-    } else {
-      const dx = driver.location[0] - prev[0];
-      const dy = driver.location[1] - prev[1];
-      if (Math.abs(dx) + Math.abs(dy) < 0.001) {
-        fwd.set(Math.cos(t * 0.3 + phaseSeed), pitch, Math.sin(t * 0.3 + phaseSeed));
+    const dx = driver.location[0] - prev[0];
+    const dy = driver.location[1] - prev[1];
+    if (Math.abs(dx) + Math.abs(dy) > 0.001) {
+      fwd.set(dx, pitch, dy);
+    } else if (target) {
+      const tx = target[0] + 0.5 - (ix + 0.5);
+      const ty = target[1] + 0.5 - (iy + 0.5);
+      const distToTarget = Math.hypot(tx, ty);
+      if (distToTarget > 3) {
+        fwd.set(tx, pitch, ty);
       } else {
-        fwd.set(dx, pitch, dy);
+        fwd.set(Math.cos(t * 0.3 + phaseSeed), pitch, Math.sin(t * 0.3 + phaseSeed));
       }
+    } else {
+      fwd.set(Math.cos(t * 0.3 + phaseSeed), pitch, Math.sin(t * 0.3 + phaseSeed));
     }
     fwd.normalize();
-    const lookAt = targetPos.clone().add(fwd.multiplyScalar(3));
+    const lookAt = targetPos.clone().add(fwd.multiplyScalar(isAerial ? 6 : 4));
 
     entry.smoothPos.lerp(targetPos, 0.18);
     entry.smoothLook.lerp(lookAt, 0.12);
