@@ -3,6 +3,32 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { TacticalRoadNetwork } from "./road-network.js";
+import { synthesizeScenario, tagBuildingDamage, pointInPolygon } from "./js/scenario/synthesize.js";
+import {
+  PRESET_DEFAULTS,
+  PRESET_VISUAL,
+  activePreset,
+  currentScenePreset,
+  readConfig,
+  $,
+  syncSimulationPresetClass,
+  setCurrentScenePreset,
+  setActivePreset,
+} from "./js/config/presets.js";
+import {
+  tacticalBaseMap,
+  tacticalBaseMapReady,
+  tacticalRoadSegments,
+  tacticalBuildingFootprints,
+  registerTacticalGridDims,
+  syncTacticalBasemapSize,
+  applyTacticalBasemapStylePreset,
+  initTacticalBasemap,
+  wireTacticalBasemapResize,
+  scaleRoadSegmentsFromExport,
+  rebuildTacticalRoadNetwork,
+  rebuildTacticalBuildingFootprints,
+} from "./js/geo/tactical-basemap.js";
 
 const canvas = document.querySelector("#simCanvas");
 const ctx = canvas.getContext("2d");
@@ -30,6 +56,8 @@ const agentCardEls = new Map();
 
 const world = {
   scene: null,
+  /** Preset key for post-init asset upgrades (ground tint, etc.) */
+  visualPresetForAssets: "urban_quake",
   agentMeshes: new Map(),
   victimMeshes: new Map(),
   blockadeMeshes: new Map(),
@@ -61,13 +89,6 @@ const MS_PER_TICK = 900;
 const GEMMA_MS_PER_TICK = 12000;
 /** Min wall time between new Fleet dialogue cards while auto-run is on (~4.4s). Multi-agent CoT in the field is usually seconds–tens of seconds per published heartbeat; this keeps the feed readable without slowing the simulation grid. Manual step still updates every tick. */
 const COT_FEED_AUTO_MIN_MS = 4400;
-/** Victim HP/damage — aligned with demo_player (timeline.json) scale.
- *  hp_max: 5 000–10 000 per victim; damage_per_step: 40–100 per tick.
- *  survival_pct = hp / hp_max × 100 (individual, not cross-victim). */
-const VICTIM_HP_MIN   = 5000;
-const VICTIM_HP_RANGE = 5000;   // hp_max ∈ [HP_MIN, HP_MIN + HP_RANGE)
-const VICTIM_DMG_MIN  = 40;
-const VICTIM_DMG_RANGE = 61;    // damage ∈ [DMG_MIN, DMG_MIN + DMG_RANGE)
 const MAX_EVENT_LOG = 20;
 /** Legacy fallback if `fleet-dialogue-cot.json` fails to load */
 const COT_FEED_MAX_BLOCKS = 28;
@@ -931,194 +952,12 @@ function resetDecisionFeeds() {
 }
 function lerp(a, b, t) { return a + (b - a) * Math.min(1, Math.max(0, t)); }
 
-/* ------------------------------------------------------------------------- */
-/* Tactical basemap — MapLibre + PMTiles (Firenze), aligned with demo_player */
-/* ------------------------------------------------------------------------- */
-const TACTICAL_PMTILES_REMOTE = "https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles";
-const GEO_BOUNDS_300M = {
-  label: "Firenze Centro 300m x 300m",
-  southWest: [43.76825, 11.25393],
-  northEast: [43.77095, 11.25767],
-};
-
-function resolveTacticalPmtilesUrl() {
-  try {
-    const o = window.location?.origin;
-    if (o && o !== "null" && window.location?.protocol !== "file:") {
-      return `${o}/api/pmtiles-proxy`;
-    }
-  } catch {
-    /* ignore */
-  }
-  return TACTICAL_PMTILES_REMOTE;
-}
-
-let tacticalPmtilesUrl = resolveTacticalPmtilesUrl();
-let tacticalBaseMap = null;
-let tacticalBaseMapReady = false;
-let tacticalPmtilesProtoInstalled = false;
-let tacticalPmtilesProtocol = null;
-let tacticalRoadSegments = [];
-let tacticalRoadNetworkReady = false;
-let tacticalBuildingFootprints = [];
-let tacticalBuildingsReady = false;
-
 /** OSM road export (lite_sim firenze_300m_roads.json) + live PMTiles fallback */
 let roadExportBase = null;
 let ugvRoadNetwork = null;
 const roadRouteCache = new Map();
 
-function getTacticalGridDims() {
-  if (state?.map?.size) return state.map.size;
-  return [30, 30];
-}
-
-function tacticalLngLatToGrid(lng, lat) {
-  const [cols, rows] = getTacticalGridDims();
-  const west = GEO_BOUNDS_300M.southWest[1];
-  const east = GEO_BOUNDS_300M.northEast[1];
-  const north = GEO_BOUNDS_300M.northEast[0];
-  const south = GEO_BOUNDS_300M.southWest[0];
-  return {
-    x: ((lng - west) / (east - west)) * cols,
-    y: ((north - lat) / (north - south)) * rows,
-  };
-}
-
-function syncTacticalBasemapSize() {
-  const el = document.getElementById("tacticalBasemap");
-  if (!el || !canvas) return;
-  const w = Math.max(1, Math.floor(canvas.clientWidth));
-  const h = Math.max(1, Math.floor(canvas.clientHeight));
-  el.style.width = `${w}px`;
-  el.style.height = `${h}px`;
-  if (tacticalBaseMap) {
-    tacticalBaseMap.resize();
-    tacticalBaseMap.fitBounds(
-      [
-        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
-        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
-      ],
-      { padding: 0, duration: 0 },
-    );
-  }
-}
-
-function makeTacticalBasemapStyle() {
-  return {
-    version: 8,
-    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-    sources: {
-      protomaps: {
-        type: "vector",
-        url: `pmtiles://${tacticalPmtilesUrl}`,
-        attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
-      },
-    },
-    layers: [
-      {
-        id: "pm-mask",
-        source: "protomaps",
-        "source-layer": "mask",
-        type: "fill",
-        paint: { "fill-color": "#0f1726" },
-      },
-      {
-        id: "pm-earth",
-        source: "protomaps",
-        "source-layer": "earth",
-        type: "fill",
-        paint: { "fill-color": "#121d2e" },
-      },
-      {
-        id: "pm-water",
-        source: "protomaps",
-        "source-layer": "water",
-        type: "fill",
-        paint: { "fill-color": "#164969", "fill-opacity": 0.85 },
-      },
-      {
-        id: "pm-landuse",
-        source: "protomaps",
-        "source-layer": "landuse",
-        type: "fill",
-        paint: { "fill-color": "#1b2940", "fill-opacity": 0.72 },
-      },
-      {
-        id: "pm-buildings",
-        source: "protomaps",
-        "source-layer": "buildings",
-        type: "fill",
-        paint: {
-          "fill-color": "#5a7392",
-          "fill-opacity": 0.92,
-          "fill-outline-color": "#94a8c4",
-        },
-      },
-      {
-        id: "pm-roads",
-        source: "protomaps",
-        "source-layer": "roads",
-        type: "line",
-        paint: {
-          "line-color": "#a9bdd5",
-          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 16, 3.2, 18, 5.6],
-          "line-opacity": 0.82,
-        },
-      },
-      {
-        id: "pm-road-labels",
-        source: "protomaps",
-        "source-layer": "roads",
-        type: "symbol",
-        filter: ["has", "name"],
-        layout: {
-          "symbol-placement": "line",
-          "text-field": ["get", "name"],
-          "text-font": ["Noto Sans Regular"],
-          "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9, 16, 11, 18, 13],
-          "text-padding": 2,
-        },
-        paint: {
-          "text-color": "#c9d6e7",
-          "text-halo-color": "#07101d",
-          "text-halo-width": 1.2,
-          "text-opacity": 0.76,
-        },
-      },
-    ],
-  };
-}
-
-function flattenTacticalRoadCoords(geometry) {
-  if (!geometry) return [];
-  if (geometry.type === "LineString") return [geometry.coordinates];
-  if (geometry.type === "MultiLineString") return geometry.coordinates;
-  return [];
-}
-
-function tacticalSegmentInMap(a, b) {
-  const [cols, rows] = getTacticalGridDims();
-  const margin = 1;
-  const minX = Math.min(a.x, b.x);
-  const maxX = Math.max(a.x, b.x);
-  const minY = Math.min(a.y, b.y);
-  const maxY = Math.max(a.y, b.y);
-  return maxX >= -margin && minX <= cols + margin && maxY >= -margin && minY <= rows + margin;
-}
-
-function scaleRoadSegmentsFromExport(data, toCols, toRows) {
-  if (!data?.segments?.length) return [];
-  const from = data.mapSize || [30, 30];
-  const fc = Math.max(1, from[0]);
-  const fr = Math.max(1, from[1]);
-  const sx = toCols / fc;
-  const sy = toRows / fr;
-  return data.segments.map((seg) => ({
-    a: { x: seg.a.x * sx, y: seg.a.y * sy },
-    b: { x: seg.b.x * sx, y: seg.b.y * sy },
-  }));
-}
+registerTacticalGridDims(() => (state?.map?.size ? state.map.size : [30, 30]));
 
 function tryUgvRoadNetworkFromLiveSegments() {
   if (!state?.map?.size || !tacticalRoadSegments.length) return;
@@ -1179,222 +1018,6 @@ function moveAgentOnRoad(agent, targetCell, targetKey) {
   agent.location = [roundCoord(nextPt[0]), roundCoord(nextPt[1])];
 }
 
-function rebuildTacticalRoadNetwork() {
-  if (!tacticalBaseMap || !tacticalBaseMapReady) return;
-  let features = [];
-  try {
-    features = tacticalBaseMap.querySourceFeatures("protomaps", { sourceLayer: "roads" });
-  } catch (err) {
-    console.warn("[tactical basemap] road query failed:", err);
-    return;
-  }
-  const segments = [];
-  for (const feature of features) {
-    for (const line of flattenTacticalRoadCoords(feature.geometry)) {
-      for (let i = 1; i < line.length; i += 1) {
-        const a = tacticalLngLatToGrid(line[i - 1][0], line[i - 1][1]);
-        const b = tacticalLngLatToGrid(line[i][0], line[i][1]);
-        if (tacticalSegmentInMap(a, b)) segments.push({ a, b });
-      }
-    }
-  }
-  if (segments.length) {
-    tacticalRoadSegments = segments;
-    tacticalRoadNetworkReady = true;
-    window.__arcSimulationRoadSegments = tacticalRoadSegments;
-  }
-  if (!ugvRoadNetwork?.available && tacticalRoadSegments.length && state?.map?.size) {
-    tryUgvRoadNetworkFromLiveSegments();
-  }
-}
-
-/* ------------------------------------------------------------------------- */
-/* Tactical buildings — query PMTiles building footprints + tag damage      */
-/* ------------------------------------------------------------------------- */
-function flattenTacticalPolygonCoords(geometry) {
-  if (!geometry) return [];
-  if (geometry.type === "Polygon") return [geometry.coordinates[0] || []];
-  if (geometry.type === "MultiPolygon") {
-    return geometry.coordinates.map((poly) => poly[0] || []);
-  }
-  return [];
-}
-
-function polygonAreaAndCentroid(ring) {
-  let twiceArea = 0;
-  let cx = 0;
-  let cy = 0;
-  if (ring.length < 3) return { area: 0, centroid: [0, 0] };
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
-    const cross = xj * yi - xi * yj;
-    twiceArea += cross;
-    cx += (xi + xj) * cross;
-    cy += (yi + yj) * cross;
-  }
-  const area = Math.abs(twiceArea) * 0.5;
-  if (area < 1e-9) {
-    const sx = ring.reduce((s, p) => s + p[0], 0) / ring.length;
-    const sy = ring.reduce((s, p) => s + p[1], 0) / ring.length;
-    return { area: 0, centroid: [sx, sy] };
-  }
-  return { area, centroid: [cx / (3 * twiceArea), cy / (3 * twiceArea)] };
-}
-
-function pointInPolygon(x, y, ring) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-    const xi = ring[i][0];
-    const yi = ring[i][1];
-    const xj = ring[j][0];
-    const yj = ring[j][1];
-    const intersects =
-      yi > y !== yj > y &&
-      x < ((xj - xi) * (y - yi)) / (yj - yi + 1e-12) + xi;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function polygonBounds(ring) {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const [x, y] of ring) {
-    if (x < minX) minX = x;
-    if (y < minY) minY = y;
-    if (x > maxX) maxX = x;
-    if (y > maxY) maxY = y;
-  }
-  return { minX, minY, maxX, maxY };
-}
-
-function simplifyRing(ring, maxVerts) {
-  if (ring.length <= maxVerts) return ring;
-  const stride = Math.ceil(ring.length / maxVerts);
-  const out = [];
-  for (let i = 0; i < ring.length; i += stride) out.push(ring[i]);
-  if (out[out.length - 1] !== ring[ring.length - 1]) out.push(ring[ring.length - 1]);
-  return out;
-}
-
-function rebuildTacticalBuildingFootprints() {
-  if (!tacticalBaseMap || !tacticalBaseMapReady) return;
-  let features = [];
-  try {
-    features = tacticalBaseMap.querySourceFeatures("protomaps", { sourceLayer: "buildings" });
-  } catch (err) {
-    console.warn("[tactical basemap] building query failed:", err);
-    return;
-  }
-  const seen = new Set();
-  const out = [];
-  const [cols, rows] = getTacticalGridDims();
-  for (const feature of features) {
-    const fid = feature.id ?? feature.properties?.["@id"] ?? feature.properties?.id;
-    const key = fid != null ? String(fid) : `${feature.geometry?.type}:${JSON.stringify(feature.geometry?.coordinates?.[0]?.[0] || [])}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const rings = flattenTacticalPolygonCoords(feature.geometry);
-    for (const ringLngLat of rings) {
-      if (!ringLngLat || ringLngLat.length < 3) continue;
-      const gridRing = ringLngLat.map((c) => {
-        const p = tacticalLngLatToGrid(c[0], c[1]);
-        return [p.x, p.y];
-      });
-      const bounds = polygonBounds(gridRing);
-      if (bounds.maxX < -1 || bounds.minX > cols + 1) continue;
-      if (bounds.maxY < -1 || bounds.minY > rows + 1) continue;
-      const simplified = simplifyRing(gridRing, 16);
-      const { area, centroid } = polygonAreaAndCentroid(simplified);
-      if (area < 0.05) continue;
-      out.push({
-        id: `B${out.length + 1}`,
-        polygon: simplified,
-        centroid,
-        area,
-        bounds,
-        damage: "intact",
-      });
-    }
-  }
-  if (out.length) {
-    tacticalBuildingFootprints = out;
-    tacticalBuildingsReady = true;
-    if (state) applyBuildingsToState();
-  }
-}
-
-function tagBuildingDamage(buildings, riskZones, cellSize) {
-  if (!buildings?.length) return;
-  const samplesPerCell = 2;
-  for (const b of buildings) {
-    const { minX, minY, maxX, maxY } = b.bounds;
-    const w = maxX - minX;
-    const h = maxY - minY;
-    const stepX = Math.max(0.25, w / Math.max(1, Math.round(w * samplesPerCell)));
-    const stepY = Math.max(0.25, h / Math.max(1, Math.round(h * samplesPerCell)));
-    let totalSamples = 0;
-    let collapseSamples = 0;
-    let fireSamples = 0;
-    let proximityHit = false;
-    for (let sx = minX + stepX / 2; sx <= maxX; sx += stepX) {
-      for (let sy = minY + stepY / 2; sy <= maxY; sy += stepY) {
-        if (!pointInPolygon(sx, sy, b.polygon)) continue;
-        totalSamples += 1;
-        for (const z of riskZones || []) {
-          const dx = sx - z.center[0];
-          const dy = sy - z.center[1];
-          const d = Math.hypot(dx, dy);
-          if (d <= z.radius) {
-            if (z.type === "collapse") collapseSamples += 1;
-            else if (z.type === "fire") fireSamples += 1;
-          } else if (d <= z.radius + 2.2) {
-            proximityHit = true;
-          }
-        }
-      }
-    }
-    if (totalSamples === 0) { b.damage = "intact"; continue; }
-    const collapseFrac = collapseSamples / totalSamples;
-    const fireFrac = fireSamples / totalSamples;
-    if (collapseFrac >= 0.15) b.damage = "collapsed";
-    else if (fireFrac >= 0.10) b.damage = "burning";
-    else if (collapseSamples + fireSamples > 0 || proximityHit) b.damage = "damaged";
-    else b.damage = "intact";
-  }
-}
-
-function buildBlockadeCandidatePool(damagedBuildings, roadSegments, gridSize) {
-  if (!damagedBuildings.length || !roadSegments.length) return [];
-  const out = [];
-  const seen = new Set();
-  const proximity = 1.4;
-  for (const b of damagedBuildings) {
-    const { minX, minY, maxX, maxY } = b.bounds;
-    for (const seg of roadSegments) {
-      const ax = seg.a.x;
-      const ay = seg.a.y;
-      const bx = seg.b.x;
-      const by = seg.b.y;
-      const midX = (ax + bx) / 2;
-      const midY = (ay + by) / 2;
-      if (midX < minX - proximity || midX > maxX + proximity) continue;
-      if (midY < minY - proximity || midY > maxY + proximity) continue;
-      const gx = Math.max(1, Math.min(gridSize - 2, Math.round(midX)));
-      const gy = Math.max(1, Math.min(gridSize - 2, Math.round(midY)));
-      const key = `${gx},${gy}`;
-      if (seen.has(key)) continue;
-      if (pointInPolygon(midX, midY, b.polygon)) continue;
-      seen.add(key);
-      out.push([gx, gy]);
-    }
-  }
-  return out;
-}
-
 function applyBuildingsToState() {
   if (!state) return;
   if (!tacticalBuildingFootprints.length) {
@@ -1414,67 +1037,11 @@ function applyBuildingsToState() {
   state.tacticalBuildings = cloned;
 }
 
-function installTacticalPmtilesProtocol() {
-  const ml = globalThis.maplibregl;
-  const Pm = globalThis.pmtiles;
-  if (!ml || !Pm) return;
-  if (!tacticalPmtilesProtoInstalled) {
-    tacticalPmtilesProtocol = new Pm.Protocol();
-    ml.addProtocol("pmtiles", tacticalPmtilesProtocol.tile);
-    tacticalPmtilesProtoInstalled = true;
-  }
-  tacticalPmtilesProtocol.add(new Pm.PMTiles(tacticalPmtilesUrl));
-}
-
-function initTacticalBasemap() {
-  const ml = globalThis.maplibregl;
-  const Pm = globalThis.pmtiles;
-  if (tacticalBaseMap || !ml || !Pm) return;
-  const mount = document.getElementById("tacticalBasemap");
-  if (!mount) return;
-
-  tacticalPmtilesUrl = resolveTacticalPmtilesUrl();
-  try {
-    installTacticalPmtilesProtocol();
-    tacticalBaseMap = new ml.Map({
-      container: mount,
-      style: makeTacticalBasemapStyle(),
-      bounds: [
-        [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
-        [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
-      ],
-      fitBoundsOptions: { padding: 0, duration: 0 },
-      interactive: false,
-      attributionControl: false,
-    });
-    tacticalBaseMap.on("load", () => {
-      tacticalBaseMapReady = true;
-      tacticalBaseMap.fitBounds(
-        [
-          [GEO_BOUNDS_300M.southWest[1], GEO_BOUNDS_300M.southWest[0]],
-          [GEO_BOUNDS_300M.northEast[1], GEO_BOUNDS_300M.northEast[0]],
-        ],
-        { padding: 0, duration: 0 },
-      );
-      syncTacticalBasemapSize();
-    });
-    tacticalBaseMap.on("idle", () => {
-      rebuildTacticalRoadNetwork();
-      rebuildTacticalBuildingFootprints();
-    });
-    tacticalBaseMap.on("error", (e) => {
-      console.warn("[tactical basemap] map error:", e?.error || e);
-    });
-  } catch (err) {
-    console.warn("[tactical basemap] initialization failed:", err);
-  }
-}
-
-function wireTacticalBasemapResize() {
-  const frame = canvas?.closest(".canvas-frame");
-  if (!frame || typeof ResizeObserver === "undefined") return;
-  const ro = new ResizeObserver(() => syncTacticalBasemapSize());
-  ro.observe(frame);
+function geoSynthesisContext() {
+  return {
+    buildingFootprints: tacticalBuildingFootprints,
+    roadSegments: tacticalRoadSegments,
+  };
 }
 
 let defaultScenario;
@@ -1517,18 +1084,21 @@ Promise.all([
     applyFleetDialogueCotDom();
     roadExportBase = roadsData;
     defaultScenario = scenario;
-    initialScenario = synthesizeScenario(scenario, readConfig());
-    init3D(initialScenario);
+    setCurrentScenePreset(readConfig().preset);
+    initialScenario = synthesizeScenario(scenario, readConfig(), geoSynthesisContext());
+    init3D(initialScenario, currentScenePreset);
     reset();
     setupCommandCenter();
     if (liveAiModeEnabled) void probeLmStudio();
     else setAiStatusBadge(false);
   })
   .catch((err) => {
-    console.error(`[simulation] Failed to load /simulation/data/scenarios/${scenarioFile}:`, err);
+    console.error(`[simulation] Bootstrap failed (${scenarioFile}):`, err);
     const id = document.getElementById("briefText");
     if (id) {
-      id.textContent = `Could not load scenario file “${scenarioFile}”. Use ?scenario=scenario_002.json or check the console.`;
+      const detail = err && err.message ? ` ${err.message}` : "";
+      id.textContent =
+        `Could not start mission (scenario “${scenarioFile}”, or a later init step, failed).${detail} Check the console.`;
     }
   });
 
@@ -1554,8 +1124,8 @@ function reset() {
   // ── 2. Rebuild road network FIRST so generatePlan / executeActions are consistent
   refreshUgvRoadNetwork();
   if (tacticalBaseMapReady) {
-    rebuildTacticalRoadNetwork();
-    rebuildTacticalBuildingFootprints();
+    rebuildTacticalRoadNetwork(() => tryUgvRoadNetworkFromLiveSegments());
+    rebuildTacticalBuildingFootprints(() => applyBuildingsToState());
   }
   applyBuildingsToState();
 
@@ -2466,9 +2036,10 @@ function drawMap(t) {
 }
 
 function drawGrid(cols, rows, cell) {
-  ctx.fillStyle = tacticalBaseMapReady ? "rgba(4, 6, 10, 0.14)" : "#04060a";
+  const c2 = (PRESET_VISUAL[currentScenePreset] || PRESET_VISUAL.urban_quake).canvas2d;
+  ctx.fillStyle = tacticalBaseMapReady ? c2.overlay : "#04060a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = tacticalBaseMapReady ? "rgba(93, 255, 180, 0.05)" : "rgba(255, 255, 255, 0.04)";
+  ctx.strokeStyle = tacticalBaseMapReady ? c2.gridStroke : "rgba(255, 255, 255, 0.04)";
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
     ctx.beginPath();
@@ -2482,8 +2053,7 @@ function drawGrid(cols, rows, cell) {
     ctx.lineTo(canvas.width, i * cell);
     ctx.stroke();
   }
-  const arterialAlpha = tacticalBaseMapReady ? 0.14 : 0.32;
-  ctx.fillStyle = `rgba(60, 80, 110, ${arterialAlpha})`;
+  ctx.fillStyle = tacticalBaseMapReady ? c2.arterial : "rgba(60, 80, 110, 0.32)";
   for (let y = 2; y < rows; y += 5) ctx.fillRect(0, y * cell + cell * 0.28, canvas.width, cell * 0.44);
   for (let x = 2; x < cols; x += 6) ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, canvas.height);
 }
@@ -3683,17 +3253,22 @@ function cellDamageLevel(cellX, cellY, riskZones) {
   return Math.min(1, max);
 }
 
-function makeGradientSkyTexture(size = 512) {
+function makeGradientSkyTexture(size = 512, stops = null) {
   const c = document.createElement("canvas");
   c.width = 16;
   c.height = size;
   const g = c.getContext("2d");
   const grad = g.createLinearGradient(0, 0, 0, size);
-  grad.addColorStop(0.0, "#08101a");
-  grad.addColorStop(0.45, "#1a1612");
-  grad.addColorStop(0.72, "#3a2418");
-  grad.addColorStop(0.88, "#5a3a22");
-  grad.addColorStop(1.0, "#1c1610");
+  const use = stops && stops.length
+    ? stops
+    : [
+        [0.0, "#08101a"],
+        [0.45, "#1a1612"],
+        [0.72, "#3a2418"],
+        [0.88, "#5a3a22"],
+        [1.0, "#1c1610"],
+      ];
+  for (const [t, color] of use) grad.addColorStop(t, color);
   g.fillStyle = grad;
   g.fillRect(0, 0, 16, size);
   const tex = new THREE.CanvasTexture(c);
@@ -4610,42 +4185,48 @@ function addUrbanStreetProps(scenario) {
   world.scene.add(group);
 }
 
-function init3D(scenario) {
+function init3D(scenario, presetKey) {
   if (world.initialized || povCols.length === 0) return;
+  const pk = presetKey || activePreset || currentScenePreset || "urban_quake";
+  world.visualPresetForAssets = pk;
+  setCurrentScenePreset(pk);
+  const vis = PRESET_VISUAL[pk] || PRESET_VISUAL.urban_quake;
+  const s3 = vis.scene3d;
   const [cols, rows] = scenario.map.size;
 
   // Build shared scene once
   world.scene = new THREE.Scene();
-  world.scene.background = new THREE.Color(0x070d16);
-  world.scene.fog = new THREE.FogExp2(0x080f1a, 0.016);
+  world.scene.background = new THREE.Color(s3.background);
+  world.scene.fog = new THREE.FogExp2(s3.fogColor, s3.fogDensity);
 
   // Ambient floor so shadow side of objects stays readable in the FPV cone.
-  world.scene.add(new THREE.AmbientLight(0x6b88aa, 0.35));
+  world.scene.add(new THREE.AmbientLight(s3.ambient.color, s3.ambient.intensity));
 
   // Three-point rig: warm hemi from above, cool fill, soft rim
-  const hemi = new THREE.HemisphereLight(0x5680c0, 0x0a0f1a, 1.0);
+  const hemi = new THREE.HemisphereLight(s3.hemi.sky, s3.hemi.ground, s3.hemi.intensity);
   world.scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xfff0d8, 0.95);
+  const key = new THREE.DirectionalLight(s3.key.color, s3.key.intensity);
   key.position.set(20, 30, 10);
   world.scene.add(key);
-  const fill = new THREE.DirectionalLight(0x4a78b0, 0.35);
+  const fill = new THREE.DirectionalLight(s3.fill.color, s3.fill.intensity);
   fill.position.set(-15, 12, -8);
   world.scene.add(fill);
-  const rim = new THREE.PointLight(0x00bfff, 0.7, 80);
+  const rim = new THREE.PointLight(s3.rim.color, s3.rim.intensity, 80);
   rim.position.set(cols / 2, 22, rows / 2);
   world.scene.add(rim);
 
   // Ground — neon grid placeholder, swapped to concrete after assets load
-  const gridTex = makeGridTexture(512, cols, rows);
+  const gridTex = makeGridTexture(512, cols, rows, s3.gridTex);
+  const gm = s3.gridMat;
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(cols, rows),
     new THREE.MeshStandardMaterial({
       map: gridTex,
-      color: 0x0a1828,
+      color: gm.color,
       roughness: 0.9,
       metalness: 0.05,
-      emissive: 0x001a33,
-      emissiveIntensity: 0.4
+      emissive: gm.emissive,
+      emissiveIntensity: gm.emissiveIntensity
     })
   );
   ground.rotation.x = -Math.PI / 2;
@@ -4654,7 +4235,7 @@ function init3D(scenario) {
   world.groundGrid = ground;
 
   // Sky-dome — smoky disaster gradient for the FPV horizon
-  const skyTex = makeGradientSkyTexture(512);
+  const skyTex = makeGradientSkyTexture(512, s3.skyStops);
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(120, 32, 16),
     new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })
@@ -4795,10 +4376,10 @@ function init3D(scenario) {
       return;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(0x02060f, 1);
+    renderer.setClearColor(s3.rendererClear, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.4;
+    renderer.toneMappingExposure = s3.toneExposure ?? 1.4;
 
     const camera = new THREE.PerspectiveCamera(72, 16 / 10, 0.1, 200);
     camera.position.set(cols / 2, 1.5, rows / 2);
@@ -5781,16 +5362,17 @@ async function upgradeToAssets(scenario) {
       tex.needsUpdate = true;
     }
     groundBase.colorSpace = THREE.SRGBColorSpace;
+    const gUp = (PRESET_VISUAL[world.visualPresetForAssets] || PRESET_VISUAL.urban_quake).groundUpgrade;
     world.groundGrid.material.dispose();
     world.groundGrid.material = new THREE.MeshStandardMaterial({
       map: groundBase,
       normalMap: groundNorm,
       roughnessMap: groundRough,
-      color: 0x4a5562,
+      color: gUp.color,
       roughness: 0.95,
       metalness: 0.05,
-      emissive: 0x06121f,
-      emissiveIntensity: 0.18
+      emissive: gUp.emissive,
+      emissiveIntensity: gUp.emissiveIntensity
     });
   }
 }
@@ -5989,13 +5571,16 @@ function addWoodenScaffolding(scenario, woodMat) {
   }
 }
 
-function makeGridTexture(size, cols, rows) {
+function makeGridTexture(size, cols, rows, texOpts = {}) {
+  const fill = texOpts.fill ?? "#04060a";
+  const stroke = texOpts.stroke ?? "rgba(93, 255, 180, 0.32)";
+  const hi = texOpts.highlight ?? "rgba(130, 200, 255, 0.06)";
   const c = document.createElement("canvas");
   c.width = c.height = size;
   const g = c.getContext("2d");
-  g.fillStyle = "#04060a";
+  g.fillStyle = fill;
   g.fillRect(0, 0, size, size);
-  g.strokeStyle = "rgba(93, 255, 180, 0.32)";
+  g.strokeStyle = stroke;
   g.lineWidth = 1.2;
   for (let i = 0; i <= cols; i += 1) {
     const x = (i / cols) * size;
@@ -6012,7 +5597,7 @@ function makeGridTexture(size, cols, rows) {
     g.stroke();
   }
   // Sparse "tile" highlights
-  g.fillStyle = "rgba(130, 200, 255, 0.06)";
+  g.fillStyle = hi;
   for (let i = 0; i < 40; i += 1) {
     const cx = Math.floor(Math.random() * cols);
     const cy = Math.floor(Math.random() * rows);
@@ -6253,381 +5838,6 @@ function currentTargetIdFor(agent) {
   return action ? action.target : null;
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Command-center extensions
-   - Scenario synthesizer (preset + sliders → scenario JSON)
-   - KPI counters, status bandwidth indicator
-   - Speed buttons, config rail toggle, copy JSON, clear log
-   - 3D world teardown so Apply & Reset can rebuild with new dimensions
-   ────────────────────────────────────────────────────────────────────────── */
-
-const PRESET_DEFAULTS = {
-  urban_quake: {
-    label: "MSN-001 · URBAN-QUAKE",
-    phase: "CLOSED LOOP · GEMMA-4",
-    grid: 30, victims: 5, blockades: 2, fires: 1, collapses: 1,
-    intensity: 70, severity: 50, scout: 1, relay: 1, rescue: 1, clear: 1,
-    balloons: 1, armored: 1,
-    baseRange: 12, relayRange: 8, deadRadius: 4, dropout: 15
-  },
-  wildfire: {
-    label: "MSN-002 · WILDFIRE-WUI",
-    phase: "PERIMETER ASSESS · GEMMA-4",
-    grid: 34, victims: 6, blockades: 1, fires: 3, collapses: 0,
-    intensity: 85, severity: 60, scout: 2, relay: 1, rescue: 1, clear: 0,
-    balloons: 2, armored: 2,
-    baseRange: 14, relayRange: 9, deadRadius: 3, dropout: 25
-  },
-  industrial: {
-    label: "MSN-003 · INDUSTRIAL-COLLAPSE",
-    phase: "STRUCTURAL TRIAGE · GEMMA-4",
-    grid: 28, victims: 4, blockades: 4, fires: 1, collapses: 2,
-    intensity: 80, severity: 70, scout: 1, relay: 1, rescue: 1, clear: 2,
-    balloons: 1, armored: 2,
-    baseRange: 10, relayRange: 7, deadRadius: 5, dropout: 30
-  }
-};
-
-let activePreset = "urban_quake";
-
-function $(id) { return document.getElementById(id); }
-
-function readConfig() {
-  const num = (id, fb) => {
-    const el = $(id);
-    if (!el) return fb;
-    return Number(el.value);
-  };
-  const str = (id, fb) => {
-    const el = $(id);
-    return el ? el.value : fb;
-  };
-  return {
-    preset: activePreset,
-    missionId: str("cfgMissionId", "MSN-001"),
-    grid: num("cfgGrid", 30),
-    cellSize: num("cfgCell", 10),
-    seed: num("cfgSeed", 42),
-    scout: num("cfgScout", 1),
-    relay: num("cfgRelay", 1),
-    rescue: num("cfgRescue", 1),
-    clearN: num("cfgClear", 1),
-    balloons: num("cfgBalloons", 1),
-    armored: num("cfgArmored", 0),
-    battery: num("cfgBat", 75),
-    victims: num("cfgVictim", 5),
-    severity: num("cfgSeverity", 50) / 100,
-    survivalWindow: num("cfgWindow", 200),
-    blockades: num("cfgBlock", 2),
-    fires: num("cfgFire", 1),
-    collapses: num("cfgCollapse", 1),
-    intensity: num("cfgIntensity", 70) / 100,
-    baseRange: num("cfgBaseRange", 12),
-    relayRange: num("cfgRelayRange", 8),
-    deadRadius: num("cfgDead", 4),
-    dropout: num("cfgDropout", 15) / 100
-  };
-}
-
-function mulberry32(seed) {
-  let a = seed | 0;
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function synthesizeScenario(base, cfg) {
-  // Build a brand-new scenario JSON from sliders, falling back to base values
-  // for things the user hasn't explicitly controlled (sensor configs, etc.).
-  const rng = mulberry32((cfg.seed | 0) * 7919 + (cfg.victims | 0) * 31 + (cfg.grid | 0) * 17);
-  const G = Math.max(20, Math.min(40, cfg.grid));
-  const baseCell = [Math.max(1, Math.floor(G * 0.07)), Math.max(1, Math.floor(G * 0.07))];
-
-  const occupied = new Set();
-  const mark = (x, y, r = 1) => {
-    for (let dx = -r; dx <= r; dx += 1)
-      for (let dy = -r; dy <= r; dy += 1)
-        occupied.add(`${x + dx},${y + dy}`);
-  };
-  mark(baseCell[0], baseCell[1], 2);
-
-  const pickCell = (minDist = 4) => {
-    for (let tries = 0; tries < 80; tries += 1) {
-      const x = 1 + Math.floor(rng() * (G - 2));
-      const y = 1 + Math.floor(rng() * (G - 2));
-      if (occupied.has(`${x},${y}`)) continue;
-      const d = Math.abs(x - baseCell[0]) + Math.abs(y - baseCell[1]);
-      if (d < minDist) continue;
-      return [x, y];
-    }
-    return [Math.floor(G / 2), Math.floor(G / 2)];
-  };
-
-  // Risk zones — radii scaled by intensity so high-intensity earthquakes
-  // produce zone-scale destruction across multiple blocks, not single tiles.
-  const riskZones = [];
-  const radiusBase = 3 + Math.round(cfg.intensity * 2.5); // 3..5+ cells
-  for (let i = 0; i < cfg.fires; i += 1) {
-    const c = pickCell(5);
-    const radius = radiusBase + Math.floor(rng() * 2);
-    riskZones.push({ id: `Z${riskZones.length + 1}`, center: c, radius, type: "fire", risk: 0.4 + cfg.intensity * 0.5 });
-    mark(c[0], c[1], radius);
-  }
-  for (let i = 0; i < cfg.collapses; i += 1) {
-    const c = pickCell(5);
-    const radius = radiusBase + 1 + Math.floor(rng() * 2);
-    riskZones.push({ id: `Z${riskZones.length + 1}`, center: c, radius, type: "collapse", risk: 0.35 + cfg.intensity * 0.45 });
-    mark(c[0], c[1], radius);
-  }
-
-  // Comm dead zone — anchor on a risk zone if present, else a random cell
-  const deadAnchor = riskZones.length ? riskZones[0].center : pickCell(6);
-  const deadZones = cfg.deadRadius > 0 ? [{
-    id: "C1",
-    center: deadAnchor,
-    radius: cfg.deadRadius,
-    dropout_addition: Math.max(0.1, cfg.dropout * 2)
-  }] : [];
-
-  // Buildings — clone and tag against the freshly computed risk zones, so
-  // blockade/victim placement below can lean on actual Firenze polygons.
-  const synthBuildings = tacticalBuildingFootprints.map((b) => ({
-    id: b.id,
-    polygon: b.polygon,
-    centroid: b.centroid,
-    area: b.area,
-    bounds: b.bounds,
-    damage: "intact",
-  }));
-  tagBuildingDamage(synthBuildings, riskZones, cfg.cellSize || 10);
-  const damagedPool = synthBuildings.filter((b) => b.damage !== "intact");
-
-  // Road-snapped blockades: prefer cells where a road meets a damaged building.
-  const blockades = [];
-  const blockadeCandidates = damagedPool.length && tacticalRoadSegments.length
-    ? buildBlockadeCandidatePool(damagedPool, tacticalRoadSegments, G)
-    : [];
-  for (let i = 0; i < cfg.blockades; i += 1) {
-    let loc = null;
-    if (blockadeCandidates.length) {
-      for (let tries = 0; tries < 8 && !loc; tries += 1) {
-        const idx = Math.floor(rng() * blockadeCandidates.length);
-        const cand = blockadeCandidates[idx];
-        if (!cand || occupied.has(`${cand[0]},${cand[1]}`)) continue;
-        loc = cand;
-      }
-    }
-    if (!loc) loc = pickCell(3);
-    blockades.push({
-      id: `K${i + 1}`,
-      location: loc,
-      repair_cost: 60 + Math.floor(rng() * 30),
-      clear_progress: 0,
-      status: "blocked"
-    });
-    mark(loc[0], loc[1], 1);
-  }
-
-  // Victims — HP system aligned with demo_player (timeline.json):
-  //   hp_max ∈ [5000, 10000), damage_per_step ∈ [40, 100)
-  //   survival_pct = hp / hp_max × 100  (individual baseline, not cross-victim)
-  // Placement: prefer interiors of damaged/collapsed buildings when basemap is loaded.
-  const victims = [];
-  const pickVictimCell = () => {
-    if (!synthBuildings.length) return pickCell(4);
-    const weights = { collapsed: 3, damaged: 2, burning: 1, intact: 0.25 };
-    let total = 0;
-    for (const b of synthBuildings) total += weights[b.damage] * Math.min(b.area, 6);
-    if (total <= 0) return pickCell(4);
-    let r = rng() * total;
-    let pick = synthBuildings[0];
-    for (const b of synthBuildings) {
-      r -= weights[b.damage] * Math.min(b.area, 6);
-      if (r <= 0) { pick = b; break; }
-    }
-    const { minX, minY, maxX, maxY } = pick.bounds;
-    for (let tries = 0; tries < 12; tries += 1) {
-      const cx = pick.centroid[0] + (rng() - 0.5) * (maxX - minX) * 0.6;
-      const cy = pick.centroid[1] + (rng() - 0.5) * (maxY - minY) * 0.6;
-      const gx = Math.max(1, Math.min(G - 2, Math.round(cx)));
-      const gy = Math.max(1, Math.min(G - 2, Math.round(cy)));
-      if (occupied.has(`${gx},${gy}`)) continue;
-      if (!pointInPolygon(cx, cy, pick.polygon)) continue;
-      return [gx, gy];
-    }
-    return pickCell(4);
-  };
-  for (let i = 0; i < cfg.victims; i += 1) {
-    const loc = pickVictimCell();
-    const sev = cfg.severity * (0.6 + rng() * 0.8);
-    const hp_max = VICTIM_HP_MIN + Math.floor(rng() * VICTIM_HP_RANGE);
-    const damage_per_step = Math.round(VICTIM_DMG_MIN + sev * VICTIM_DMG_RANGE);
-    victims.push({
-      id: `V${i + 1}`,
-      location: loc,
-      hp: hp_max,
-      hp_max,
-      survival_pct: 100,
-      damage_per_step,
-      thermal_signal: round(0.25 + rng() * 0.7),
-      status: rng() < 0.85 ? "trapped" : "unknown"
-    });
-    mark(loc[0], loc[1], 1);
-  }
-
-  // Agents — spawn ring around base
-  const agentTemplates = (base && base.agents) || [];
-  const agents = [];
-  let spawn = 0;
-  const ring = [
-    [0, 0], [1, 0], [0, 1], [-1, 0], [0, -1],
-    [1, 1], [-1, 1], [1, -1], [-1, -1]
-  ];
-  const place = () => {
-    const [dx, dy] = ring[spawn % ring.length] || [0, 0];
-    spawn += 1;
-    return [baseCell[0] + dx, baseCell[1] + dy];
-  };
-  const pickTpl = (kind, role) =>
-    agentTemplates.find((a) => a.type === kind && a.role === role) ||
-    agentTemplates.find((a) => a.type === kind) ||
-    null;
-
-  for (let i = 0; i < cfg.scout; i += 1) {
-    const tpl = pickTpl("drone", "scout");
-    agents.push({
-      ...(tpl || {}),
-      id: `Drone-${agents.filter((a) => a.type === "drone").length + 1}`,
-      type: "drone",
-      role: "scout",
-      location: place(),
-      battery: cfg.battery,
-      speed: 3,
-      perception_range: 6,
-      sensors: ["thermal", "camera", "audio"],
-      payload: "medical_beacon"
-    });
-  }
-  for (let i = 0; i < cfg.relay; i += 1) {
-    agents.push({
-      id: `Drone-${agents.filter((a) => a.type === "drone").length + 1}`,
-      type: "drone",
-      role: "relay",
-      location: place(),
-      battery: cfg.battery,
-      speed: 3,
-      perception_range: 5,
-      sensors: ["camera", "audio"],
-      payload: "radio_relay"
-    });
-  }
-  for (let i = 0; i < cfg.rescue; i += 1) {
-    agents.push({
-      id: `UGV-${agents.filter((a) => a.type === "ground_rescue").length + 1}`,
-      type: "ground_rescue",
-      role: "rescue",
-      location: place(),
-      battery: cfg.battery,
-      speed: 1,
-      perception_range: 3,
-      sensors: ["audio", "vibration"],
-      payload: "first_aid_pack"
-    });
-  }
-  for (let i = 0; i < cfg.clearN; i += 1) {
-    agents.push({
-      id: `UGV-${agents.filter((a) => a.type === "ground_clear").length + agents.filter((a) => a.type === "ground_rescue").length + 1}`,
-      type: "ground_clear",
-      role: "clear_blockade",
-      location: place(),
-      battery: cfg.battery,
-      speed: 1,
-      perception_range: 3,
-      clear_rate: 20,
-      sensors: ["camera"],
-      payload: "rubble_clear_tool"
-    });
-  }
-  for (let i = 0; i < cfg.balloons; i += 1) {
-    agents.push({
-      id: `BAL-${agents.filter((a) => a.type === "balloon").length + 1}`,
-      type: "balloon",
-      role: "relay",
-      location: place(),
-      battery: cfg.battery,
-      speed: 0.5,
-      perception_range: 12,
-      sensors: ["camera", "audio"],
-      payload: "comm_relay"
-    });
-  }
-  for (let i = 0; i < cfg.armored; i += 1) {
-    agents.push({
-      id: `AAV-${agents.filter((a) => a.type === "ground_armored").length + 1}`,
-      type: "ground_armored",
-      role: "rescue",
-      location: place(),
-      battery: cfg.battery,
-      speed: 1,
-      perception_range: 4,
-      sensors: ["thermal", "audio", "vibration"],
-      payload: "rescue_pod",
-      risk_immune: true
-    });
-  }
-  if (agents.length === 0 && agentTemplates.length) {
-    agents.push(JSON.parse(JSON.stringify(agentTemplates[0])));
-  }
-
-  const baseMap = base?.map || {};
-  const baseSize = baseMap.size?.[0] || G;
-  const scale = G / Math.max(1, baseSize);
-  const clampCell = (v) => Math.max(0, Math.min(G - 1, Math.round(v * scale)));
-  const scaleFootprint = ([x, y, w, h]) => {
-    const sx = clampCell(x);
-    const sy = clampCell(y);
-    const ex = Math.max(sx + 1, clampCell(x + w));
-    const ey = Math.max(sy + 1, clampCell(y + h));
-    return [sx, sy, Math.max(1, Math.min(G - sx, ex - sx)), Math.max(1, Math.min(G - sy, ey - sy))];
-  };
-  const terrain = (baseMap.terrain || []).map((t) => ({ ...t, footprint: scaleFootprint(t.footprint) }));
-  const buildings = (baseMap.buildings || []).map((b) => ({ ...b, footprint: scaleFootprint(b.footprint) }));
-  const roads = (baseMap.roads || []).map((r) => ({
-    ...r,
-    points: (r.points || []).map(([x, y]) => [clampCell(x), clampCell(y)])
-  }));
-
-  return {
-    scenario_id: cfg.missionId.toLowerCase().replace(/[^a-z0-9]+/g, "_") || "msn_synth",
-    description: base?.description ||
-      `Synthesized scenario: ${cfg.victims} victims · ${cfg.fires + cfg.collapses} hazard zones · ${cfg.blockades} blockades.`,
-    map: {
-      size: [G, G],
-      cell_size_m: cfg.cellSize,
-      base: baseCell,
-      refuges: [{ id: "R0", location: baseCell }],
-      blocked_cells: blockades,
-      risk_zones: riskZones,
-      communication_dead_zones: deadZones,
-      terrain,
-      roads,
-      buildings
-    },
-    victims,
-    agents,
-    communication: {
-      base_range: cfg.baseRange,
-      relay_range: cfg.relayRange,
-      direct_comm_range: 4,
-      bandwidth_limit: 3,
-      base_dropout_probability: cfg.dropout
-    }
-  };
-}
-
 /* ── Tear down 3D world so Apply & Reset can rebuild ──────────────────── */
 function disposeMaterial(mat) {
   if (!mat) return;
@@ -6693,12 +5903,16 @@ function rebuildSimulation(cfg) {
   roadRouteCache.clear();
 
   teardown3D();
-  initialScenario = synthesizeScenario(defaultScenario, cfg);
-  init3D(initialScenario);
+  const pk = cfg.preset || "urban_quake";
+  setCurrentScenePreset(pk);
+  initialScenario = synthesizeScenario(defaultScenario, cfg, geoSynthesisContext());
+  init3D(initialScenario, pk);
 
   // reset() now: rebuilds road network → generates fresh plan → renders
   reset();
   updateMissionLabels(cfg);
+  applyTacticalBasemapStylePreset(pk);
+  syncSimulationPresetClass(pk);
 
   // Re-render panels immediately so CoT/Decision Hub reflect the new fleet plan
   if (state && plan) renderOnce();
@@ -6730,12 +5944,18 @@ function updateCommandKpis(candidates) {
 
 function updateMissionLabels(cfg) {
   const preset = PRESET_DEFAULTS[cfg.preset] || PRESET_DEFAULTS.urban_quake;
+  const vis = PRESET_VISUAL[cfg.preset] || PRESET_VISUAL.urban_quake;
   const idEl = $("msnId");
   if (idEl) idEl.textContent = `${cfg.missionId} · ${preset.label.split("· ")[1] || "MISSION"}`;
   const phaseEl = $("msnPhase");
   if (phaseEl) phaseEl.textContent = preset.phase;
   const gridBadge = $("gridBadge");
   if (gridBadge) gridBadge.textContent = `${cfg.grid} × ${cfg.grid}`;
+  const geoEl = $("geoGridBadge");
+  if (geoEl) {
+    geoEl.textContent = vis.geoShort;
+    geoEl.title = vis.geoTitle;
+  }
 }
 
 /* ── Control wiring ────────────────────────────────────────────────────── */
@@ -6776,7 +5996,7 @@ function setupCommandCenter() {
     btn.addEventListener("click", () => {
       const key = btn.dataset.preset;
       if (!PRESET_DEFAULTS[key]) return;
-      activePreset = key;
+      setActivePreset(key);
       document.querySelectorAll(".preset").forEach((b) => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
       const p = PRESET_DEFAULTS[key];
       const set = (id, v) => { const el = $(id); if (el) { el.value = v; el.dispatchEvent(new Event("input")); } };
@@ -6797,6 +6017,7 @@ function setupCommandCenter() {
       set("cfgRelayRange", p.relayRange);
       set("cfgDead", p.deadRadius);
       set("cfgDropout", p.dropout);
+      rebuildSimulation(readConfig());
     });
   });
 
@@ -6856,6 +6077,8 @@ function setupCommandCenter() {
 
   // Initial label paint
   updateMissionLabels(readConfig());
+  applyTacticalBasemapStylePreset(readConfig().preset);
+  syncSimulationPresetClass(readConfig().preset);
 
   // MOCK / GEMMA4 header toggle
   syncAiModeSegmentedUi();
@@ -6872,7 +6095,12 @@ function setupCommandCenter() {
   if (bw) bw.className = "bw lvl-5";
 }
 
-initTacticalBasemap();
+initTacticalBasemap({
+  onIdle() {
+    rebuildTacticalRoadNetwork(() => tryUgvRoadNetworkFromLiveSegments());
+    rebuildTacticalBuildingFootprints(() => applyBuildingsToState());
+  },
+});
 wireTacticalBasemapResize();
 requestAnimationFrame(() => syncTacticalBasemapSize());
 
