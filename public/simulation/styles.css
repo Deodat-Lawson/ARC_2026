@@ -117,7 +117,7 @@ a { color: inherit; text-decoration: none; }
 /* ── Top command bar ─────────────────────────────────────────── */
 .cc-top {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto auto 1fr;
   align-items: center;
   gap: 24px;
   padding: 0 16px;
@@ -142,6 +142,106 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius);
   background: rgba(4, 6, 10, 0.6);
   overflow: hidden;
+}
+
+/* MOCK / GEMMA4 switch — between KPI strip and transport controls */
+.cc-top-ai {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: rgba(4, 8, 14, 0.72);
+  box-shadow: 0 1px 0 rgba(93, 255, 180, 0.05);
+}
+
+.ai-mode-seg-btn {
+  margin: 0;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 0;
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: rgba(130, 200, 255, 0.55);
+  background: transparent;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.ai-mode-seg-btn:hover {
+  color: rgba(200, 220, 240, 0.9);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ai-mode-seg-btn + .ai-mode-seg-btn {
+  border-left: 1px solid var(--line);
+}
+
+.ai-mode-seg-btn.active {
+  color: #5dffb4;
+  background: rgba(14, 40, 28, 0.55);
+  box-shadow: inset 0 0 12px rgba(93, 255, 180, 0.08);
+}
+
+.ai-mode-seg-btn:focus-visible {
+  outline: 2px solid rgba(93, 255, 180, 0.55);
+  outline-offset: 2px;
+}
+
+.gemma-ai-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(130, 200, 255, 0.75);
+  background: rgba(4, 8, 14, 0.65);
+}
+
+.gemma-ai-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(130, 200, 255, 0.45);
+}
+
+.gemma-ai-status.live {
+  border-color: rgba(93, 255, 180, 0.45);
+  color: #5dffb4;
+  background: rgba(14, 40, 28, 0.55);
+}
+
+.gemma-ai-status.live .gemma-ai-status-dot {
+  background: #5dffb4;
+  box-shadow: 0 0 8px rgba(93, 255, 180, 0.65);
+}
+
+.gemma-ai-status.mock {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(180, 190, 200, 0.65);
+}
+
+.gemma-ai-status.mock .gemma-ai-status-dot {
+  background: rgba(180, 190, 200, 0.45);
+}
+
+.gemma-ai-status.pending .gemma-ai-status-dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
 .cc-divider {
@@ -777,6 +877,18 @@ input[type="range"]::-moz-range-thumb {
   align-items: baseline;
 }
 .briefing-row:last-child { border-bottom: none; margin-bottom: 0; }
+
+.briefing-row-pending,
+.thinking-row-pending {
+  opacity: 0.72;
+  border-style: dashed;
+}
+
+.briefing-row-pending .briefing-body,
+.thinking-row-pending .thinking-body {
+  color: rgba(130, 200, 255, 0.65);
+  font-style: italic;
+}
 .briefing-step {
   color: var(--warn);
   font-weight: 700;
@@ -1954,6 +2066,12 @@ pre::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99
 @media (max-width: 1280px) {
   :root { --rail-w-l: 240px; --rail-w-r: 270px; }
   .cc-top-c { display: none; }
+  .cc-top {
+    grid-template-columns: 1fr auto 1fr;
+  }
+  .cc-top-l { grid-column: 1; }
+  .cc-top-ai { grid-column: 2; }
+  .cc-top-r { grid-column: 3; }
 }
 
 @media (max-width: 1100px) {

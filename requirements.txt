@@ -7,13 +7,14 @@ google-generativeai>=0.8     # Gemini 3 cloud orchestration
 # ── LiteRT Edge Deployment (Special Technology Track — LiteRT award) ─────────
 litert-lm>=0.11.0            # google-ai-edge/LiteRT-LM: Gemma 4 on-device inference
                              # Model: litert-community/gemma-4-E4B-it-litert-lm
+huggingface-hub>=0.26.0      # Download .litertlm weights (used by GemmaPerceiver)
 
 # ── Numerical / Scientific ───────────────────────────────────────────────────
 numpy>=1.24.0                # GA task allocator, position arithmetic
 scipy>=1.11.0                # CMA-ES optimisation (GATaskAllocator)
 
 # ── Web / API ────────────────────────────────────────────────────────────────
-flask>=3.0                   # REST API for Timmy's Landing Page
+flask>=3.0                   # REST APIs; litert_openai_server.py (OpenAI-compatible LiteRT bridge)
 websockets>=12.0             # Real-time push to frontend demo player
 
 # ── Visualisation ────────────────────────────────────────────────────────────

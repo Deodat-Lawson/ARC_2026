@@ -51,6 +51,8 @@ const T0 = performance.now();
 const trails = new Map();
 const TRAIL_LEN = 10;
 const MS_PER_TICK = 900;
+/** Slower auto-step interval in GEMMA4 mode so LiteRT rounds can finish before the next tick (no MOCK backfill). */
+const GEMMA_MS_PER_TICK = 12000;
 /** Min wall time between new Fleet dialogue cards while auto-run is on (~4.4s). Multi-agent CoT in the field is usually seconds–tens of seconds per published heartbeat; this keeps the feed readable without slowing the simulation grid. Manual step still updates every tick. */
 const COT_FEED_AUTO_MIN_MS = 4400;
 /** Victim HP/damage — aligned with demo_player (timeline.json) scale.
@@ -214,6 +216,504 @@ let cotFeedPrependedStep = -999;
 let lastCotFeedWallMs = 0;
 const cotFeedTranscriptChunks = [];
 
+/* ------------------------------------------------------------------------- */
+/* Live Gemma 4 · LM Studio / LiteRT (via /api/gemma-chat)                   */
+/* ------------------------------------------------------------------------- */
+const AI_ENDPOINT = "/api/gemma-chat";
+const LIVE_AI_STORAGE_KEY = "arc_sim_ai_mode";
+
+function readInitialLiveAiMode() {
+  try {
+    const q = (new URLSearchParams(window.location.search || "").get("ai") || "").toLowerCase();
+    if (q === "mock" || q === "0" || q === "false") return false;
+    if (q === "gemma" || q === "gemma4" || q === "1" || q === "true" || q === "live") return true;
+  } catch { /* ignore */ }
+  try {
+    const s = localStorage.getItem(LIVE_AI_STORAGE_KEY);
+    if (s === "mock") return false;
+    if (s === "gemma") return true;
+  } catch { /* ignore */ }
+  return true;
+}
+
+/** When true, call backend for orchestrator / vision / fleet; when false, template-only MOCK. */
+let liveAiModeEnabled = readInitialLiveAiMode();
+
+function persistLiveAiMode() {
+  try {
+    localStorage.setItem(LIVE_AI_STORAGE_KEY, liveAiModeEnabled ? "gemma" : "mock");
+  } catch { /* ignore */ }
+}
+
+function syncAiModeSegmentedUi() {
+  const mockBtn = document.getElementById("aiModeMock");
+  const gemmaBtn = document.getElementById("aiModeGemma");
+  if (!mockBtn || !gemmaBtn) return;
+  mockBtn.classList.toggle("active", !liveAiModeEnabled);
+  gemmaBtn.classList.toggle("active", liveAiModeEnabled);
+  mockBtn.setAttribute("aria-pressed", (!liveAiModeEnabled).toString());
+  gemmaBtn.setAttribute("aria-pressed", liveAiModeEnabled.toString());
+}
+
+function applyLiveAiModeFromUser(enableGemma) {
+  if (liveAiModeEnabled === enableGemma) return;
+  liveAiModeEnabled = enableGemma;
+  persistLiveAiMode();
+  syncAiModeSegmentedUi();
+  resetLiveAiState();
+  if (!liveAiModeEnabled) {
+    setAiStatusBadge(false);
+  } else {
+    liveAiConnected = null;
+    setAiStatusBadge(null);
+    void probeLmStudio();
+  }
+  if (state && plan) {
+    renderOnce();
+    if (liveAiModeEnabled) scheduleLiveAiRound(plan);
+  }
+  if (timer) startAuto();
+}
+
+const agentHistories = {
+  Drone_Alpha: [],
+  Track_Beta: [],
+  Relay_Gamma: [],
+  Orchestrator: [],
+};
+
+const liveAiCache = {
+  tick: -1,
+  orchestratorTick: -1,
+  orchestratorText: "",
+  orchestratorLive: false,
+  briefingTick: -1,
+  briefingText: "",
+  fleetSlides: null,
+  droneMsg: "",
+  betaMsg: "",
+  gammaMsg: "",
+};
+
+let liveAiRequestId = 0;
+let liveAiInFlight = false;
+/** @type {boolean|null} null = probing, true = LM Studio reachable */
+let liveAiConnected = null;
+/** Latest plan to run after the current Gemma round finishes (simulation keeps stepping). */
+let liveAiPendingPlan = null;
+let liveAiRoundStartedAt = 0;
+const GEMMA_ROUND_TIMEOUT_MS = 180_000;
+
+function simulationTickIntervalMs() {
+  const base = liveAiModeEnabled ? GEMMA_MS_PER_TICK : MS_PER_TICK;
+  return Math.max(80, base / speedMultiplier);
+}
+
+function releaseStuckLiveAiRound() {
+  if (!liveAiInFlight) return false;
+  if (performance.now() - liveAiRoundStartedAt < GEMMA_ROUND_TIMEOUT_MS) return false;
+  liveAiRequestId += 1;
+  liveAiInFlight = false;
+  liveAiCache.orchestratorLive = false;
+  emitToast("default", "Gemma 4 round timed out — simulation continues");
+  return true;
+}
+
+/** GEMMA4: queue inference; never block simulation timestep (D — serial rounds, no MOCK). */
+function scheduleLiveAiRound(plan) {
+  if (!liveAiModeEnabled || !state || !plan) return;
+  if (liveAiConnected === false) return;
+  releaseStuckLiveAiRound();
+  if (liveAiInFlight) {
+    liveAiPendingPlan = plan;
+    syncLiveAiHudPending();
+    return;
+  }
+  void triggerLiveAiRound(plan);
+}
+
+function setAiStatusBadge(live) {
+  const el = document.getElementById("gemmaAiStatus");
+  if (!el) return;
+  liveAiConnected = live;
+  el.classList.toggle("live", live === true);
+  el.classList.toggle("mock", live === false);
+  el.classList.toggle("pending", live === null);
+  const label = el.querySelector(".gemma-ai-status-label");
+  if (!label) return;
+  if (live === true) label.textContent = "● LIVE Gemma 4";
+  else if (live === false) label.textContent = "○ MOCK mode";
+  else label.textContent = "… Gemma 4";
+}
+
+function capturePoV() {
+  const povCanvas =
+    povs[0]?.canvas ||
+    povCols[0]?.querySelector("[data-pov-canvas]") ||
+    document.querySelector("[data-pov-canvas]");
+  if (!povCanvas || typeof povCanvas.toDataURL !== "function") return null;
+  try {
+    return povCanvas.toDataURL("image/jpeg", 0.5);
+  } catch {
+    return null;
+  }
+}
+
+function buildSimulationContext(plan) {
+  if (!state || !plan) return "Simulation standby.";
+  const candidates = rankVictims();
+  const trapped = state.victims.filter(
+    (v) => v.status === "trapped" || v.status === "unknown"
+  ).length;
+  const total = state.victims.length || 1;
+  const survivalRate = Math.round((trapped / total) * 100);
+  const top = candidates[0];
+  const tasks = (plan.mission_plan || [])
+    .map((a) => `${a.agent}:${a.task}@${a.target}`)
+    .join("; ");
+  return [
+    `T+${String(state.timestep).padStart(3, "0")}`,
+    `rescued ${state.rescued}/${total}`,
+    `open victims ${trapped}`,
+    `survival pressure ~${survivalRate}%`,
+    `priority ${(plan.priority_order || []).join(" → ") || "none"}`,
+    top ? `lead ${top.id} score ${top.score.toFixed(2)} comm ${top.communication_status}` : "no lead victim",
+    `tasks: ${tasks || "patrol / hold"}`,
+  ].join(" | ");
+}
+
+function pushAgentHistory(agent, role, content) {
+  if (!agentHistories[agent]) return;
+  agentHistories[agent].push({ role, content });
+  while (agentHistories[agent].length > 24) agentHistories[agent].shift();
+}
+
+async function callGemmaChat(agent, message, { history = [], image_base64, stream = false } = {}) {
+  const res = await fetch(AI_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent, message, history, image_base64, stream }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    return { fallback: true, content: "", error: err.error || res.statusText };
+  }
+  if (stream) return { fallback: false, stream: res.body };
+  const data = await res.json();
+  return data;
+}
+
+async function streamGemmaToThinking(agent, message, history, requestId) {
+  const el = thinkingFeedEl;
+  if (!el) return "";
+
+  liveAiCache.orchestratorLive = true;
+
+  const row = document.createElement("div");
+  row.className = "thinking-row thinking-row-live";
+  const label = document.createElement("span");
+  label.className = "thinking-step";
+  label.textContent = `[T${String(state.timestep).padStart(3, "0")}] `;
+  const body = document.createElement("span");
+  body.className = "thinking-body";
+  row.append(label, body);
+  el.appendChild(row);
+  syncLiveAiHudPending();
+
+  const result = await callGemmaChat(agent, message, { history, stream: true });
+  if (result.fallback || !result.stream) {
+    row.remove();
+    liveAiCache.orchestratorLive = false;
+    syncLiveAiHudPending();
+    return "";
+  }
+
+  const reader = result.stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+
+  while (true) {
+    if (requestId !== liveAiRequestId) break;
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n");
+    buffer = parts.pop() || "";
+    for (const line of parts) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const json = JSON.parse(data);
+        const token = json.choices?.[0]?.delta?.content ?? json.content ?? "";
+        if (token) {
+          full += token;
+          body.textContent = full;
+          el.scrollTop = el.scrollHeight;
+        }
+      } catch {
+        /* ignore partial SSE JSON */
+      }
+    }
+  }
+
+  const cancelled = requestId !== liveAiRequestId;
+  const text = full.trim();
+  liveAiCache.orchestratorLive = false;
+
+  if (!text) {
+    row.remove();
+  } else {
+    if (cancelled) body.textContent = `${text} …`;
+    liveAiCache.orchestratorText = text;
+    liveAiCache.orchestratorTick = state.timestep;
+    pushAgentHistory("Orchestrator", "user", message);
+    pushAgentHistory("Orchestrator", "assistant", text);
+    thinkingSeen.add(text);
+  }
+
+  while (el.children.length > 80) el.removeChild(el.firstChild);
+  syncLiveAiHudPending();
+  return text;
+}
+
+function buildLiveFleetSlides(orchestrator, drone, beta, gamma, plan) {
+  const padT = `T+${String(state.timestep).padStart(3, "0")}`;
+  const slides = [];
+
+  if (orchestrator) {
+    slides.push({
+      title: `${padT} · Gemma 4 orchestrator · CoT · LIVE`,
+      turns: [
+        {
+          kind: "cot",
+          who: "Gemma 4 · mesh orchestrator",
+          lines: splitThinkingLog(orchestrator),
+        },
+      ],
+    });
+  }
+
+  if (drone) {
+    slides.push({
+      title: `${padT} · Drone_Alpha · vision · LIVE`,
+      turns: [
+        {
+          kind: "cot",
+          who: "Gemma 4@Drone_Alpha",
+          lines: [`FPV frame ingested. ${drone}`],
+        },
+        {
+          kind: "msg",
+          who: "Drone_Alpha",
+          to: "fleet",
+          cls: "drone",
+          text: drone,
+        },
+      ],
+    });
+  }
+
+  if (beta) {
+    slides.push({
+      title: `${padT} · Track_Beta · long-context · LIVE`,
+      turns: [
+        {
+          kind: "cot",
+          who: "Gemma 4@Track_Beta",
+          lines: splitThinkingLog(beta),
+        },
+        {
+          kind: "msg",
+          who: "Track_Beta",
+          to: "Relay_Gamma",
+          cls: "ugv",
+          text: beta,
+        },
+      ],
+    });
+  }
+
+  if (gamma) {
+    slides.push({
+      title: `${padT} · Relay_Gamma · command · LIVE`,
+      turns: [
+        {
+          kind: "cot",
+          who: "Gemma 4@Relay_Gamma",
+          lines: splitThinkingLog(gamma),
+        },
+        {
+          kind: "msg",
+          who: "Relay_Gamma",
+          to: "fleet",
+          cls: "drone",
+          text: gamma,
+        },
+      ],
+    });
+  }
+
+  if (!slides.length) return buildFleetDialogueSlides(plan);
+  return slides;
+}
+
+function applyLiveFleetSlides(plan, slides) {
+  liveAiCache.fleetSlides = slides;
+  liveAiCache.tick = state.timestep;
+  cotFeedPrependedStep = -999;
+  updateFleetDialogueCarousel(plan, slides);
+  updateCotFeedMeta(slides);
+}
+
+async function fetchOrchestrator(plan, contextMsg, requestId) {
+  const history = agentHistories.Orchestrator.slice(-12);
+  const prompt = `${contextMsg}\n\nThink step by step, then state orchestrator policy for this heartbeat.`;
+  return streamGemmaToThinking("Orchestrator", prompt, history, requestId);
+}
+
+async function fetchDroneAlpha(plan, contextMsg, requestId) {
+  const image = capturePoV();
+  const prompt = image
+    ? `${contextMsg}\n\nAnalyze the attached FPV frame: road damage, debris, and safest aerial corridor.`
+    : `${contextMsg}\n\nNo FPV frame — infer from grid state and report visual assessment.`;
+  const history = agentHistories.Drone_Alpha.slice(-12);
+  const data = await callGemmaChat("Drone_Alpha", prompt, {
+    history,
+    image_base64: image || undefined,
+    stream: false,
+  });
+  if (requestId !== liveAiRequestId || data.fallback) return "";
+  const text = (data.content || "").trim();
+  if (text) {
+    pushAgentHistory("Drone_Alpha", "user", prompt);
+    pushAgentHistory("Drone_Alpha", "assistant", text);
+    liveAiCache.droneMsg = text;
+    liveAiCache.briefingText = text;
+    liveAiCache.briefingTick = state.timestep;
+    if (plan) {
+      plan.commander_briefing = text;
+      syncBriefingFeed(plan);
+      syncLiveAiHudPending();
+    }
+  }
+  return text;
+}
+
+async function fetchTrackBeta(droneMsg, contextMsg, requestId) {
+  const prompt = `Visual intel: "${droneMsg}". Context: ${contextMsg}. Assess surface stability and UGV passability.`;
+  const history = agentHistories.Track_Beta.slice(-16);
+  const data = await callGemmaChat("Track_Beta", prompt, { history, stream: false });
+  if (requestId !== liveAiRequestId || data.fallback) return "";
+  const text = (data.content || "").trim();
+  if (text) {
+    pushAgentHistory("Track_Beta", "user", prompt);
+    pushAgentHistory("Track_Beta", "assistant", text);
+    liveAiCache.betaMsg = text;
+  }
+  return text;
+}
+
+async function fetchRelayGamma(droneMsg, betaMsg, contextMsg, requestId) {
+  const prompt = `Visual: "${droneMsg}". Ground: "${betaMsg}". Context: ${contextMsg}. Issue coordinated fleet movement orders.`;
+  const history = agentHistories.Relay_Gamma.slice(-20);
+  const data = await callGemmaChat("Relay_Gamma", prompt, { history, stream: false });
+  if (requestId !== liveAiRequestId || data.fallback) return "";
+  const text = (data.content || "").trim();
+  if (text) {
+    pushAgentHistory("Relay_Gamma", "user", prompt);
+    pushAgentHistory("Relay_Gamma", "assistant", text);
+    liveAiCache.gammaMsg = text;
+  }
+  return text;
+}
+
+async function probeLmStudio() {
+  setAiStatusBadge(null);
+  try {
+    const res = await fetch(AI_ENDPOINT, { method: "GET", cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    const ok = res.ok && data.ok === true;
+    setAiStatusBadge(ok);
+    return ok;
+  } catch {
+    setAiStatusBadge(false);
+    return false;
+  }
+}
+
+async function triggerLiveAiRound(plan) {
+  if (!liveAiModeEnabled || !state || !plan) return;
+  if (liveAiConnected === false) return;
+
+  if (liveAiConnected === null) {
+    const up = await probeLmStudio();
+    if (!up) return;
+  }
+
+  const requestId = ++liveAiRequestId;
+  liveAiInFlight = true;
+  liveAiRoundStartedAt = performance.now();
+  syncLiveAiHudPending();
+  const contextMsg = buildSimulationContext(plan);
+
+  try {
+    const orchestratorP = fetchOrchestrator(plan, contextMsg, requestId);
+    const droneP = fetchDroneAlpha(plan, contextMsg, requestId);
+
+    const [orchestrator, drone] = await Promise.all([orchestratorP, droneP]);
+    if (requestId !== liveAiRequestId) return;
+
+    const beta = await fetchTrackBeta(drone || "No visual report.", contextMsg, requestId);
+    if (requestId !== liveAiRequestId) return;
+
+    const gamma = await fetchRelayGamma(
+      drone || "No visual report.",
+      beta || "No ground assessment.",
+      contextMsg,
+      requestId
+    );
+    if (requestId !== liveAiRequestId) return;
+
+    const slides = buildLiveFleetSlides(orchestrator, drone, beta, gamma, plan);
+    applyLiveFleetSlides(plan, slides);
+    setAiStatusBadge(true);
+  } catch (err) {
+    console.warn("[simulation] Live Gemma round failed:", err);
+    setAiStatusBadge(false);
+  } finally {
+    if (requestId === liveAiRequestId) {
+      liveAiInFlight = false;
+      syncLiveAiHudPending();
+      if (liveAiPendingPlan) {
+        const pending = liveAiPendingPlan;
+        liveAiPendingPlan = null;
+        scheduleLiveAiRound(pending);
+      }
+    }
+  }
+}
+
+function resetLiveAiState() {
+  liveAiRequestId += 1;
+  liveAiInFlight = false;
+  liveAiPendingPlan = null;
+  liveAiRoundStartedAt = 0;
+  liveAiCache.tick = -1;
+  liveAiCache.orchestratorTick = -1;
+  liveAiCache.orchestratorText = "";
+  liveAiCache.orchestratorLive = false;
+  liveAiCache.briefingTick = -1;
+  liveAiCache.briefingText = "";
+  liveAiCache.fleetSlides = null;
+  liveAiCache.droneMsg = "";
+  liveAiCache.betaMsg = "";
+  liveAiCache.gammaMsg = "";
+  for (const key of Object.keys(agentHistories)) agentHistories[key].length = 0;
+}
+
 function splitThinkingLog(text) {
   return String(text || "")
     .split(/(?<=[。！？.!?])\s+/)
@@ -317,6 +817,10 @@ function buildThinkingNarrative(plan) {
 function syncThinkingFeed(plan) {
   const el = thinkingFeedEl;
   if (!el || !plan) return;
+  if (liveAiModeEnabled && liveAiConnected !== false) {
+    if (liveAiCache.orchestratorLive || liveAiCache.orchestratorTick === state.timestep) return;
+    if (liveAiConnected === null || liveAiInFlight) return;
+  }
   const narrative = buildThinkingNarrative(plan);
   splitThinkingLog(narrative).forEach((line) => {
     if (thinkingSeen.has(line)) return;
@@ -326,11 +830,86 @@ function syncThinkingFeed(plan) {
 }
 
 function syncBriefingFeed(plan) {
-  if (!briefText || !plan?.commander_briefing) return;
+  if (!briefText || !plan) return;
+  if (liveAiModeEnabled && liveAiConnected !== false) {
+    if (liveAiCache.briefingTick === state.timestep && liveAiCache.briefingText) {
+      const text = liveAiCache.briefingText;
+      if (briefingSeen.has(text)) return;
+      briefingSeen.add(text);
+      appendBriefingRow(briefText, state.timestep, text);
+    }
+    if (liveAiConnected === null || liveAiInFlight) return;
+    return;
+  }
+  if (!plan.commander_briefing) return;
   const text = plan.commander_briefing;
   if (briefingSeen.has(text)) return;
   briefingSeen.add(text);
   appendBriefingRow(briefText, state.timestep, text);
+}
+
+/** UI-only placeholders while waiting for real Gemma output (not MOCK decision text). */
+function syncLiveAiHudPending() {
+  const briefId = "briefAiPending";
+  const thinkId = "thinkAiPending";
+  let bp = document.getElementById(briefId);
+  let tp = document.getElementById(thinkId);
+
+  const gemmaHud =
+    liveAiModeEnabled && liveAiConnected !== false && state;
+
+  const needBrief =
+    gemmaHud &&
+    (liveAiInFlight || liveAiConnected === null) &&
+    liveAiCache.briefingTick !== state.timestep;
+
+  const needThink =
+    gemmaHud &&
+    (liveAiInFlight || liveAiConnected === null) &&
+    liveAiCache.orchestratorTick !== state.timestep &&
+    !liveAiCache.orchestratorLive;
+
+  if (needBrief && briefText) {
+    if (!bp) {
+      bp = document.createElement("div");
+      bp.id = briefId;
+      bp.className = "briefing-row briefing-row-pending";
+      const label = document.createElement("span");
+      label.className = "briefing-step";
+      label.textContent = `[T${String(state.timestep).padStart(3, "0")}] `;
+      const body = document.createElement("span");
+      body.className = "briefing-body";
+      body.textContent = "Awaiting Gemma 4 · Drone_Alpha vision…";
+      bp.append(label, body);
+      briefText.appendChild(bp);
+    } else {
+      bp.querySelector(".briefing-step").textContent =
+        `[T${String(state.timestep).padStart(3, "0")}] `;
+    }
+  } else if (bp) {
+    bp.remove();
+  }
+
+  if (needThink && thinkingFeedEl) {
+    if (!tp) {
+      tp = document.createElement("div");
+      tp.id = thinkId;
+      tp.className = "thinking-row thinking-row-pending";
+      const label = document.createElement("span");
+      label.className = "thinking-step";
+      label.textContent = `[T${String(state.timestep).padStart(3, "0")}] `;
+      const body = document.createElement("span");
+      body.className = "thinking-body";
+      body.textContent = "Awaiting Gemma 4 · orchestrator…";
+      tp.append(label, body);
+      thinkingFeedEl.appendChild(tp);
+    } else {
+      tp.querySelector(".thinking-step").textContent =
+        `[T${String(state.timestep).padStart(3, "0")}] `;
+    }
+  } else if (tp) {
+    tp.remove();
+  }
 }
 
 function resetDecisionFeeds() {
@@ -340,6 +919,7 @@ function resetDecisionFeeds() {
   thinkingTyping = false;
   thinkingSeen.clear();
   briefingSeen.clear();
+  resetLiveAiState();
   if (thinkingFeedEl) thinkingFeedEl.innerHTML = "";
   if (briefText) briefText.innerHTML = "";
 }
@@ -935,6 +1515,8 @@ Promise.all([
     init3D(initialScenario);
     reset();
     setupCommandCenter();
+    if (liveAiModeEnabled) void probeLmStudio();
+    else setAiStatusBadge(false);
   })
   .catch((err) => {
     console.error(`[simulation] Failed to load /simulation/data/scenarios/${scenarioFile}:`, err);
@@ -988,6 +1570,7 @@ function reset() {
   stopAuto();
   renderOnce();
   startRafLoop();
+  if (liveAiModeEnabled) scheduleLiveAiRound(plan);
 }
 
 function recordSurvivalSample() {
@@ -1041,6 +1624,8 @@ function step() {
   }
   recordSurvivalSample();
   renderOnce();
+  if (liveAiModeEnabled) scheduleLiveAiRound(plan);
+  return true;
 }
 
 function startRafLoop() {
@@ -1465,6 +2050,15 @@ function batteryPctLabel(agent) {
 }
 
 function buildFleetDialogueSlides(plan) {
+  if (
+    liveAiModeEnabled &&
+    liveAiConnected === true &&
+    liveAiCache.fleetSlides &&
+    liveAiCache.tick === state?.timestep
+  ) {
+    return liveAiCache.fleetSlides;
+  }
+
   const dDlg = fleetDialogueCot?.dialogue ?? FLEET_DIALOGUE_COT_BUILTIN.dialogue;
   const standby = dDlg.standby ?? FLEET_DIALOGUE_COT_BUILTIN.dialogue.standby;
   if (!state || !plan) {
@@ -2711,6 +3305,7 @@ function renderPanels() {
 
   syncThinkingFeed(plan);
   syncBriefingFeed(plan);
+  syncLiveAiHudPending();
   const fleetDialogueSlides = buildFleetDialogueSlides(plan);
   updateCotFeedMeta(fleetDialogueSlides);
   updateFleetDialogueCarousel(plan, fleetDialogueSlides);
@@ -2892,7 +3487,7 @@ function stopAuto() {
 function startAuto() {
   clearInterval(timer);
   lastCotFeedWallMs = performance.now() - COT_FEED_AUTO_MIN_MS;
-  timer = setInterval(step, Math.max(80, MS_PER_TICK / speedMultiplier));
+  timer = setInterval(() => step(), simulationTickIntervalMs());
   setRunLabel("PAUSE");
 }
 
@@ -4855,6 +5450,13 @@ function setupCommandCenter() {
 
   // Initial label paint
   updateMissionLabels(readConfig());
+
+  // MOCK / GEMMA4 header toggle
+  syncAiModeSegmentedUi();
+  const aiModeMock = $("aiModeMock");
+  const aiModeGemma = $("aiModeGemma");
+  if (aiModeMock) aiModeMock.addEventListener("click", () => applyLiveAiModeFromUser(false));
+  if (aiModeGemma) aiModeGemma.addEventListener("click", () => applyLiveAiModeFromUser(true));
 
   // Onboarding tour
   setupTour();

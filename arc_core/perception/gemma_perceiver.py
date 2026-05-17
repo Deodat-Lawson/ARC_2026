@@ -228,6 +228,7 @@ class GemmaPerceiver:
             self._litert_engine = Engine(
                 model_path=self._litert_model_path,
                 backend=Backend.CPU,          # GPU: Backend.GPU
+                vision_backend=Backend.CPU,  # Required for Gemma 4 E4B image understanding (FPV, etc.)
                 max_num_tokens=2048,
             )
             self._mode = "litert"
