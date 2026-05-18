@@ -156,37 +156,57 @@ export function M2Planning() {
         })}
 
         {/* Targets (survivor markers) */}
-        {TARGETS.map((t) => (
-          <g key={`t${t.id}`}>
-            <circle
-              cx={t.x}
-              cy={t.y}
-              r="8"
-              fill="none"
-              stroke="#5dffb4"
-              strokeWidth="1"
-            />
-            <circle cx={t.x} cy={t.y} r="2" fill="#5dffb4" />
-            <text
-              x={t.x + 14}
-              y={t.y - 6}
-              fill="#5dffb4"
-              fontSize="9"
-              letterSpacing="1"
-            >
-              T-{t.id.toString().padStart(2, "0")}
-            </text>
-            <text
-              x={t.x + 14}
-              y={t.y + 6}
-              fill="#8a8f98"
-              fontSize="8"
-              letterSpacing="0.5"
-            >
-              P {(t.priority * 100).toFixed(0)}
-            </text>
-          </g>
-        ))}
+        {TARGETS.map((t) => {
+          const isPrimary = t.id === 1;
+          return (
+            <g key={`t${t.id}`}>
+              <circle
+                cx={t.x}
+                cy={t.y}
+                r="8"
+                fill="none"
+                stroke="#5dffb4"
+                strokeWidth="1"
+              />
+              {isPrimary ? (
+                <g
+                  transform={`translate(${t.x} ${t.y})`}
+                  stroke="#5dffb4"
+                  strokeWidth="0.9"
+                  strokeLinecap="round"
+                  fill="none"
+                >
+                  <circle cx="-3.5" cy="0" r="1.6" fill="#5dffb4" />
+                  <line x1="-2" y1="0" x2="3" y2="0" />
+                  <line x1="0" y1="0" x2="1.5" y2="-2.4" />
+                  <line x1="0.5" y1="0" x2="2.5" y2="2.2" />
+                  <line x1="3" y1="0" x2="4.8" y2="-1.6" />
+                  <line x1="3" y1="0" x2="4.8" y2="1.8" />
+                </g>
+              ) : (
+                <circle cx={t.x} cy={t.y} r="2" fill="#5dffb4" />
+              )}
+              <text
+                x={t.x + 14}
+                y={t.y - 6}
+                fill="#5dffb4"
+                fontSize="9"
+                letterSpacing="1"
+              >
+                T-{t.id.toString().padStart(2, "0")}
+              </text>
+              <text
+                x={t.x + 14}
+                y={t.y + 6}
+                fill="#8a8f98"
+                fontSize="8"
+                letterSpacing="0.5"
+              >
+                P {(t.priority * 100).toFixed(0)}
+              </text>
+            </g>
+          );
+        })}
 
         {/* Drones at base */}
         {DRONES_START.map((d, i) => (

@@ -89,12 +89,14 @@ export const world = {
   smokePuffs: [],
   fireGlows: [],
   brokenBranches: [],
+  skyClouds: [],
   initialized: false,
 };
 
 function makeGradientSkyTexture(size = 512, stops = null) {
   const c = document.createElement("canvas");
-  c.width = 16;
+  const width = 512;
+  c.width = width;
   c.height = size;
   const g = c.getContext("2d");
   const grad = g.createLinearGradient(0, 0, 0, size);
@@ -109,10 +111,71 @@ function makeGradientSkyTexture(size = 512, stops = null) {
       ];
   for (const [t, color] of use) grad.addColorStop(t, color);
   g.fillStyle = grad;
-  g.fillRect(0, 0, 16, size);
+  g.fillRect(0, 0, width, size);
+
+  // Layered ash-cloud streaks — soft horizontal bands of slightly-warmer dust
+  // that break up the flat gradient and read as "smoke in the upper atmosphere."
+  const cloudLayers = 8;
+  for (let i = 0; i < cloudLayers; i += 1) {
+    const cy = size * (0.15 + (i / cloudLayers) * 0.7 + (Math.sin(i * 12.9898) * 0.5 + 0.5) * 0.08);
+    const ch = size * (0.04 + (Math.sin(i * 78.233) * 0.5 + 0.5) * 0.08);
+    const cloudGrad = g.createLinearGradient(0, cy - ch, 0, cy + ch);
+    const warm = i < 3 ? "rgba(80, 50, 35," : "rgba(60, 45, 38,";
+    cloudGrad.addColorStop(0, `${warm} 0)`);
+    cloudGrad.addColorStop(0.5, `${warm} ${0.18 + (Math.sin(i * 9.7) * 0.5 + 0.5) * 0.18})`);
+    cloudGrad.addColorStop(1, `${warm} 0)`);
+    g.fillStyle = cloudGrad;
+    // Irregular horizontal patches so cloud bands aren't perfectly straight
+    const patches = 5;
+    for (let k = 0; k < patches; k += 1) {
+      const x0 = (k / patches) * width + (Math.sin(i * 3 + k * 7) * 0.5 + 0.5) * (width / patches) * 0.5;
+      const w = (width / patches) * (0.6 + (Math.sin(i * 5 + k * 11) * 0.5 + 0.5) * 0.8);
+      g.fillRect(x0, cy - ch, w, ch * 2);
+    }
+  }
+
+  // Faint warm horizon glow — uneven reddish smear at the bottom edge
+  const horizonGrad = g.createLinearGradient(0, size * 0.78, 0, size);
+  horizonGrad.addColorStop(0, "rgba(0,0,0,0)");
+  horizonGrad.addColorStop(0.6, "rgba(110, 50, 25, 0.22)");
+  horizonGrad.addColorStop(1, "rgba(140, 70, 35, 0.32)");
+  g.fillStyle = horizonGrad;
+  g.fillRect(0, size * 0.78, width, size * 0.22);
+
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+/** Slow-drifting volumetric clouds in the upper atmosphere — adds depth to the sky. */
+function addSkyClouds(scene, cols, rows) {
+  const clouds = [];
+  const cx = cols / 2;
+  const cz = rows / 2;
+  const cloudCount = 14;
+  for (let i = 0; i < cloudCount; i += 1) {
+    const ang = (i / cloudCount) * Math.PI * 2 + Math.sin(i * 7.3) * 0.4;
+    const dist = 26 + Math.sin(i * 11.7) * 6;
+    const height = 14 + Math.sin(i * 4.2) * 6;
+    const cloud = new THREE.Mesh(
+      new THREE.SphereGeometry(3.5 + Math.sin(i * 5.5) * 1.8, 8, 6),
+      new THREE.MeshBasicMaterial({
+        color: 0x2a2018,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        fog: false,
+      })
+    );
+    cloud.position.set(cx + Math.cos(ang) * dist, height, cz + Math.sin(ang) * dist);
+    cloud.scale.set(2.2 + Math.sin(i * 3.1) * 0.6, 0.55, 1.6 + Math.sin(i * 6.7) * 0.5);
+    const baseOpacity = 0.18 + (Math.sin(i * 8.1) * 0.5 + 0.5) * 0.22;
+    cloud.material.opacity = baseOpacity;
+    cloud.material.color.setRGB(0.12 + Math.sin(i * 2.3) * 0.04, 0.09, 0.07);
+    scene.add(cloud);
+    clouds.push({ mesh: cloud, cx, cz, ang, dist, height, phase: i, baseOpacity });
+  }
+  return clouds;
 }
 
 function addTerrainPatches3D(scenario) {
@@ -418,7 +481,7 @@ function addRoadDebris(scenario, rubbleMat, rubbleGlbSrc) {
       const perpX = -dirZ;
       const perpZ = dirX;
 
-      const step = 0.4;
+      const step = 0.22;
       const stops = Math.max(1, Math.floor(len / step));
       for (let s = 0; s <= stops; s += 1) {
         const t = s / Math.max(1, stops);
@@ -428,8 +491,8 @@ function addRoadDebris(scenario, rubbleMat, rubbleGlbSrc) {
         const cellY = Math.floor(sz);
         const damage = cellDamageLevel(cellX, cellY, riskZones);
 
-        // Density: ~45% baseline, ramped to ~95% in heavily damaged cells.
-        const placeProb = 0.45 + damage * 0.5;
+        // Density: ~75% baseline, ramped to ~100% in heavily damaged cells.
+        const placeProb = 0.75 + damage * 0.25;
         if (hash01(sx, sz, 380) > placeProb) continue;
 
         // Keep the spawn pad clear.
@@ -492,6 +555,96 @@ function addRoadDebris(scenario, rubbleMat, rubbleGlbSrc) {
           pile.position.set(cx, groundedY(pile) + 0.005, cz);
           pile.rotation.y = hash01(sx, sz, 405) * Math.PI * 2;
           group.add(pile);
+        }
+      }
+    }
+  }
+
+  world.scene.add(group);
+}
+
+/** Spray dirt patches, dust mounds, and cracked-ground decals across the whole map
+ *  so the city floor reads as a chaotic post-quake mess rather than clean asphalt
+ *  and clean concrete. Operates on every grid cell, with extra density on roads
+ *  and inside damage zones. */
+function addGroundMess(scenario, rubbleMat, damageMat) {
+  if (!rubbleMat) return;
+  const [cols, rows] = scenario.map.size;
+  const riskZones = scenario.map.risk_zones || [];
+  const [bxBase, byBase] = scenario.map.base || [-99, -99];
+  const baseCx = bxBase + 0.5;
+  const baseCz = byBase + 0.5;
+  const roadCellSet = computeRoadCells(scenario);
+  const buildingRects = buildingAvoidanceRects(scenario);
+
+  const group = new THREE.Group();
+  group.name = "ground-mess";
+
+  // Tint the dirt material slightly darker than rubble for variety.
+  const dirtMat = (damageMat || rubbleMat).clone();
+  dirtMat.color = (damageMat || rubbleMat).color.clone();
+
+  for (let cy = 0; cy < rows; cy += 1) {
+    for (let cx = 0; cx < cols; cx += 1) {
+      const damage = cellDamageLevel(cx, cy, riskZones);
+      const isRoad = roadCellSet.has(`${cx},${cy}`);
+
+      // 2–4 dirt patches per cell, more on damaged/road cells.
+      const patches = 2 + Math.floor(hash01(cx, cy, 500) * 2) + (isRoad ? 1 : 0) + Math.floor(damage * 2);
+      for (let i = 0; i < patches; i += 1) {
+        // Cell-relative jittered placement.
+        const px = cx + 0.15 + hash01(cx + i, cy, 501 + i) * 0.7;
+        const pz = cy + 0.15 + hash01(cx, cy + i, 502 + i) * 0.7;
+
+        // Keep dirt away from the spawn pad.
+        const dx = px - baseCx;
+        const dz = pz - baseCz;
+        if (dx * dx + dz * dz < 1.2) continue;
+
+        // Skip if this lands inside a building footprint.
+        if (pointNearBuilding(px, pz, buildingRects, -0.05)) continue;
+
+        // 60% dirt-patch decals (flat brown planes), 25% dust mounds (low box),
+        // 15% small cracked-concrete shards near road cells.
+        const variantRoll = hash01(px, pz, 503);
+
+        if (variantRoll < 0.6) {
+          // Flat dirt patch — slightly above ground to avoid z-fighting.
+          const w = 0.3 + hash01(px, pz, 504) * 0.7;
+          const d = 0.3 + hash01(px, pz, 505) * 0.7;
+          const patch = new THREE.Mesh(
+            new THREE.PlaneGeometry(w, d),
+            dirtMat
+          );
+          patch.rotation.x = -Math.PI / 2;
+          patch.rotation.z = hash01(px, pz, 506) * Math.PI * 2;
+          // Layer height varies a hair so overlapping patches still render correctly.
+          patch.position.set(px, 0.052 + hash01(px, pz, 507) * 0.004, pz);
+          group.add(patch);
+        } else if (variantRoll < 0.85) {
+          // Low dust mound.
+          const w = 0.18 + hash01(px, pz, 508) * 0.3;
+          const h = 0.04 + hash01(px, pz, 509) * 0.06;
+          const d = 0.18 + hash01(px, pz, 510) * 0.3;
+          const mound = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), rubbleMat);
+          mound.position.set(px, h / 2 + 0.05, pz);
+          mound.rotation.y = hash01(px, pz, 511) * Math.PI * 2;
+          mound.rotation.x = (hash01(px, pz, 512) - 0.5) * 0.2;
+          mound.rotation.z = (hash01(px, pz, 513) - 0.5) * 0.2;
+          group.add(mound);
+        } else {
+          // Small cracked-concrete shard.
+          const rw = 0.05 + hash01(px, pz, 514) * 0.1;
+          const rh = 0.025 + hash01(px, pz, 515) * 0.05;
+          const rd = 0.05 + hash01(px, pz, 516) * 0.1;
+          const shard = new THREE.Mesh(new THREE.BoxGeometry(rw, rh, rd), rubbleMat);
+          shard.position.set(px, rh / 2 + 0.045, pz);
+          shard.rotation.set(
+            (hash01(px, pz, 517) - 0.5) * 0.6,
+            hash01(px, pz, 518) * Math.PI * 2,
+            (hash01(px, pz, 519) - 0.5) * 0.6
+          );
+          group.add(shard);
         }
       }
     }
@@ -615,41 +768,109 @@ function addFireSmoke(scenario) {
     world.scene.add(ember);
     world.fireGlows.push({ ember, _isEmber: true, x: baseX, z: baseZ });
 
-    const puffCount = 6;
-    const plumeHeight = 14;
+    // Per-zone wind direction so multiple fires plume in slightly different ways
+    const windAng = Math.sin(z.center[0] * 12.9 + z.center[1] * 78.2) * Math.PI * 2;
+    const windX = Math.cos(windAng);
+    const windZ = Math.sin(windAng);
+
+    // Denser, layered plume — 14 puffs per fire, randomized lateral seed so each
+    // particle traces a different helical path rather than all sharing a phase ring.
+    const puffCount = 14;
+    const plumeHeight = 18;
     for (let i = 0; i < puffCount; i += 1) {
       const phase = i / puffCount;
+      const lateralSeed = (Math.sin(z.center[0] * 37 + z.center[1] * 91 + i * 13.7) * 0.5 + 0.5) * Math.PI * 2;
+      const swirlRadius = 0.4 + ((Math.sin(i * 5.7) * 0.5 + 0.5)) * 0.6;
       const sphere = new THREE.Mesh(
-        new THREE.SphereGeometry(0.38, 6, 4),
+        new THREE.SphereGeometry(0.42 + (Math.sin(i * 3.3) * 0.5 + 0.5) * 0.18, 8, 6),
         new THREE.MeshBasicMaterial({ color: 0x1f1c19, transparent: true, opacity: 0.7, depthWrite: false, fog: true })
       );
       sphere.position.set(baseX, 0.6 + phase * plumeHeight, baseZ);
       world.scene.add(sphere);
-      world.smokePuffs.push({ mesh: sphere, baseX, baseZ, baseY: 0.6, height: plumeHeight, phase, zoneId: z.id });
+      world.smokePuffs.push({
+        mesh: sphere,
+        baseX,
+        baseZ,
+        baseY: 0.6,
+        height: plumeHeight,
+        phase,
+        lateralSeed,
+        swirlRadius,
+        windX,
+        windZ,
+        zoneId: z.id,
+      });
+    }
+
+    // Low-altitude fire glow puffs — small orange spheres that breathe at the base
+    // of the plume so the bottom of the column reads as hot, not just dark smoke.
+    const emberPuffs = 4;
+    for (let i = 0; i < emberPuffs; i += 1) {
+      const ang = (i / emberPuffs) * Math.PI * 2;
+      const r = 0.25 + (Math.sin(i * 7.3) * 0.5 + 0.5) * 0.2;
+      const flame = new THREE.Mesh(
+        new THREE.SphereGeometry(0.22, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0xff7a28, transparent: true, opacity: 0.85, depthWrite: false, fog: false })
+      );
+      flame.position.set(baseX + Math.cos(ang) * r, 0.4, baseZ + Math.sin(ang) * r);
+      world.scene.add(flame);
+      world.fireGlows.push({ ember: flame, _isFlame: true, x: baseX, z: baseZ, phase: i });
     }
   }
 }
 
 function updateSmokeAndGlows(t) {
   if (world.smokePuffs) {
-    const ageNorm = (t * 0.045) % 1;
+    // Slower lifecycle reads as heavier, more weighted smoke (was 0.045).
+    const ageNorm = (t * 0.032) % 1;
     for (const p of world.smokePuffs) {
       const localT = (p.phase + ageNorm) % 1;
-      p.mesh.position.y = p.baseY + localT * p.height;
-      p.mesh.scale.setScalar(0.65 + localT * 1.8);
-      p.mesh.position.x = p.baseX + Math.sin(t * 0.6 + p.phase * 6) * localT * 0.7;
-      p.mesh.position.z = p.baseZ + Math.cos(t * 0.55 + p.phase * 5) * localT * 0.7;
+      // Ease-out rise: smoke accelerates then slows as it expands and cools.
+      const rise = 1 - Math.pow(1 - localT, 1.7);
+      p.mesh.position.y = p.baseY + rise * p.height;
+
+      // Helical swirl: each puff rotates around its own offset axis as it ascends,
+      // and gets pushed steadily downwind. Reads as turbulent air, not just sway.
+      const swirlAngle = p.lateralSeed + t * 0.4 + localT * 2.2;
+      const swirlAmp = p.swirlRadius * (0.3 + localT * 1.4);
+      const drift = localT * 2.2;
+      p.mesh.position.x = p.baseX + Math.cos(swirlAngle) * swirlAmp + p.windX * drift;
+      p.mesh.position.z = p.baseZ + Math.sin(swirlAngle) * swirlAmp + p.windZ * drift;
+
+      // Scale grows non-linearly so the plume reads as a billowing fan, not a column.
+      p.mesh.scale.setScalar(0.6 + localT * 2.6 + Math.sin(t * 1.4 + p.phase * 9) * 0.18);
+
       const mat = p.mesh.material;
       if (mat) {
-        const dark = 0.12 - localT * 0.04;
-        mat.color.setRGB(Math.max(0.04, dark + 0.04), Math.max(0.03, dark + 0.02), Math.max(0.03, dark));
-        mat.opacity = Math.max(0, 0.75 - localT * 0.7);
+        // Color: hot orange/red at the base, fading through brown to ash-gray as it rises.
+        if (localT < 0.18) {
+          const heat = 1 - localT / 0.18;
+          mat.color.setRGB(0.38 + heat * 0.32, 0.18 + heat * 0.16, 0.08);
+        } else {
+          const cool = (localT - 0.18) / 0.82;
+          const dark = 0.22 - cool * 0.16;
+          mat.color.setRGB(dark + 0.04, dark + 0.02, dark);
+        }
+        // Opacity: ramps up fast from the source, then thins as smoke dissipates.
+        const fadeIn = Math.min(1, localT / 0.08);
+        const fadeOut = Math.max(0, 1 - (localT - 0.4) / 0.6);
+        mat.opacity = fadeIn * fadeOut * 0.78;
       }
     }
   }
   if (world.fireGlows) {
     for (const g of world.fireGlows) {
-      if (g._isEmber) {
+      if (g._isFlame) {
+        // Low-altitude flame puffs flicker faster and brighter than ember balls.
+        const flicker = 0.8 + Math.sin(t * 14 + g.phase * 2.3) * 0.25 + Math.sin(t * 22 + g.phase * 5.1) * 0.18;
+        g.ember.scale.setScalar(Math.max(0.45, flicker));
+        const mat = g.ember.material;
+        if (mat) {
+          mat.opacity = 0.55 + Math.sin(t * 17 + g.phase * 3) * 0.3;
+          const heat = 0.7 + Math.sin(t * 11 + g.phase) * 0.25;
+          mat.color.setRGB(1.0, 0.5 * heat, 0.15 * heat);
+        }
+      } else if (g._isEmber) {
         const flicker = 0.7 + Math.sin(t * 9 + g.x) * 0.3 + Math.sin(t * 14 + g.z) * 0.2;
         g.ember.scale.setScalar(Math.max(0.4, flicker));
         const mat = g.ember.material;
@@ -657,6 +878,18 @@ function updateSmokeAndGlows(t) {
       } else if (g.intensity !== undefined) {
         g.intensity = 1.6 + Math.sin(t * 8 + g.position.x) * 0.5 + Math.sin(t * 13 + g.position.z) * 0.3;
       }
+    }
+  }
+  // Sky cloud drift — slow rotation around the city center, gentle vertical bob,
+  // and a subtle opacity breath so the atmosphere feels alive.
+  if (world.skyClouds?.length) {
+    for (const c of world.skyClouds) {
+      const ang = c.ang + t * 0.012 + Math.sin(t * 0.04 + c.phase * 1.7) * 0.18;
+      c.mesh.position.x = c.cx + Math.cos(ang) * c.dist;
+      c.mesh.position.z = c.cz + Math.sin(ang) * c.dist;
+      c.mesh.position.y = c.height + Math.sin(t * 0.08 + c.phase * 2.3) * 0.6;
+      const mat = c.mesh.material;
+      if (mat) mat.opacity = c.baseOpacity * (0.85 + Math.sin(t * 0.15 + c.phase) * 0.18);
     }
   }
 }
@@ -742,10 +975,13 @@ function addStreetFurniture(scenario) {
   /** EZ-Tree generation — same procedural library used by the wildfire scene.
    *  Bounded count so per-tree CPU cost stays small for urban-quake. */
   const treePresets = ["Oak Small", "Aspen Small", "Ash Small"];
-  let treeBudget = 60;
+  let treeBudget = 240;
   const buildingRects = buildingAvoidanceRects(scenario);
   const roadCellSet = computeRoadCells(scenario);
   const baseXY = scenario.map.base || [-99, -99];
+  // Clear-radius around the spawn point — no trees inside this many cells of base.
+  const baseClearRadius = 4;
+  const nearBase = (cx, cy) => Math.abs(cx - baseXY[0]) <= baseClearRadius && Math.abs(cy - baseXY[1]) <= baseClearRadius;
 
   // Fallback wood material — upgradeToAssets swaps these meshes to the textured
   // woodMat once the async texture set finishes loading.
@@ -773,9 +1009,12 @@ function addStreetFurniture(scenario) {
     // Pick damage state: snapped > fallen > leaning > upright.
     // Baseline percentages even in undamaged cells so the citywide quake reads.
     const stateRoll = hash01(tx, tz, saltBase + 4);
-    const snappedThresh = 0.7 - damage * 0.3;     // ~30% baseline, ~60% in heavy damage
-    const fallenThresh = 0.35 - damage * 0.25;    // ~35% baseline, ~60% in heavy damage
-    const leaningThresh = 0.05 - damage * 0.05;   // ~30% baseline, almost everything in damage zones
+    // Heavily biased toward `fallen` — the dominant post-quake silhouette is trees
+    // lying flat on the ground, not leaning or upright stumps.
+    const snappedThresh = 0.85 - damage * 0.2;    // ~15% baseline snapped stumps
+    const fallenThresh = 0.1 - damage * 0.1;      // ~75% baseline fallen flat
+    const leaningThresh = 0.02 - damage * 0.02;   // ~8% baseline leaning, vanishes in damage zones
+    // Anything below leaningThresh is upright — ~2% baseline, 0% in damage cells.
     let state;
     if (stateRoll > snappedThresh) state = "snapped";
     else if (stateRoll > fallenThresh) state = "fallen";
@@ -823,18 +1062,21 @@ function addStreetFurniture(scenario) {
     for (let i = 0; i < treeCount; i += 1) {
       const tx = px + 0.3 + hash01(px + i, py, 41) * (pw - 0.6);
       const tz = py + 0.3 + hash01(px, py + i, 42) * (ph - 0.6);
+      if (nearBase(Math.floor(tx), Math.floor(tz))) continue;
       placeTree(tx, tz, 40);
       treeBudget -= 1;
       if (treeBudget <= 0) break;
     }
   }
 
-  // Second pass: scatter on empty cells (no roads, no buildings, no base spawn pad)
+  // Second pass: scatter very densely on empty cells (no roads, no buildings, no base spawn pad).
+  // Threshold dropped to 0.22 so the majority of open city cells carry at least one tree —
+  // post-quake the streetscape should read as a forest that was levelled.
   for (let cy = 1; cy < rows - 1 && treeBudget > 0; cy += 1) {
     for (let cx = 1; cx < cols - 1 && treeBudget > 0; cx += 1) {
-      if (hash01(cx, cy, 360) < 0.78) continue;
+      if (hash01(cx, cy, 360) < 0.22) continue;
       if (roadCellSet.has(`${cx},${cy}`)) continue;
-      if (Math.abs(cx - baseXY[0]) <= 2 && Math.abs(cy - baseXY[1]) <= 2) continue;
+      if (nearBase(cx, cy)) continue;
       const tx = cx + 0.5 + (hash01(cx, cy, 361) - 0.5) * 0.6;
       const tz = cy + 0.5 + (hash01(cx, cy, 362) - 0.5) * 0.6;
       if (pointNearBuilding(tx, tz, buildingRects, 0.15)) continue;
@@ -893,13 +1135,16 @@ export function init3D(scenario, presetKey, povCols) {
   world.scene.add(ground);
   world.groundGrid = ground;
 
-  // Sky-dome — smoky disaster gradient for the FPV horizon
+  // Sky-dome — smoky disaster gradient with ash-cloud streaks for the FPV horizon
   const skyTex = makeGradientSkyTexture(512, s3.skyStops);
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(50, 24, 12),
+    new THREE.SphereGeometry(50, 32, 16),
     new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })
   );
   world.scene.add(sky);
+
+  // Drifting volumetric ash clouds above the city
+  world.skyClouds = addSkyClouds(world.scene, cols, rows);
 
   // Scenario-driven world detail. These helpers are guarded so legacy
   // scenarios without terrain/roads still render the base FPV scene.
@@ -1336,6 +1581,9 @@ async function upgradeToAssets(scenario) {
 
   // Scatter rubble, stones, and concrete chunks across roads and sidewalks
   addRoadDebris(scenario, rubbleMat, rubbleGlb.scene);
+
+  // Citywide dirt, dust mounds, and cracked-concrete shards on every cell.
+  addGroundMess(scenario, rubbleMat, damageMat);
 
   // Upgrade any broken-branch primitives placed during synchronous tree setup
   // to the textured wood material now that it's ready.
