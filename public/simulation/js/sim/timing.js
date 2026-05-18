@@ -1,5 +1,6 @@
-/** Base simulation pacing (2D + planner ticks). */
-export const MS_PER_TICK = 900;
+/** Base simulation pacing. At cell_size_m=10 and agent.speed=3, this gives a
+ *  ~12.5 m/s (45 km/h) drone — realistic urban survey pace. */
+export const MS_PER_TICK = 2400;
 
 /** Slower auto-step in live Gemma mode so rounds can finish before the next tick. */
 export const GEMMA_MS_PER_TICK = 12000;

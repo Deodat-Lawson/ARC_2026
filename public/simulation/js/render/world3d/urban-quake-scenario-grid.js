@@ -34,32 +34,66 @@ export const DEFAULT_3D_ROADS = [
   { id: "RV-28", kind: "side", points: [[28, 0], [28, 29]] },
 ];
 
+/** Fixed, hand-verified building layout. No procedural infill, no runtime dedup.
+ *  Cell ranges avoid roads, base, victims, blocked cells, and terrain patches. */
 export const DEFAULT_3D_BUILDINGS = [
   { id: "B1", footprint: [5, 5, 2, 3], kind: "apartment" },
-  { id: "B2", footprint: [8, 4, 3, 2], kind: "civic" },
   { id: "B3", footprint: [13, 3, 2, 3], kind: "apartment" },
-  { id: "B4", footprint: [15, 4, 3, 3], kind: "civic" },
   { id: "B5", footprint: [22, 5, 3, 2], kind: "lowrise" },
   { id: "B6", footprint: [24, 9, 2, 3], kind: "apartment" },
-  { id: "B7", footprint: [6, 10, 3, 2], kind: "lowrise" },
-  { id: "B8", footprint: [10, 9, 2, 3], kind: "apartment" },
+  { id: "B7", footprint: [8, 10, 3, 2], kind: "lowrise" },
   { id: "B9", footprint: [14, 10, 3, 2], kind: "civic" },
-  { id: "B10", footprint: [18, 11, 3, 3], kind: "civic" },
-  { id: "B11", footprint: [22, 13, 3, 3], kind: "warehouse" },
   { id: "B12", footprint: [3, 14, 3, 2], kind: "apartment" },
   { id: "B13", footprint: [8, 15, 2, 3], kind: "lowrise" },
-  { id: "B14", footprint: [11, 16, 3, 2], kind: "lowrise" },
   { id: "B15", footprint: [15, 15, 3, 2], kind: "civic" },
-  { id: "B16", footprint: [19, 16, 4, 4], kind: "warehouse" },
   { id: "B17", footprint: [25, 17, 2, 3], kind: "lowrise" },
-  { id: "B18", footprint: [5, 21, 3, 3], kind: "civic" },
-  { id: "B19", footprint: [10, 21, 3, 2], kind: "apartment" },
-  { id: "B20", footprint: [14, 22, 3, 3], kind: "civic" },
-  { id: "B21", footprint: [19, 22, 4, 3], kind: "warehouse" },
+  { id: "B18", footprint: [4, 21, 3, 3], kind: "civic" },
+  { id: "B19", footprint: [8, 21, 4, 2], kind: "apartment" },
+  { id: "B21", footprint: [13, 22, 4, 3], kind: "warehouse" },
   { id: "B22", footprint: [25, 22, 3, 3], kind: "apartment" },
-  { id: "B23", footprint: [3, 25, 3, 3], kind: "lowrise" },
-  { id: "B24", footprint: [15, 26, 4, 2], kind: "warehouse" },
-  { id: "B25", footprint: [21, 26, 3, 3], kind: "civic" },
+  { id: "B26", footprint: [5, 1, 1, 1], kind: "lowrise" },
+  { id: "B27", footprint: [8, 1, 1, 1], kind: "warehouse" },
+  { id: "B28", footprint: [19, 1, 1, 1], kind: "lowrise" },
+  { id: "B29", footprint: [26, 1, 1, 1], kind: "apartment" },
+  { id: "B30", footprint: [27, 5, 1, 2], kind: "civic" },
+  { id: "B31", footprint: [1, 10, 1, 1], kind: "lowrise" },
+  { id: "B32", footprint: [1, 19, 1, 1], kind: "civic" },
+  { id: "B33", footprint: [10, 25, 2, 1], kind: "apartment" },
+  { id: "B34", footprint: [26, 27, 1, 1], kind: "warehouse" },
+  // Density fill — added to make the city feel populated.
+  { id: "B35", footprint: [3, 5, 2, 3], kind: "apartment" },
+  { id: "B36", footprint: [9, 3, 3, 3], kind: "civic" },
+  { id: "B37", footprint: [9, 6, 3, 1], kind: "lowrise" },
+  { id: "B38", footprint: [15, 3, 1, 3], kind: "apartment" },
+  { id: "B39", footprint: [4, 9, 3, 2], kind: "apartment" },
+  { id: "B40", footprint: [22, 9, 1, 3], kind: "lowrise" },
+  { id: "B41", footprint: [13, 13, 1, 3], kind: "civic" },
+  { id: "B42", footprint: [4, 17, 3, 2], kind: "apartment" },
+  { id: "B43", footprint: [9, 13, 3, 1], kind: "civic" },
+  { id: "B44", footprint: [22, 13, 3, 3], kind: "warehouse" },
+  { id: "B45", footprint: [22, 17, 2, 2], kind: "apartment" },
+  { id: "B46", footprint: [22, 25, 3, 3], kind: "apartment" },
+  { id: "B48", footprint: [26, 13, 2, 3], kind: "apartment" },
+  { id: "B50", footprint: [17, 9, 3, 1], kind: "lowrise" },
+  // Second density pass — finer city block fill.
+  { id: "B52", footprint: [6, 3, 1, 2], kind: "lowrise" },
+  { id: "B53", footprint: [13, 6, 3, 2], kind: "civic" },
+  { id: "B54", footprint: [17, 7, 3, 1], kind: "lowrise" },
+  { id: "B55", footprint: [22, 7, 3, 1], kind: "warehouse" },
+  { id: "B56", footprint: [25, 5, 2, 2], kind: "apartment" },
+  { id: "B60", footprint: [26, 9, 2, 3], kind: "lowrise" },
+  { id: "B61", footprint: [10, 14, 2, 2], kind: "apartment" },
+  { id: "B62", footprint: [18, 13, 2, 3], kind: "civic" },
+  { id: "B63", footprint: [18, 17, 2, 3], kind: "warehouse" },
+  { id: "B64", footprint: [27, 17, 1, 3], kind: "lowrise" },
+  { id: "B66", footprint: [13, 17, 1, 3], kind: "apartment" },
+  { id: "B68", footprint: [3, 25, 3, 3], kind: "civic" },
+  { id: "B69", footprint: [8, 23, 2, 4], kind: "apartment" },
+  { id: "B70", footprint: [13, 25, 3, 3], kind: "lowrise" },
+  { id: "B71", footprint: [17, 21, 3, 3], kind: "civic" },
+  { id: "B72", footprint: [17, 25, 3, 3], kind: "apartment" },
+  { id: "B73", footprint: [22, 21, 4, 1], kind: "lowrise" },
+  { id: "B75", footprint: [22, 3, 2, 1], kind: "warehouse" },
 ];
 
 export function scale3DFootprint([x, y, w, h], scenario) {
@@ -136,79 +170,28 @@ export function cellDamageLevel(cellX, cellY, riskZones) {
   return Math.min(1, max);
 }
 
+/** Real-world heights at cell_size_m=10 (1 world unit = 10m).
+ *  Apartment 12–20m, civic 8–14m, warehouse/lowrise 6–10m. */
 export function buildingProfile(kind) {
   const profiles = {
-    apartment: { color: 0x677382, roof: 0x222a32, minH: 3.2, maxH: 5.8, floors: 8 },
-    civic: { color: 0x7d786c, roof: 0x252a2e, minH: 2.4, maxH: 4.4, floors: 6 },
-    warehouse: { color: 0x5c6470, roof: 0x30343a, minH: 1.6, maxH: 2.6, floors: 3 },
-    lowrise: { color: 0x766b5f, roof: 0x2b2927, minH: 2.0, maxH: 3.4, floors: 4 },
+    apartment: { color: 0x677382, roof: 0x222a32, minH: 1.2, maxH: 2.0, floors: 6 },
+    civic: { color: 0x7d786c, roof: 0x252a2e, minH: 0.8, maxH: 1.4, floors: 4 },
+    warehouse: { color: 0x5c6470, roof: 0x30343a, minH: 0.6, maxH: 1.0, floors: 2 },
+    lowrise: { color: 0x766b5f, roof: 0x2b2927, minH: 0.6, maxH: 1.0, floors: 2 },
   };
   return profiles[kind] || profiles.lowrise;
 }
 
-export function buildingRenderFootprint(x, y, w, d, height) {
-  const cx = x + w / 2;
-  const cz = y + d / 2;
-  const heightSpan = height > 4.5 ? 1.55 : height > 3.1 ? 1.32 : 1.05;
-  const targetW = Math.min(w + 0.34, Math.max(w * 0.96, heightSpan));
-  const targetD = Math.min(d + 0.34, Math.max(d * 0.96, heightSpan));
-  return [cx - targetW / 2, cz - targetD / 2, targetW, targetD];
+/** No render expansion. Building shell fills its grid cells exactly so it never
+ *  spills into adjacent road cells (which would visually overlap the asphalt). */
+export function buildingRenderFootprint(x, y, w, d /* , height */) {
+  return [x, y, w, d];
 }
 
+/** Returns the fixed building layout. Scenarios can override via `map.buildings`,
+ *  but with no procedural infill — what you define is what renders, every time. */
 export function scenarioBuildingEntries(scenario) {
-  const explicit = get3DBuildings(scenario).map((b) => ({ ...b, synthetic: false }));
-  const [cols, rows] = scenario.map.size;
-  const occupied = new Set();
-  const markRect = (x, y, w = 1, h = 1, pad = 0) => {
-    for (let dx = -pad; dx < w + pad; dx += 1) {
-      for (let dy = -pad; dy < h + pad; dy += 1) {
-        occupied.add(`${x + dx},${y + dy}`);
-      }
-    }
-  };
-
-  const roadCells = computeRoadCells(scenario);
-  for (const key of roadCells) occupied.add(key);
-  if (scenario.map.base) markRect(scenario.map.base[0], scenario.map.base[1], 1, 1, 2);
-  for (const v of scenario.victims || []) markRect(v.location[0], v.location[1], 1, 1, 1);
-  for (const b of scenario.map.blocked_cells || []) markRect(b.location[0], b.location[1], 1, 1, 1);
-  for (const t of get3DTerrain(scenario)) {
-    if (t.kind === "water" || t.kind === "grass" || t.kind === "plaza") {
-      const [x, y, w, h] = t.footprint;
-      markRect(x, y, w, h, 0);
-    }
-  }
-  for (const b of explicit) {
-    const [x, y, w, h] = b.footprint;
-    markRect(x, y, w, h, 1);
-  }
-
-  const infill = [];
-  const target = Math.min(36, Math.max(10, Math.floor((cols * rows) / 42)));
-  for (let y = 1; y < rows - 1 && infill.length < target; y += 1) {
-    for (let x = 1; x < cols - 1 && infill.length < target; x += 1) {
-      if (occupied.has(`${x},${y}`)) continue;
-      const r = hash01(x, y, 210);
-      if (r > 0.2) continue;
-      const wider = x < cols - 2 && !occupied.has(`${x + 1},${y}`) && hash01(x, y, 211) > 0.58;
-      const deeper = y < rows - 2 && !occupied.has(`${x},${y + 1}`) && !wider && hash01(x, y, 212) > 0.62;
-      const w = wider ? 2 : 1;
-      const h = deeper ? 2 : 1;
-      if (wider && occupied.has(`${x + 1},${y}`)) continue;
-      if (deeper && occupied.has(`${x},${y + 1}`)) continue;
-      const kindRoll = hash01(x, y, 213);
-      const kind = kindRoll < 0.34 ? "lowrise" : kindRoll < 0.62 ? "apartment" : kindRoll < 0.82 ? "civic" : "warehouse";
-      infill.push({
-        id: `INF-${x}-${y}`,
-        kind,
-        footprint: [x, y, w, h],
-        synthetic: true,
-      });
-      markRect(x, y, w, h, 1);
-    }
-  }
-
-  return explicit.concat(infill);
+  return get3DBuildings(scenario).map((b) => ({ ...b, synthetic: false }));
 }
 
 export function buildingAvoidanceRects(scenario) {

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
-import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
+import { Tree, TreePreset } from "@dgreenheck/ez-tree";
 import {
   PRESET_VISUAL,
   activePreset,
@@ -43,6 +43,34 @@ import {
 } from "./urban-quake-scenario-grid.js";
 
 export { buildingAvoidanceRects };
+
+const ROAD_TEX_BASE = "/textures/road";
+let _roadTextures = null;
+function ensureRoadTextures() {
+  if (_roadTextures) return _roadTextures;
+  const loader = new THREE.TextureLoader();
+  const load = (url, srgb = true) => {
+    const t = loader.load(url);
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+    return t;
+  };
+  _roadTextures = {
+    asphalt: load(`${ROAD_TEX_BASE}/asphalt.jpg`),
+    pavement: load(`${ROAD_TEX_BASE}/pavement.jpg`),
+    pavementBump: load(`${ROAD_TEX_BASE}/pavement-bump.jpg`, false),
+    metal: load(`${ROAD_TEX_BASE}/metal.jpg`),
+  };
+  return _roadTextures;
+}
+
+function tiledClone(tex, repeatX, repeatY) {
+  const t = tex.clone();
+  t.needsUpdate = true;
+  t.repeat.set(repeatX, repeatY);
+  return t;
+}
 
 export const world = {
   scene: null,
@@ -108,33 +136,6 @@ function addTerrainPatches3D(scenario) {
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(px + pw / 2, 0.012, py + ph / 2);
     world.scene.add(mesh);
-
-    if (patch.kind === "rubble") {
-      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5a4838, roughness: 0.95 });
-      const stoneCount = Math.floor(pw * ph * 3);
-      for (let i = 0; i < stoneCount; i += 1) {
-        const sx = px + 0.1 + hash01(px + i, py, 101) * (pw - 0.2);
-        const sz = py + 0.1 + hash01(px, py + i, 102) * (ph - 0.2);
-        const sw = 0.1 + hash01(sx, sz, 103) * 0.18;
-        const sh = 0.06 + hash01(sx, sz, 104) * 0.12;
-        const sd = 0.1 + hash01(sx, sz, 105) * 0.18;
-        const stone = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, sd), stoneMat);
-        stone.position.set(sx, sh / 2 + 0.02, sz);
-        stone.rotation.y = hash01(sx, sz, 106) * Math.PI * 2;
-        stone.rotation.x = (hash01(sx, sz, 107) - 0.5) * 0.5;
-        world.scene.add(stone);
-      }
-    } else if (patch.kind === "grass") {
-      const tuftMat = new THREE.MeshStandardMaterial({ color: 0x3a5a30, roughness: 0.9 });
-      const tuftCount = Math.floor(pw * ph * 2);
-      for (let i = 0; i < tuftCount; i += 1) {
-        const tx = px + 0.1 + hash01(px + i, py, 111) * (pw - 0.2);
-        const tz = py + 0.1 + hash01(px, py + i, 112) * (ph - 0.2);
-        const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 5), tuftMat);
-        tuft.position.set(tx, 0.09, tz);
-        world.scene.add(tuft);
-      }
-    }
   }
 }
 
@@ -200,7 +201,7 @@ function buildRoads3D(scenario) {
   const roads = get3DRoads(scenario);
   if (!roads.length) return;
 
-  const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x1a1f27, roughness: 0.95, metalness: 0.05 });
+  const tex = ensureRoadTextures();
   const curbMat = new THREE.MeshStandardMaterial({ color: 0x586173, roughness: 0.85, metalness: 0.05 });
   const yellowMat = new THREE.MeshStandardMaterial({ color: 0xffe44d, emissive: 0xffe44d, emissiveIntensity: 0.45, roughness: 0.6 });
   const whiteMat = new THREE.MeshStandardMaterial({ color: 0xd6dde4, emissive: 0xd6dde4, emissiveIntensity: 0.18, roughness: 0.7 });
@@ -227,7 +228,13 @@ function buildRoads3D(scenario) {
       const cz = (az + bz) / 2;
       const yaw = Math.atan2(dz, dx);
 
-      const asphalt = new THREE.Mesh(new THREE.BoxGeometry(len + 0.02, 0.03, width), asphaltMat);
+      const segAsphaltMat = new THREE.MeshStandardMaterial({
+        map: tiledClone(tex.asphalt, Math.max(1, len / 1.8), Math.max(1, width / 1.8)),
+        color: 0xb8bcc4,
+        roughness: 0.92,
+        metalness: 0.06,
+      });
+      const asphalt = new THREE.Mesh(new THREE.BoxGeometry(len + 0.02, 0.03, width), segAsphaltMat);
       asphalt.position.set(cx, 0.018, cz);
       asphalt.rotation.y = -yaw;
       group.add(asphalt);
@@ -277,8 +284,7 @@ function addCityGroundDetail(scenario) {
 
   const group = new THREE.Group();
   group.name = "city-ground-detail";
-  const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x3c4652, roughness: 0.96, metalness: 0.02 });
-  const seamMat = new THREE.MeshStandardMaterial({ color: 0x252b33, roughness: 0.98, metalness: 0.02 });
+  const tex = ensureRoadTextures();
   const crosswalkMat = new THREE.MeshStandardMaterial({ color: 0xc8d1d8, roughness: 0.88, metalness: 0.02, emissive: 0xc8d1d8, emissiveIntensity: 0.06 });
   const hLines = new Set();
   const vLines = new Set();
@@ -286,7 +292,7 @@ function addCityGroundDetail(scenario) {
   for (const road of roads) {
     const isMain = road.kind === "main";
     const width = isMain ? 1.0 : 0.7;
-    const sidewalkW = isMain ? 0.34 : 0.26;
+    const sidewalkW = isMain ? 0.25 : 0.18;
     const pts = road.points || [];
     for (let i = 1; i < pts.length; i += 1) {
       const a = pts[i - 1];
@@ -310,20 +316,18 @@ function addCityGroundDetail(scenario) {
       const offset = width / 2 + 0.11 + sidewalkW / 2;
 
       for (const side of [-1, 1]) {
-        const walk = new THREE.Mesh(new THREE.BoxGeometry(len + 0.04, 0.025, sidewalkW), sidewalkMat);
+        const segWalkMat = new THREE.MeshStandardMaterial({
+          map: tiledClone(tex.pavement, Math.max(1, len / 0.6), 1),
+          bumpMap: tiledClone(tex.pavementBump, Math.max(1, len / 0.6), 1),
+          bumpScale: 0.05,
+          color: 0xc8c0b2,
+          roughness: 0.9,
+          metalness: 0.04,
+        });
+        const walk = new THREE.Mesh(new THREE.BoxGeometry(len + 0.04, 0.025, sidewalkW), segWalkMat);
         walk.position.set(cx + perpX * offset * side, 0.018, cz + perpZ * offset * side);
         walk.rotation.y = -yaw;
         group.add(walk);
-
-        const seamCount = Math.min(32, Math.max(2, Math.floor(len / 1.1)));
-        for (let s = 1; s < seamCount; s += 1) {
-          if (s % 2 === 0) continue;
-          const pos = -len / 2 + (s / seamCount) * len;
-          const seam = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.004, sidewalkW * 0.92), seamMat);
-          seam.position.set(cx + (dx / len) * pos + perpX * offset * side, 0.034, cz + (dz / len) * pos + perpZ * offset * side);
-          seam.rotation.y = -yaw;
-          group.add(seam);
-        }
       }
     }
   }
@@ -342,44 +346,6 @@ function addCityGroundDetail(scenario) {
   world.scene.add(group);
 }
 
-function makeFacadeTexture(kind, fire = false) {
-  const c = document.createElement("canvas");
-  c.width = 128;
-  c.height = 128;
-  const g = c.getContext("2d");
-  const palettes = {
-    apartment: ["#596777", "#6d7a86", "#46515d"],
-    civic: ["#777064", "#8a8274", "#5d584f"],
-    warehouse: ["#4e5965", "#687480", "#303841"],
-    lowrise: ["#725f52", "#876f5f", "#4d4038"]
-  };
-  const p = palettes[kind] || palettes.lowrise;
-  g.fillStyle = fire ? "#27211d" : p[0];
-  g.fillRect(0, 0, 128, 128);
-  g.fillStyle = fire ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.055)";
-  for (let y = 0; y < 128; y += kind === "warehouse" ? 18 : 14) g.fillRect(0, y, 128, 1);
-  for (let x = 0; x < 128; x += kind === "warehouse" ? 22 : 16) g.fillRect(x, 0, 1, 128);
-  g.fillStyle = fire ? "rgba(0,0,0,0.38)" : p[1];
-  for (let y = 10; y < 128; y += 22) {
-    for (let x = 8; x < 128; x += 24) {
-      if (kind === "warehouse") g.fillRect(x, y, 14, 4);
-      else g.fillRect(x, y, 8, 9);
-    }
-  }
-  g.fillStyle = fire ? "rgba(20,10,4,0.45)" : "rgba(0,0,0,0.13)";
-  for (let i = 0; i < 48; i += 1) {
-    const x = Math.floor(hash01(i, 0, 280) * 128);
-    const y = Math.floor(hash01(i, 0, 281) * 128);
-    g.fillRect(x, y, 1 + Math.floor(hash01(i, 0, 282) * 3), 1);
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(kind === "warehouse" ? 1.2 : 1.6, 2.4);
-  tex.anisotropy = 4;
-  return tex;
-}
-
 function nearestRiskKind(cellX, cellY, riskZones) {
   let best = { damage: 0, kind: null };
   for (const z of riskZones || []) {
@@ -394,39 +360,10 @@ function nearestRiskKind(cellX, cellY, riskZones) {
   return best;
 }
 
-function addBuildingWindows(group, footprint, height, damage, floors, windowMat) {
-  if (damage > 0.72 || height < 0.55) return;
-  const [x, y, w, d] = footprint;
-  const usableFloors = Math.max(1, Math.min(floors, Math.floor(height / 0.28)));
-  const colsX = Math.max(1, Math.min(5, Math.floor(w * 1.5)));
-  const colsZ = Math.max(1, Math.min(5, Math.floor(d * 1.5)));
-  const addPane = (px, py, pz, rotY, sx = 0.09) => {
-    if (hash01(px * 3, pz * 3, Math.round(py * 10)) < damage * 0.45) return;
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(sx * 1.15, 0.12), windowMat);
-    pane.position.set(px, py, pz);
-    pane.rotation.y = rotY;
-    group.add(pane);
-  };
-
-  for (let floor = 1; floor <= usableFloors; floor += 1) {
-    const py = Math.min(height - 0.16, 0.22 + floor * (height / (usableFloors + 1)));
-    for (let i = 0; i < colsX; i += 1) {
-      const px = x + ((i + 1) / (colsX + 1)) * w;
-      addPane(px, py, y - 0.006, 0);
-      addPane(px, py, y + d + 0.006, Math.PI);
-    }
-    for (let i = 0; i < colsZ; i += 1) {
-      const pz = y + ((i + 1) / (colsZ + 1)) * d;
-      addPane(x - 0.006, py, pz, Math.PI / 2);
-      addPane(x + w + 0.006, py, pz, -Math.PI / 2);
-    }
-  }
-}
-
 function addBuildingRubble(group, footprint, damage, rubbleMat) {
   if (damage < 0.28) return;
   const [x, y, w, d] = footprint;
-  const count = Math.min(18, Math.max(4, Math.floor(w * d * (3 + damage * 3))));
+  const count = Math.min(5, Math.max(2, Math.floor(w * d * (1 + damage))));
   for (let i = 0; i < count; i += 1) {
     const sideBias = hash01(x + i, y, 170);
     const rx = x + hash01(x + i, y, 171) * w + (sideBias < 0.25 ? -0.18 : sideBias > 0.75 ? 0.18 : 0);
@@ -451,7 +388,7 @@ function addRooftopDetails(group, footprint, height, damage, mats) {
   const railMat = mats.rail;
   const tankMat = mats.tank;
 
-  const units = Math.min(3, Math.max(1, Math.floor(w * d * 0.25)));
+  const units = Math.min(1, Math.max(0, Math.floor(w * d * 0.18)));
   for (let i = 0; i < units; i += 1) {
     if (hash01(cx + i, cz, 250) < damage * 0.35) continue;
     const ux = x + 0.25 + hash01(x + i, y, 251) * Math.max(0.1, w - 0.5);
@@ -533,104 +470,6 @@ function addDamageDecals(group, footprint, height, damage, fire, mats) {
   }
 }
 
-function buildScenarioBuildings3D(scenario) {
-  const buildings = scenarioBuildingEntries(scenario);
-  if (!buildings.length) return;
-
-  const group = new THREE.Group();
-  group.name = "scenario-buildings";
-  const riskZones = scenario.map.risk_zones || [];
-  const windowMat = new THREE.MeshBasicMaterial({ color: 0xa9d6e5, transparent: true, opacity: 0.34, depthWrite: false, side: THREE.DoubleSide });
-  const sootMat = new THREE.MeshBasicMaterial({ color: 0x050404, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide });
-  const rubbleMat = new THREE.MeshStandardMaterial({ color: 0x51483e, roughness: 0.98, metalness: 0.03 });
-  const detailMats = {
-    vent: new THREE.MeshStandardMaterial({ color: 0x303841, roughness: 0.78, metalness: 0.35 }),
-    rail: new THREE.MeshStandardMaterial({ color: 0x20262c, roughness: 0.7, metalness: 0.45 }),
-    tank: new THREE.MeshStandardMaterial({ color: 0x48525d, roughness: 0.62, metalness: 0.55 }),
-    shop: new THREE.MeshBasicMaterial({ color: 0x8fb6c8, transparent: true, opacity: 0.38, side: THREE.DoubleSide }),
-    awning: new THREE.MeshStandardMaterial({ color: 0x6d2b2b, roughness: 0.82, metalness: 0.04 }),
-    crack: new THREE.MeshBasicMaterial({ color: 0x090909, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide }),
-    soot: new THREE.MeshBasicMaterial({ color: 0x040302, transparent: true, opacity: 0.48, depthWrite: false, side: THREE.DoubleSide })
-  };
-  const facadeTexCache = new Map();
-  const roofMatCache = new Map();
-  const wallMatCache = new Map();
-
-  const matFor = (key, color, damage, fire, kind = "lowrise") => {
-    const cacheKey = `${key}-${color}-${Math.round(damage * 10)}-${fire ? 1 : 0}`;
-    const cache = key === "roof" ? roofMatCache : wallMatCache;
-    if (cache.has(cacheKey)) return cache.get(cacheKey);
-    const c = new THREE.Color(color);
-    c.multiplyScalar(fire ? 0.45 : damage > 0.55 ? 0.58 : damage > 0.25 ? 0.75 : 1);
-    const mat = new THREE.MeshStandardMaterial({
-      color: c,
-      roughness: 0.92,
-      metalness: 0.04,
-      emissive: fire ? 0x1a0803 : 0x000000,
-      emissiveIntensity: fire ? 0.25 : 0
-    });
-    if (key === "wall") {
-      const texKey = `${kind}-${fire ? "fire" : "base"}`;
-      if (!facadeTexCache.has(texKey)) facadeTexCache.set(texKey, makeFacadeTexture(kind, fire));
-      mat.map = facadeTexCache.get(texKey);
-    }
-    cache.set(cacheKey, mat);
-    return mat;
-  };
-
-  for (const b of buildings) {
-    const [x, y, w, d] = b.footprint;
-    if (w <= 0 || d <= 0) continue;
-    const profile = buildingProfile(b.kind);
-    const cx = x + w / 2;
-    const cz = y + d / 2;
-    const risk = nearestRiskKind(cx, cz, riskZones);
-    const damage = risk.damage;
-    const fire = risk.kind === "fire" && damage > 0.18;
-    const collapsed = risk.kind === "collapse" && damage > 0.58;
-    const heightSeed = hash01(x, y, 130);
-    let height = profile.minH + heightSeed * (profile.maxH - profile.minH);
-    if (collapsed) height *= 0.32 + hash01(x, y, 131) * 0.22;
-    else if (damage > 0.35) height *= 0.72 + hash01(x, y, 132) * 0.16;
-
-    const footprint = buildingRenderFootprint(x, y, w, d, height);
-    const shell = new THREE.Mesh(
-      new THREE.BoxGeometry(footprint[2], height, footprint[3]),
-      matFor("wall", profile.color, damage, fire, b.kind)
-    );
-    shell.position.set(cx, height / 2 + 0.025, cz);
-    if (damage > 0.32 && !collapsed) {
-      shell.rotation.x = (hash01(x, y, 133) - 0.5) * damage * 0.18;
-      shell.rotation.z = (hash01(x, y, 134) - 0.5) * damage * 0.18;
-    }
-    group.add(shell);
-
-    const roof = new THREE.Mesh(
-      new THREE.BoxGeometry(footprint[2] * 1.02, 0.045, footprint[3] * 1.02),
-      matFor("roof", profile.roof, damage, fire, b.kind)
-    );
-    roof.position.set(cx, height + 0.055, cz);
-    roof.rotation.copy(shell.rotation);
-    group.add(roof);
-
-    addBuildingWindows(group, footprint, height, damage, profile.floors, windowMat);
-    addRooftopDetails(group, footprint, height, damage, detailMats);
-    addStreetLevelDetails(group, footprint, height, damage, b.kind, detailMats);
-    addDamageDecals(group, footprint, height, damage, fire, detailMats);
-    addBuildingRubble(group, footprint, Math.max(damage, collapsed ? 0.8 : 0), rubbleMat);
-
-    if (fire) {
-      const soot = new THREE.Mesh(new THREE.PlaneGeometry(footprint[2] * 0.65, Math.max(0.35, height * 0.65)), sootMat);
-      soot.position.set(cx, Math.max(0.25, height * 0.55), y + 0.07);
-      soot.rotation.x = 0;
-      group.add(soot);
-    }
-  }
-
-  world.scene.add(group);
-  world.scenarioBuildingsGroup = group;
-}
-
 function addFireSmoke(scenario) {
   const fireZones = (scenario?.map?.risk_zones || []).filter((z) => z.type === "fire");
   if (!fireZones.length) return;
@@ -654,12 +493,12 @@ function addFireSmoke(scenario) {
     world.scene.add(ember);
     world.fireGlows.push({ ember, _isEmber: true, x: baseX, z: baseZ });
 
-    const puffCount = 12;
+    const puffCount = 6;
     const plumeHeight = 14;
     for (let i = 0; i < puffCount; i += 1) {
       const phase = i / puffCount;
       const sphere = new THREE.Mesh(
-        new THREE.SphereGeometry(0.38, 10, 8),
+        new THREE.SphereGeometry(0.38, 6, 4),
         new THREE.MeshBasicMaterial({ color: 0x1f1c19, transparent: true, opacity: 0.7, depthWrite: false, fog: true })
       );
       sphere.position.set(baseX, 0.6 + phase * plumeHeight, baseZ);
@@ -700,9 +539,9 @@ function updateSmokeAndGlows(t) {
   }
 }
 
+/** Lamp posts at every road intersection + EZ-Trees in grass patches. */
 function addStreetFurniture(scenario) {
   const [cols, rows] = scenario.map.size;
-  const roadCells = computeRoadCells(scenario);
   const riskZones = scenario.map.risk_zones || [];
   const hLines = new Set();
   const vLines = new Set();
@@ -717,183 +556,101 @@ function addStreetFurniture(scenario) {
     }
   }
 
-  const postMat = new THREE.MeshStandardMaterial({ color: 0x2a2e34, roughness: 0.85, metalness: 0.3 });
-  const armMat = new THREE.MeshStandardMaterial({ color: 0x32363c, roughness: 0.8, metalness: 0.4 });
+  const tex = ensureRoadTextures();
+  const postMetalTex = tiledClone(tex.metal, 1, 3);
+  const armMetalTex = tiledClone(tex.metal, 1, 1);
+  const postMat = new THREE.MeshStandardMaterial({ map: postMetalTex, color: 0x4a4e54, roughness: 0.7, metalness: 0.55 });
+  const armMat = new THREE.MeshStandardMaterial({ map: armMetalTex, color: 0x52565c, roughness: 0.65, metalness: 0.6 });
+
+  /** Skip lamp posts on cells adjacent to the base so they don't stand in the spawn pad. */
+  const baseX = scenario.map.base?.[0];
+  const baseY = scenario.map.base?.[1];
   for (const y of hLines) {
     for (const x of vLines) {
       if (x === 0 || x === cols - 1 || y === 0 || y === rows - 1) continue;
+      if (baseX != null && Math.abs(x - baseX) <= 1 && Math.abs(y - baseY) <= 1) continue;
       const damage = cellDamageLevel(x, y, riskZones);
-      for (const ox of [-1, 1]) {
-        for (const oz of [-1, 1]) {
-          const lamp = new THREE.Group();
-          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.4, 8), postMat);
-          post.position.y = 0.7;
-          lamp.add(post);
-          const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.25, 6), armMat);
-          arm.rotation.z = Math.PI / 2;
-          arm.position.set(-ox * 0.12, 1.35, 0);
-          lamp.add(arm);
-          const isLit = damage < 0.4 && hash01(x, y, 50 + ox + oz * 2) > 0.15;
-          const lampMat = new THREE.MeshStandardMaterial({
-            color: isLit ? 0xffe9b0 : 0x1a1614,
-            emissive: isLit ? 0xffd080 : 0x000000,
-            emissiveIntensity: isLit ? 0.9 : 0,
-            roughness: 0.7
-          });
-          const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.18), lampMat);
-          head.position.set(-ox * 0.24, 1.32, 0);
-          lamp.add(head);
-          if (isLit) {
-            const light = new THREE.PointLight(0xffd080, 0.6, 4.5);
-            light.position.set(-ox * 0.24, 1.32, 0);
-            lamp.add(light);
-          }
-          lamp.position.set(x + 0.5 + ox * 0.55, 0, y + 0.5 + oz * 0.55);
-          if (damage > 0.45) {
-            lamp.rotation.z = (hash01(x, y, 51 + ox + oz * 2) - 0.5) * 0.6;
-            lamp.rotation.x = (hash01(x, y, 52 + ox + oz * 2) - 0.5) * 0.3;
-          }
-          world.scene.add(lamp);
+      /** One lamp per intersection (was two diagonals) — halves the per-frame draw count. */
+      const lampPick = hash01(x, y, 70);
+      const lampCorners = [[-1, -1], [1, 1], [-1, 1], [1, -1]];
+      const [ox, oz] = lampCorners[Math.floor(lampPick * 4) % 4];
+      {
+        const lamp = new THREE.Group();
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.04, 10), postMat);
+        base.position.y = 0.02;
+        lamp.add(base);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.7, 10), postMat);
+        post.position.y = 0.39;
+        lamp.add(post);
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.02, 10), armMat);
+        collar.position.y = 0.74;
+        lamp.add(collar);
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.14, 6), armMat);
+        arm.rotation.z = Math.PI / 2;
+        arm.position.set(-ox * 0.08, 0.75, 0);
+        lamp.add(arm);
+        const isLit = damage < 0.4 && hash01(x, y, 50 + ox + oz * 2) > 0.15;
+        const lampMat = new THREE.MeshStandardMaterial({
+          color: isLit ? 0xffe9b0 : 0x1a1614,
+          emissive: isLit ? 0xffd080 : 0x000000,
+          emissiveIntensity: isLit ? 0.9 : 0,
+          roughness: 0.7
+        });
+        const hood = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.045, 10, 1, true), armMat);
+        hood.position.set(-ox * 0.15, 0.73, 0);
+        lamp.add(hood);
+        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.052, 0.055, 10), lampMat);
+        head.position.set(-ox * 0.15, 0.68, 0);
+        lamp.add(head);
+        if (isLit) {
+          const light = new THREE.PointLight(0xffd080, 0.55, 3);
+          light.position.set(-ox * 0.15, 0.65, 0);
+          lamp.add(light);
         }
+        lamp.position.set(x + 0.5 + ox * 0.55, 0, y + 0.5 + oz * 0.55);
+        if (damage > 0.45) {
+          lamp.rotation.z = (hash01(x, y, 51 + ox + oz * 2) - 0.5) * 0.6;
+          lamp.rotation.x = (hash01(x, y, 52 + ox + oz * 2) - 0.5) * 0.3;
+        }
+        world.scene.add(lamp);
       }
     }
   }
 
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.95 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2d4a25, roughness: 0.9 });
-  const fallenLeafMat = new THREE.MeshStandardMaterial({ color: 0x4a3522, roughness: 0.95 });
+  /** EZ-Tree generation — same procedural library used by the wildfire scene.
+   *  Bounded count so per-tree CPU cost stays small for urban-quake. */
+  const treePresets = ["Oak Small", "Aspen Small", "Ash Small"];
+  let treeBudget = 8;
   for (const patch of get3DTerrain(scenario)) {
+    if (treeBudget <= 0) break;
     if (patch.kind !== "grass") continue;
     const [px, py, pw, ph] = patch.footprint;
-    const treeCount = Math.max(1, Math.floor(pw * ph * 0.5));
+    const treeCount = Math.min(treeBudget, Math.max(1, Math.floor(pw * ph * 0.5)));
     for (let i = 0; i < treeCount; i += 1) {
       const tx = px + 0.3 + hash01(px + i, py, 41) * (pw - 0.6);
       const tz = py + 0.3 + hash01(px, py + i, 42) * (ph - 0.6);
       const damage = cellDamageLevel(Math.floor(tx), Math.floor(tz), riskZones);
       const fallen = damage > 0.4 && hash01(tx, tz, 44) > 0.4;
-      const tree = new THREE.Group();
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.5, 6), trunkMat);
-      trunk.position.y = 0.25;
-      tree.add(trunk);
-      const leaves = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 8), fallen ? fallenLeafMat : leafMat);
-      leaves.position.y = 0.7;
-      tree.add(leaves);
-      tree.position.set(tx, 0, tz);
-      tree.scale.setScalar(0.8 + hash01(tx, tz, 43) * 0.6);
-      if (fallen) tree.rotation.z = (Math.PI / 2) * (hash01(tx, tz, 45) > 0.5 ? 1 : -1) * 0.85;
-      world.scene.add(tree);
-    }
-  }
-
-  const hydrantMat = new THREE.MeshStandardMaterial({ color: 0x9a2820, roughness: 0.6, metalness: 0.2 });
-  for (let i = 0; i < 14; i += 1) {
-    const cx = Math.floor(hash01(i, 7, 61) * cols);
-    const cz = Math.floor(hash01(i, 11, 62) * rows);
-    if (!roadCells.has(`${cx},${cz}`)) continue;
-    const hydrant = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.28, 8), hydrantMat);
-    body.position.y = 0.14;
-    hydrant.add(body);
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.07, 8), hydrantMat);
-    top.position.y = 0.32;
-    hydrant.add(top);
-    hydrant.position.set(cx + 0.92, 0, cz + 0.92);
-    world.scene.add(hydrant);
-  }
-}
-
-function addUrbanStreetProps(scenario) {
-  const roads = get3DRoads(scenario);
-  if (!roads.length) return;
-
-  const group = new THREE.Group();
-  group.name = "urban-street-props";
-  const carBodyMats = [
-    new THREE.MeshStandardMaterial({ color: 0x26384a, roughness: 0.72, metalness: 0.24 }),
-    new THREE.MeshStandardMaterial({ color: 0x3b342f, roughness: 0.8, metalness: 0.18 }),
-    new THREE.MeshStandardMaterial({ color: 0x5b2b25, roughness: 0.82, metalness: 0.14 }),
-    new THREE.MeshStandardMaterial({ color: 0x6f6b5a, roughness: 0.78, metalness: 0.16 })
-  ];
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x101820, roughness: 0.45, metalness: 0.2, emissive: 0x031018, emissiveIntensity: 0.1 });
-  const tireMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.92, metalness: 0.02 });
-  const debrisMat = new THREE.MeshStandardMaterial({ color: 0x554c41, roughness: 0.98, metalness: 0.02 });
-  const buildingRects = buildingAvoidanceRects(scenario);
-  let parked = 0;
-  let debris = 0;
-
-  const placeCar = (x, z, yaw, seed) => {
-    const car = new THREE.Group();
-    const bodyMat = carBodyMats[Math.floor(hash01(seed, z, 270) * carBodyMats.length) % carBodyMats.length];
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.58), bodyMat);
-    body.position.y = 0.12;
-    car.add(body);
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.26), glassMat);
-    cabin.position.set(0, 0.25, -0.03);
-    car.add(cabin);
-    for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.035, 8), tireMat);
-        tire.rotation.z = Math.PI / 2;
-        tire.position.set(sx * 0.18, 0.055, sz * 0.22);
-        car.add(tire);
-      }
-    }
-    car.position.set(x, 0, z);
-    car.rotation.y = yaw;
-    if (hash01(seed, z, 271) < 0.22) {
-      car.rotation.z = (hash01(seed, z, 272) - 0.5) * 0.22;
-    }
-    group.add(car);
-  };
-
-  for (const road of roads) {
-    if (parked > 34 && debris > 40) break;
-    const isMain = road.kind === "main";
-    const width = isMain ? 1.0 : 0.7;
-    const pts = road.points || [];
-    for (let i = 1; i < pts.length; i += 1) {
-      const a = pts[i - 1];
-      const b = pts[i];
-      const ax = a[0] + 0.5;
-      const az = a[1] + 0.5;
-      const bx = b[0] + 0.5;
-      const bz = b[1] + 0.5;
-      const dx = bx - ax;
-      const dz = bz - az;
-      const len = Math.sqrt(dx * dx + dz * dz);
-      if (len < 2) continue;
-      const yaw = Math.atan2(dx, dz);
-      const perpX = -dz / len;
-      const perpZ = dx / len;
-      const step = 2.2;
-      const count = Math.floor(len / step);
-      for (let k = 1; k < count; k += 1) {
-        const t = k / count;
-        const px = ax + dx * t;
-        const pz = az + dz * t;
-        const side = hash01(px, pz, 273) > 0.5 ? 1 : -1;
-        const curbOffset = width / 2 + 0.28;
-        const propX = px + perpX * curbOffset * side;
-        const propZ = pz + perpZ * curbOffset * side;
-        if (pointNearBuilding(propX, propZ, buildingRects, 0.42)) continue;
-        if (parked < 34 && hash01(px, pz, 274) < 0.26) {
-          placeCar(propX, propZ, yaw, px + pz);
-          parked += 1;
-        } else if (debris < 40 && hash01(px, pz, 275) < 0.18) {
-          const chunk = new THREE.Mesh(
-            new THREE.BoxGeometry(0.08 + hash01(px, pz, 276) * 0.16, 0.035 + hash01(px, pz, 277) * 0.06, 0.08 + hash01(px, pz, 278) * 0.16),
-            debrisMat
-          );
-          chunk.position.set(propX, 0.055, propZ);
-          chunk.rotation.y = hash01(px, pz, 279) * Math.PI * 2;
-          group.add(chunk);
-          debris += 1;
+      const presetName = treePresets[Math.floor(hash01(tx, tz, 46) * treePresets.length) % treePresets.length];
+      const opts = structuredClone(TreePreset[presetName] || TreePreset["Oak Small"]);
+      opts.seed = Math.floor((hash01(tx, tz, 47) * 1e6)) >>> 0;
+      /** Cap branch section counts — fewer vertices per tree at this tiny scale. */
+      if (opts?.branch?.sections) {
+        for (const k of Object.keys(opts.branch.sections)) {
+          opts.branch.sections[k] = Math.min(opts.branch.sections[k], 5);
         }
       }
+      const tree = new Tree();
+      tree.loadFromJson(opts);
+      tree.position.set(tx, 0, tz);
+      tree.scale.setScalar(0.02 + hash01(tx, tz, 43) * 0.015);
+      tree.rotation.y = hash01(tx, tz, 48) * Math.PI * 2;
+      if (fallen) tree.rotation.z = (Math.PI / 2) * (hash01(tx, tz, 45) > 0.5 ? 1 : -1) * 0.85;
+      world.scene.add(tree);
+      treeBudget -= 1;
+      if (treeBudget <= 0) break;
     }
   }
-
-  world.scene.add(group);
 }
 
 export function init3D(scenario, presetKey, povCols) {
@@ -948,7 +705,7 @@ export function init3D(scenario, presetKey, povCols) {
   // Sky-dome — smoky disaster gradient for the FPV horizon
   const skyTex = makeGradientSkyTexture(512, s3.skyStops);
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(120, 32, 16),
+    new THREE.SphereGeometry(50, 24, 12),
     new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })
   );
   world.scene.add(sky);
@@ -957,7 +714,7 @@ export function init3D(scenario, presetKey, povCols) {
   // scenarios without terrain/roads still render the base FPV scene.
   addTerrainPatches3D(scenario);
   addCityGroundDetail(scenario);
-  buildScenarioBuildings3D(scenario);
+  // Primitive building shells removed; upgradeScenarioBuildingsToAssets populates GLB clones.
 
   // Base marker
   const [bx, by] = scenario.map.base;
@@ -980,7 +737,7 @@ export function init3D(scenario, presetKey, povCols) {
   world.scene.add(base);
   world.baseMesh = base;
 
-  // Blockades
+  // Blockades — primitive boxes that the GLB upgrade pass replaces with rubble-large.glb clones.
   for (const blk of scenario.map.blocked_cells) {
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(0.9, 1.2, 0.9),
@@ -991,7 +748,7 @@ export function init3D(scenario, presetKey, povCols) {
     world.blockadeMeshes.set(blk.id, mesh);
   }
 
-  // Risk zones — subtle: thin ground ring + a small atmospheric column (no harsh disk)
+  // Risk zones — thin ground ring + halo light + optional smoke column for fire zones.
   for (const zone of scenario.map.risk_zones) {
     const isFire = zone.type === "fire";
     const baseColor = isFire ? 0xff7a3c : 0xa887ff;
@@ -999,7 +756,6 @@ export function init3D(scenario, presetKey, povCols) {
     const grp = new THREE.Group();
     grp.position.set(zone.center[0] + 0.5, 0, zone.center[1] + 0.5);
 
-    // Thin ground ring (annulus) — like a survey marker
     const ringInner = Math.max(0.1, zone.radius - 0.18);
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(ringInner, zone.radius, 64),
@@ -1009,12 +765,10 @@ export function init3D(scenario, presetKey, povCols) {
     ring.position.y = 0.02;
     grp.add(ring);
 
-    // Tiny core glow at center — vertical pillar-of-light implied
     const halo = new THREE.PointLight(baseColor, isFire ? 0.85 : 0.45, zone.radius * 3.5);
     halo.position.y = 1.4;
     grp.add(halo);
 
-    // For fire: a thin vertical "smoke column" billboard
     let column = null;
     if (isFire) {
       const colGeo = new THREE.CylinderGeometry(0.05, 0.18, 3.2, 8, 1, true);
@@ -1035,7 +789,7 @@ export function init3D(scenario, presetKey, povCols) {
     world.riskMeshes.set(zone.id, { group: grp, ring, halo, column, baseColor, isFire });
   }
 
-  // Victims
+  // Victims — primitive post + arm markers that the GLB upgrade pass replaces with survivor.glb clones.
   for (const v of scenario.victims) {
     const grp = new THREE.Group();
     const post = new THREE.Mesh(
@@ -1061,7 +815,6 @@ export function init3D(scenario, presetKey, povCols) {
   buildRoads3D(scenario);
   addFireSmoke(scenario);
   addStreetFurniture(scenario);
-  addUrbanStreetProps(scenario);
 
   // Agents — detailed primitive build matching the marketing hero aesthetic
   for (const a of scenario.agents) {
@@ -1086,13 +839,14 @@ export function init3D(scenario, presetKey, povCols) {
       }));
       return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+    renderer.shadowMap.enabled = false;
     renderer.setClearColor(s3.rendererClear, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = s3.toneExposure ?? 1.4;
 
-    const camera = new THREE.PerspectiveCamera(72, 16 / 10, 0.1, 200);
+    const camera = new THREE.PerspectiveCamera(72, 16 / 10, 0.1, 80);
     camera.position.set(cols / 2, 1.5, rows / 2);
     camera.lookAt(cols / 2 + 1, 0.8, rows / 2);
 
@@ -1121,6 +875,7 @@ export function init3D(scenario, presetKey, povCols) {
       smoothLook: new THREE.Vector3(cols / 2 + 1, 0.8, rows / 2),
       smoothHdg: 0,
       smoothVel: 0,
+      visible: true,
       hud: {
         alt: col.querySelector("[data-hud='alt']"),
         hdg: col.querySelector("[data-hud='hdg']"),
@@ -1133,6 +888,14 @@ export function init3D(scenario, presetKey, povCols) {
 
     const ro = new ResizeObserver(() => resizePov(entry));
     ro.observe(canvas.parentElement);
+
+    /** Skip the per-POV render path when the viewport is scrolled off-screen. */
+    if (typeof IntersectionObserver !== "undefined") {
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) entry.visible = e.isIntersecting;
+      }, { rootMargin: "200px" });
+      io.observe(col);
+    }
 
     povs.push(entry);
     resizePov(entry);
@@ -1285,8 +1048,6 @@ async function upgradeToAssets(scenario) {
   const M = "/models/";
   const T = "/textures/";
 
-  const fbxLoader = new FBXLoader();
-
   const [
     aptGlb, facadeGlb, mansionGlb, multiGlb,
     rubbleGlb, signsGlb, survivorGlb, taxiGlb,
@@ -1298,7 +1059,6 @@ async function upgradeToAssets(scenario) {
     rBase, rNorm, rRough,
     wBase, wNorm, wRough,
     mBase, mMetal, mNorm, mRough,
-    heroFbx, heroColor, heroBumpNm
   ] = await Promise.all([
     loader.loadAsync(`${M}building-apartment.glb`),
     loader.loadAsync(`${M}building-facade.glb`),
@@ -1333,9 +1093,6 @@ async function upgradeToAssets(scenario) {
     texLoader.loadAsync(`${T}metal-rust_metallic.jpg`),
     texLoader.loadAsync(`${T}metal-rust_normal.jpg`),
     texLoader.loadAsync(`${T}metal-rust_roughness.jpg`),
-    fbxLoader.loadAsync("/models-fbx/AM165_001_VRay.fbx").catch((err) => { console.warn("[hero FBX] load failed:", err); return null; }),
-    texLoader.loadAsync("/models-fbx/AM165_001_color.jpg").catch(() => null),
-    texLoader.loadAsync("/models-fbx/AM165_001_bump_nm.jpg").catch(() => null)
   ]);
 
   // Preset switched away (e.g. to wildfire) while assets were downloading — abort quietly.
@@ -1419,7 +1176,7 @@ async function upgradeToAssets(scenario) {
     rubble.traverse((obj) => {
       if (obj.isMesh) obj.material = rubbleMat;
     });
-    fitToSize(rubble, 1.4);
+    fitToSize(rubble, 0.8);
     rubble.position.set(blk.location[0] + 0.5, groundedY(rubble), blk.location[1] + 0.5);
     rubble.rotation.y = (blk.location[0] * 13 + blk.location[1] * 7) * 0.31;
     world.scene.add(rubble);
@@ -1456,11 +1213,8 @@ async function upgradeToAssets(scenario) {
     world.victimMeshes.set(v.id, { group: grp, flare, meshes, isAsset: true });
   }
 
-  // Scatter scenery — also reuse the rubble GLB for small debris piles
-  scatterScenery(scenario, buildingTemplates, taxiGlb.scene, signsGlb.scene, rubbleGlb.scene, { rubbleMat, woodMat, rustMat });
-
-  // Single hero landmark from the AM165 FBX at city center
-  placeHeroProp(scenario, heroFbx, heroColor, heroBumpNm);
+  // Dress the starting area with realistic GLB clones so the spawn pad reads as a city block
+  dressBaseCamp(scenario, taxiGlb.scene, signsGlb.scene, rubbleGlb.scene, { rustMat, rubbleMat });
 
   // Texture the ground — use the second concrete variant so it reads distinct from building walls
   if (world.groundGrid) {
@@ -1488,199 +1242,91 @@ async function upgradeToAssets(scenario) {
   }
 }
 
-function placeHeroProp(scenario, fbx, colorTex, bumpTex) {
-  if (!fbx) return;
-  if (colorTex) colorTex.colorSpace = THREE.SRGBColorSpace;
-  fbx.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const next = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.85,
-      metalness: 0.05
-    });
-    if (colorTex) next.map = colorTex;
-    if (bumpTex) next.normalMap = bumpTex;
-    obj.material = next;
-  });
-  fitToSize(fbx, 3.5);
-  const [cols, rows] = scenario.map.size;
-  fbx.position.set(cols / 2, groundedY(fbx), rows / 2);
-  fbx.rotation.y = Math.PI / 4;
-  world.scene.add(fbx);
-  world.heroProp = fbx;
-}
-
-function scatterScenery(scenario, buildingTemplates, taxiSrc, signsSrc, rubbleSrc, palette = {}) {
-  const { rubbleMat, woodMat, rustMat } = palette;
-  const [cols, rows] = scenario.map.size;
-  const occupied = new Set();
-  const mark = (x, y, r = 1) => {
-    for (let dx = -r; dx <= r; dx += 1) {
-      for (let dy = -r; dy <= r; dy += 1) {
-        occupied.add(`${x + dx},${y + dy}`);
-      }
+/** Place a handful of realistic GLB clones (taxis, signs, debris) around the
+ *  starting base so the spawn point reads as a real city block. Uses the same
+ *  assets already loaded by upgradeToAssets — no new geometry. */
+function dressBaseCamp(scenario, taxiSrc, signsSrc, rubbleSrc, palette = {}) {
+  if (!scenario.map.base) return;
+  const { rustMat, rubbleMat } = palette;
+  const [bx, by] = scenario.map.base;
+  const cx = bx + 0.5;
+  const cz = by + 0.5;
+  const buildingRects = buildingAvoidanceRects(scenario);
+  const occupied = [
+    { x: cx, z: cz, r: 0.7 },
+    ...((scenario.agents || []).map((a) => ({ x: a.location[0] + 0.5, z: a.location[1] + 0.5, r: 0.55 }))),
+    ...((scenario.victims || []).map((v) => ({ x: v.location[0] + 0.5, z: v.location[1] + 0.5, r: 1.0 }))),
+  ];
+  const blocked = (x, z) => {
+    if (pointNearBuilding(x, z, buildingRects, 0.35)) return true;
+    for (const o of occupied) {
+      const dx = x - o.x;
+      const dz = z - o.z;
+      if (dx * dx + dz * dz < o.r * o.r) return true;
     }
-  };
-  mark(scenario.map.base[0], scenario.map.base[1], 2);
-  for (const v of scenario.victims) mark(v.location[0], v.location[1], 2);
-  for (const b of scenario.map.blocked_cells) mark(b.location[0], b.location[1], 1);
-  for (const b of scenario.map.buildings || []) {
-    const [bx, by, bw, bh] = b.footprint;
-    for (let dx = 0; dx < bw; dx += 1) {
-      for (let dy = 0; dy < bh; dy += 1) {
-        mark(bx + dx, by + dy, 0);
-      }
-    }
-  }
-  for (const z of scenario.map.risk_zones) {
-    const r = Math.ceil(z.radius);
-    for (let dx = -r; dx <= r; dx += 1) {
-      for (let dy = -r; dy <= r; dy += 1) {
-        if (dx * dx + dy * dy <= z.radius * z.radius) {
-          occupied.add(`${z.center[0] + dx},${z.center[1] + dy}`);
-        }
-      }
-    }
-  }
-
-  const hash = (x, y) => Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5) % 1;
-  const cardinalRot = (x, y) => Math.floor(hash(x, y + 5) * 4) * (Math.PI / 2);
-
-  // Road cells (open spine every 5th row / 6th col) — skip placement here so streets stay clear
-  const isRoad = (x, y) => (y % 5 === 2) || (x % 6 === 2);
-
-  for (let x = 1; x < cols - 1; x += 1) {
-    for (let y = 1; y < rows - 1; y += 1) {
-      if (occupied.has(`${x},${y}`)) continue;
-      if (isRoad(x, y)) {
-        // Street props: lower-frequency taxis and signs in roads
-        const rr = hash(x + 7, y - 3);
-        if (rr < 0.04 && taxiSrc) {
-          const taxi = taxiSrc.clone(true);
-          fitToSize(taxi, 0.7);
-          taxi.position.set(x + 0.5, groundedY(taxi), y + 0.5);
-          taxi.rotation.y = cardinalRot(x + 1, y);
-          // Burned/abandoned hulks get the rust material; ~40% chance
-          if (rustMat && hash(x + 11, y - 1) < 0.4) {
-            taxi.traverse((obj) => { if (obj.isMesh) obj.material = rustMat; });
-          }
-          world.scene.add(taxi);
-        } else if (rr < 0.07 && signsSrc) {
-          const sign = signsSrc.clone(true);
-          fitToSize(sign, 0.5);
-          sign.position.set(x + 0.5, groundedY(sign), y + 0.5);
-          sign.rotation.y = cardinalRot(x + 2, y);
-          // Weathered signs: ~30% rusted
-          if (rustMat && hash(x + 13, y - 2) < 0.3) {
-            sign.traverse((obj) => { if (obj.isMesh) obj.material = rustMat; });
-          }
-          world.scene.add(sign);
-        }
-        continue;
-      }
-      const r = hash(x, y);
-      if (r < 0.32 && !(scenario.map.buildings || []).length) {
-        const idx = Math.floor(hash(x + 3, y - 2) * buildingTemplates.length);
-        const b = buildingTemplates[idx].clone(true);
-        b.position.set(x + 0.5, groundedY(b), y + 0.5);
-        b.rotation.y = cardinalRot(x, y);
-        world.scene.add(b);
-        mark(x, y, 1);
-      } else if (r < 0.42 && rubbleSrc) {
-        // Small debris pile in vacant lots
-        const debris = rubbleSrc.clone(true);
-        fitToSize(debris, 0.6 + hash(x, y + 8) * 0.4);
-        debris.position.set(x + 0.5, groundedY(debris), y + 0.5);
-        debris.rotation.y = hash(x + 5, y) * Math.PI * 2;
-        if (rubbleMat) {
-          debris.traverse((obj) => { if (obj.isMesh) obj.material = rubbleMat; });
-        } else {
-          debris.traverse((obj) => {
-            if (obj.isMesh) {
-              obj.material = obj.material.clone();
-              if (obj.material.color) obj.material.color.setHex(0x554840);
-              obj.material.roughness = 0.95;
-            }
-          });
-        }
-        world.scene.add(debris);
-      } else if (r < 0.45 && signsSrc) {
-        const sign = signsSrc.clone(true);
-        fitToSize(sign, 0.5);
-        sign.position.set(x + 0.5, groundedY(sign), y + 0.5);
-        sign.rotation.y = cardinalRot(x + 2, y);
-        world.scene.add(sign);
-      }
-    }
-  }
-
-  if (woodMat) addWoodenScaffolding(scenario, woodMat);
-}
-
-function addWoodenScaffolding(scenario, woodMat) {
-  const buildings = scenario?.tacticalBuildings;
-  const hash = (x, y) => Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5) % 1;
-  const placed = new Set();
-
-  const placeScaffoldAt = (cx, cz, salt) => {
-    const key = `${Math.round(cx * 4)},${Math.round(cz * 4)}`;
-    if (placed.has(key)) return;
-    placed.add(key);
-    const scaffold = new THREE.Group();
-    const postH = 1.5;
-    const span = 0.45;
-    for (const [ox, oz] of [[-span, -span], [span, -span], [span, span], [-span, span]]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, postH, 0.05), woodMat);
-      post.position.set(ox, postH / 2, oz);
-      scaffold.add(post);
-    }
-    for (const yy of [postH * 0.35, postH * 0.7]) {
-      const railA = new THREE.Mesh(new THREE.BoxGeometry(span * 2 + 0.05, 0.04, 0.04), woodMat);
-      railA.position.set(0, yy, -span);
-      scaffold.add(railA);
-      const railB = new THREE.Mesh(new THREE.BoxGeometry(span * 2 + 0.05, 0.04, 0.04), woodMat);
-      railB.position.set(0, yy, span);
-      scaffold.add(railB);
-    }
-    const brace = new THREE.Mesh(new THREE.BoxGeometry(span * 2 + 0.05, 0.04, 0.04), woodMat);
-    brace.position.set(0, postH * 0.5, -span);
-    brace.rotation.z = Math.PI / 5;
-    scaffold.add(brace);
-    scaffold.position.set(cx, 0, cz);
-    scaffold.rotation.y = hash(cx + salt, cz) * Math.PI * 2;
-    world.scene.add(scaffold);
+    return false;
   };
 
-  if (buildings && buildings.length) {
-    const cellSize = scenario?.map?.cell_size_m ? 1 : 1;
-    let count = 0;
-    for (const b of buildings) {
-      if (!(b.damage > 0.4)) continue;
-      const cx = (b.centerX ?? b.x ?? 0) * cellSize;
-      const cz = (b.centerY ?? b.y ?? 0) * cellSize;
-      if (!Number.isFinite(cx) || !Number.isFinite(cz)) continue;
-      const offset = 0.7;
-      const angle = hash(cx, cz) * Math.PI * 2;
-      placeScaffoldAt(cx + Math.cos(angle) * offset, cz + Math.sin(angle) * offset, 1);
-      count += 1;
-      if (count >= 24) break;
+  /** Two parked taxis on the curb adjacent to the base. */
+  if (taxiSrc) {
+    const taxiSpots = [
+      { ox: 1.4, oz: -0.05, yaw: Math.PI / 2, rust: true },
+      { ox: -1.45, oz: 0.85, yaw: -Math.PI / 2, rust: false },
+    ];
+    for (const s of taxiSpots) {
+      const x = cx + s.ox;
+      const z = cz + s.oz;
+      if (blocked(x, z)) continue;
+      const taxi = taxiSrc.clone(true);
+      fitToSize(taxi, 0.45);
+      taxi.position.set(x, groundedY(taxi), z);
+      taxi.rotation.y = s.yaw;
+      if (s.rust && rustMat) taxi.traverse((obj) => { if (obj.isMesh) obj.material = rustMat; });
+      world.scene.add(taxi);
     }
-    if (count > 0) return;
   }
 
-  const [cols, rows] = scenario.map.size;
-  for (const z of (scenario.map.risk_zones || [])) {
-    const samples = 4;
-    for (let i = 0; i < samples; i += 1) {
-      const a = (i / samples) * Math.PI * 2;
-      const r = z.radius + 0.4;
-      const cx = z.center[0] + 0.5 + Math.cos(a) * r;
-      const cz = z.center[1] + 0.5 + Math.sin(a) * r;
-      if (cx < 0.5 || cz < 0.5 || cx > cols - 0.5 || cz > rows - 0.5) continue;
-      placeScaffoldAt(cx, cz, i * 3);
+  /** Street signs flanking the staging entry. */
+  if (signsSrc) {
+    const signSpots = [
+      { ox: -0.95, oz: -1.05, yaw: 0.6 },
+      { ox: 1.05, oz: -1.0, yaw: -0.5 },
+      { ox: -1.25, oz: 1.15, yaw: 2.4 },
+    ];
+    for (const s of signSpots) {
+      const x = cx + s.ox;
+      const z = cz + s.oz;
+      if (blocked(x, z)) continue;
+      const sign = signsSrc.clone(true);
+      fitToSize(sign, 0.3);
+      sign.position.set(x, groundedY(sign), z);
+      sign.rotation.y = s.yaw;
+      world.scene.add(sign);
+    }
+  }
+
+  /** Small rubble piles around the perimeter — same GLB used elsewhere for debris. */
+  if (rubbleSrc) {
+    const rubbleSpots = [
+      { ox: 0.85, oz: 1.25, size: 0.3 },
+      { ox: -0.7, oz: -1.2, size: 0.4 },
+      { ox: 1.4, oz: 1.05, size: 0.28 },
+      { ox: -1.15, oz: -0.45, size: 0.34 },
+    ];
+    for (const s of rubbleSpots) {
+      const x = cx + s.ox;
+      const z = cz + s.oz;
+      if (blocked(x, z)) continue;
+      const pile = rubbleSrc.clone(true);
+      fitToSize(pile, s.size);
+      pile.position.set(x, groundedY(pile), z);
+      pile.rotation.y = (s.ox + s.oz) * 1.1;
+      if (rubbleMat) pile.traverse((obj) => { if (obj.isMesh) obj.material = rubbleMat; });
+      world.scene.add(pile);
     }
   }
 }
+
 
 function makeGridTexture(size, cols, rows, texOpts = {}) {
   const fill = texOpts.fill ?? "#04060a";
@@ -1845,6 +1491,7 @@ export function update3D(t, sim) {
 
   // ── Per-POV camera + render ─────────────────────────────────────────────
   for (const entry of povs) {
+    if (entry.visible === false) continue;
     const driver = state.agents.find((a) => a.id === entry.selectedId) || state.agents[0];
     if (!driver) continue;
     const prev = driver.prevLocation || driver.location;
