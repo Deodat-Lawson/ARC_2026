@@ -72,7 +72,7 @@ useLoader.preload(InjuredSoldierPackLoader, MODEL_ASSET_URL);
 // lying down), not the height. Scaling by Y alone would stretch the body to
 // ~8m wide. We scale by the LONGEST dimension so the whole figure fits into
 // FIGURE_EXTENT regardless of which axis the source uses for length.
-const FIGURE_EXTENT = 1.9; // length of the prone body in world units (≈ metres)
+const FIGURE_EXTENT = 6.0; // length of the prone body in world units (≈ metres)
 
 /**
  * Visualizes the two trapped survivors at `SURVIVORS[]` placement: an
@@ -213,8 +213,8 @@ function SurvivorMarker({
         </group>
       </group>
 
-      <mesh ref={heatPlume} position={[0, 1.2, 0]}>
-        <cylinderGeometry args={[0.08, 0.18, 2.4, 12, 1, true]} />
+      <mesh ref={heatPlume} position={[0, 3.8, 0]}>
+        <cylinderGeometry args={[0.25, 0.55, 7.6, 12, 1, true]} />
         <meshStandardMaterial
           color="#ff7040"
           emissive="#ff7040"
@@ -226,7 +226,7 @@ function SurvivorMarker({
       </mesh>
 
       <mesh ref={pulseRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <ringGeometry args={[0.5, 0.62, 36]} />
+        <ringGeometry args={[1.6, 1.95, 36]} />
         <meshBasicMaterial color="#ffa040" transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>

@@ -47,6 +47,8 @@ let wfBootGeneration = 0;
 
 /** EZ-Tree instances currently bound (wind animation). */
 let wfEzTrees = [];
+/** Toggles each frame to halve EZ-Tree wind animation cost (still reads as moving). */
+let wfTreeUpdateFrame = 0;
 /** @type {THREE.Group | null} */
 let wfForestRoot = null;
 
@@ -113,11 +115,19 @@ function disposeSceneResources(scene) {
   });
 }
 
+/**
+ * Wildfire meadow uses a 200m slab + wide 72° FPV. Drone/UGV meshes are tuned
+ * for the urban-quake cell pitch (~10m), so they read tiny here — bump 2× at
+ * spawn rather than mutating the base scales in `fleet-agents-mesh.js`.
+ */
+const WILDFIRE_AGENT_SCALE_MUL = 2.0;
+
 function bootstrapWildfireAgents(scenario, meadowFn, pitchScale) {
   wfAgentMeshes.clear();
 
   for (const ag of scenario.agents || []) {
     const grp = createAgentMesh(ag.type);
+    grp.scale.multiplyScalar(WILDFIRE_AGENT_SCALE_MUL);
     const p = meadowFn(ag.location[0], ag.location[1]);
     grp.position.x = p.x;
     grp.position.z = p.z;
@@ -453,7 +463,10 @@ export function update3D(t, sim) {
 
   grassWindTimeUniform.value = t;
   wfForestRoot?.userData?.tickWildfireBurn?.(t);
-  for (let i = 0; i < wfEzTrees.length; i += 1) wfEzTrees[i]?.update?.(t);
+  // EZ-Tree update is procedural and main-thread heavy; 30 Hz sway is indistinguishable from 60.
+  if ((wfTreeUpdateFrame++ & 1) === 0) {
+    for (let i = 0; i < wfEzTrees.length; i += 1) wfEzTrees[i]?.update?.(t);
+  }
 
   const { state, plan, lastTickAt, msPerTick } = sim;
   const frac = Math.min(1, Math.max(0, (performance.now() - lastTickAt) / msPerTick));

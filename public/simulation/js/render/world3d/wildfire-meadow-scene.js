@@ -629,10 +629,12 @@ function attachWildfireBurnInferno(meadowRoot, ox, oz, burntRadiusMetres, opts) 
   const zoneIndex = opts?.zoneIndex ?? -1;
   const Iraw = THREE.MathUtils.clamp(opts?.intensity ?? 1, 0.06, 1.55);
   const Ieff = Iraw ** 0.94;
+  /** Optional global trim on particle counts (1 = unchanged). Lets callers cheap-out distant spot fires. */
+  const particleMul = THREE.MathUtils.clamp(opts?.particleMul ?? 1, 0.1, 1);
   /** Ground footprint multiplier — weak fires occupy a visibly smaller halo. */
   const footMul = THREE.MathUtils.clamp(0.74 + Math.sqrt(Ieff) * 0.36, 0.72, 1.26);
-  const nMulSmoke = THREE.MathUtils.clamp(0.38 + Ieff * 0.82, 0.28, 1.42);
-  const nMulFlame = THREE.MathUtils.clamp(0.22 + Ieff * 0.96, 0.14, 1.52);
+  const nMulSmoke = THREE.MathUtils.clamp(0.38 + Ieff * 0.82, 0.28, 1.42) * particleMul;
+  const nMulFlame = THREE.MathUtils.clamp(0.22 + Ieff * 0.96, 0.14, 1.52) * particleMul;
   const opMul = THREE.MathUtils.clamp(0.48 + Ieff * 0.65, 0.42, 1.14);
   const sizeMul = THREE.MathUtils.clamp(0.76 + Ieff * 0.38, 0.7, 1.28);
   const riseMul = THREE.MathUtils.clamp(0.86 + Ieff * 0.22, 0.82, 1.22);
@@ -1190,10 +1192,15 @@ function attachWildfireBurnZonesFromConfig(meadowRoot) {
   for (let zi = 0; zi < zones.length; zi++) {
     const z = zones[zi];
     const iq = THREE.MathUtils.clamp(z.intensity ?? 1, 0.015, 1.55);
+    // Small distant spot fires don't deserve a hero-zone particle budget — they
+    // dominate the per-frame point cloud cost. Hero zones (≥0.30 intensity)
+    // stay full-fidelity.
+    const particleMul = iq >= 0.3 ? 1 : 0.35;
     ticks.push(
       attachWildfireBurnInferno(meadowRoot, z.ox, z.oz, z.radiusMeters, {
         intensity: iq,
         zoneIndex: zi,
+        particleMul,
       }),
     );
   }

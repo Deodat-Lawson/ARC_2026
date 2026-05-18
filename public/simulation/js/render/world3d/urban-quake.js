@@ -825,14 +825,22 @@ function addDamageDecals(group, footprint, height, damage, fire, mats) {
   }
 }
 
-// ── Wildfire-style smoke plume (Points particles with rise + sway + turbulence) ──
+// ── Wildfire-style inferno plume (Points particles with rise + sway + turbulence) ──
 // Ported from wildfire-meadow-scene.js::attachWildfireBurnInferno, scaled for the
 // urban grid plume (radius ~3–6 cells vs the meadow's tens of metres).
+// Adds flame / ember / spark layers on top of the smoke column so the base of
+// each fire reads as live flame rather than coloured sphere puffs.
 
 /** @type {THREE.CanvasTexture | null} */
 let _urbanSmokeMap = null;
 /** @type {THREE.CanvasTexture | null} */
 let _urbanSmokeWispMap = null;
+/** @type {THREE.CanvasTexture | null} */
+let _urbanFlareMap = null;
+/** @type {THREE.CanvasTexture | null} */
+let _urbanFlareCoreMap = null;
+/** @type {THREE.CanvasTexture | null} */
+let _urbanSparkMap = null;
 
 function bakeUrbanSmokeBillow(which) {
   const s = which === "smoke_wisp" ? 112 : 96;
@@ -865,10 +873,29 @@ function bakeUrbanSmokeBillow(which) {
     }
   } else {
     const g0 = cx.createRadialGradient(s * 0.5, s * 0.52, s * 0.02, s * 0.5, s * 0.52, s * 0.44);
-    g0.addColorStop(0, "rgba(240,237,231,0.38)");
-    g0.addColorStop(0.32, "rgba(120,115,112,0.22)");
-    g0.addColorStop(0.68, "rgba(60,58,58,0.1)");
-    g0.addColorStop(1, "rgba(42,41,43,0)");
+    if (which === "flare") {
+      g0.addColorStop(0, "rgba(255,255,255,0.92)");
+      g0.addColorStop(0.16, "rgba(255,235,215,0.78)");
+      g0.addColorStop(0.45, "rgba(255,150,74,0.38)");
+      g0.addColorStop(0.75, "rgba(200,60,18,0.12)");
+      g0.addColorStop(1, "rgba(120,38,14,0)");
+    } else if (which === "flare_core") {
+      g0.addColorStop(0, "rgba(255,255,255,0.98)");
+      g0.addColorStop(0.12, "rgba(255,248,220,0.85)");
+      g0.addColorStop(0.38, "rgba(255,200,120,0.35)");
+      g0.addColorStop(0.72, "rgba(255,110,48,0.08)");
+      g0.addColorStop(1, "rgba(160,42,14,0)");
+    } else if (which === "spark") {
+      g0.addColorStop(0, "rgba(255,255,255,1)");
+      g0.addColorStop(0.18, "rgba(255,236,190,0.95)");
+      g0.addColorStop(0.55, "rgba(255,170,96,0.35)");
+      g0.addColorStop(1, "rgba(255,120,60,0)");
+    } else {
+      g0.addColorStop(0, "rgba(240,237,231,0.38)");
+      g0.addColorStop(0.32, "rgba(120,115,112,0.22)");
+      g0.addColorStop(0.68, "rgba(60,58,58,0.1)");
+      g0.addColorStop(1, "rgba(42,41,43,0)");
+    }
     cx.fillStyle = g0;
     cx.fillRect(0, 0, s, s);
   }
@@ -879,33 +906,48 @@ function bakeUrbanSmokeBillow(which) {
 function getUrbanSmokeMaps() {
   if (!_urbanSmokeMap) _urbanSmokeMap = bakeUrbanSmokeBillow("smoke");
   if (!_urbanSmokeWispMap) _urbanSmokeWispMap = bakeUrbanSmokeBillow("smoke_wisp");
-  return { smokeMap: _urbanSmokeMap, smokeWispMap: _urbanSmokeWispMap };
+  if (!_urbanFlareMap) _urbanFlareMap = bakeUrbanSmokeBillow("flare");
+  if (!_urbanFlareCoreMap) _urbanFlareCoreMap = bakeUrbanSmokeBillow("flare_core");
+  if (!_urbanSparkMap) _urbanSparkMap = bakeUrbanSmokeBillow("spark");
+  return {
+    smokeMap: _urbanSmokeMap,
+    smokeWispMap: _urbanSmokeWispMap,
+    flareMap: _urbanFlareMap,
+    flareCoreMap: _urbanFlareCoreMap,
+    sparkMap: _urbanSparkMap,
+  };
 }
 
 /**
- * Three Points-based smoke plume at (baseX, baseZ). Returns a step(t, driftX, driftZ)
+ * Three Points-based smoke + flame plume at (baseX, baseZ). Returns a step(t, driftX, driftZ)
  * function — wind is supplied per-frame by the parent so multiple plumes oscillate in sync,
  * matching the wildfire inferno's behaviour. Particle motion: rise w/ lift jitter,
  * wind sway, turbulent swirl, recycle when above ceiling or beyond the radial limit.
  */
 function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
-  const { smokeMap, smokeWispMap } = getUrbanSmokeMaps();
+  const { smokeMap, smokeWispMap, flareMap, flareCoreMap, sparkMap } = getUrbanSmokeMaps();
 
   const group = new THREE.Group();
-  group.name = "urban_smoke_plume";
+  group.name = "urban_inferno_plume";
   group.position.set(baseX, 0, baseZ);
   scene.add(group);
+
+  const _tmpC0 = new THREE.Color();
+  const _tmpC1 = new THREE.Color();
 
   function spawnLayer(n, tex, conf) {
     const {
       radialMul, minY, spreadY, capY, rise, sway, size, opacity, colorHex,
       renderOrder, name, turbAmp, turbHz, liftJitter, windMul = 1,
+      additive = false, varyColorHex,
     } = conf;
 
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(n * 3);
     const swirl = new Float32Array(n);
     const liftMul = new Float32Array(n);
+    /** @type {Float32Array | null} */
+    let colAttr = null;
     const radialLimit = radius * radialMul;
 
     const reposition = (ix) => {
@@ -917,22 +959,44 @@ function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
       pos[i3 + 1] = minY + Math.random() * spreadY;
       swirl[ix] = Math.random() * Math.PI * 2;
       liftMul[ix] = 1 + (Math.random() * 2 - 1) * liftJitter;
+      if (colAttr && varyColorHex != null) {
+        _tmpC0.setHex(colorHex);
+        _tmpC1.setHex(varyColorHex);
+        _tmpC0.lerp(_tmpC1, Math.random() * 0.92);
+        colAttr[i3] = _tmpC0.r;
+        colAttr[i3 + 1] = _tmpC0.g;
+        colAttr[i3 + 2] = _tmpC0.b;
+      }
     };
 
     for (let ix = 0; ix < n; ix++) reposition(ix);
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    if (varyColorHex != null) {
+      colAttr = new Float32Array(n * 3);
+      geo.setAttribute("color", new THREE.BufferAttribute(colAttr, 3));
+      for (let ix = 0; ix < n; ix++) {
+        const i3 = ix * 3;
+        _tmpC0.setHex(colorHex);
+        _tmpC1.setHex(varyColorHex);
+        _tmpC0.lerp(_tmpC1, Math.random() * 0.92);
+        colAttr[i3] = _tmpC0.r;
+        colAttr[i3 + 1] = _tmpC0.g;
+        colAttr[i3 + 2] = _tmpC0.b;
+      }
+    }
 
     const mat = new THREE.PointsMaterial({
       map: tex,
-      color: colorHex,
+      color: varyColorHex != null ? 0xffffff : colorHex,
       opacity,
       size,
       transparent: true,
-      depthWrite: false,
-      blending: THREE.NormalBlending,
+      depthWrite: !additive,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
       sizeAttenuation: true,
       fog: true,
-      toneMapped: false,
+      toneMapped: !additive,
+      vertexColors: varyColorHex != null,
     });
 
     const pts = new THREE.Points(geo, mat);
