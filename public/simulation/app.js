@@ -42,7 +42,7 @@ import {
   applyFleetDialogueCotDom,
   liveAiModeEnabled,
   scheduleLiveAiRound,
-  probeLmStudio,
+  probeGemmaBackend,
   setAiStatusBadge,
   resetDecisionFeeds,
   bindAiDom,
@@ -570,7 +570,7 @@ Promise.all([
         if (timer) startAuto();
       },
     });
-    if (liveAiModeEnabled) void probeLmStudio();
+    if (liveAiModeEnabled) void probeGemmaBackend();
     else setAiStatusBadge(false);
   })
   .catch((err) => {

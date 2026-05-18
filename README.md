@@ -205,7 +205,6 @@ Optional GPU: `LITERT_BACKEND=gpu LITERT_VISION_BACKEND=gpu python scripts/liter
 | File | Purpose |
 |------|---------|
 | [**Writeup.md**](Writeup.md) | Kaggle writeup — problem, architecture, impact |
-| [**已改进的部分对比.md**](已改进的部分对比.md) | Changelog vs pre-refactor (Chinese) |
 | [**whitepaper.md**](whitepaper.md) | Extended system design |
 
 ---
@@ -224,4 +223,6 @@ A.R.C. is **decision support** for research and hackathon demonstration. It does
 
 ## License
 
-See `LICENSE` if present; otherwise follow team / hackathon submission terms.
+MIT — see [LICENSE](LICENSE).
+
+**Demo video & cover:** see the [Kaggle submission](https://www.kaggle.com/competitions/gemma-4-good-hackathon) (project writeup, gallery, and linked media).

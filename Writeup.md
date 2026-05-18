@@ -19,28 +19,23 @@ After a major urban earthquake, professional rescuers face a **72-hour survival 
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  subgraph edge [Edge device]
-    FPV[FPV frames]
-    LiteRT[Gemma 4 E4B LiteRT]
-    FC[FC tools]
-  end
-  subgraph web [Mission Command]
-    Sim["/simulation"]
-    API["/api/gemma-chat"]
-  end
-  subgraph core [arc_core Python]
-    Hub[DecisionHub]
-    Perc[GemmaPerceiver]
-    TL[timeline_generator]
-  end
-  FPV --> Sim
-  Sim --> API --> LiteRT
-  LiteRT --> FC
-  Hub --> Perc --> LiteRT
-  TL --> Perc
-  Sim -.-> Hub
+```text
+                    ┌── Mission Command (browser) ──────────────────┐
+                    │  /simulation  ──►  /api/gemma-chat            │
+                    └────────────┬──────────────────────────────────┘
+                                 │
+  FPV frames ────────────────────┘
+       │
+       ▼
+┌── Edge device ─────────────────────────────────────────────────────┐
+│  Gemma 4 E4B (LiteRT)  ──►  function-calling tools (FC)          │
+└──────────────────────────────▲─────────────────────────────────────┘
+                               │
+┌── arc_core (Python) ─────────┴───────────────────────────────────┐
+│  timeline_generator ──► GemmaPerceiver ◄── DecisionHub            │
+│                              ▲                                      │
+│                              └── (optional) ◄── /simulation       │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 **Data flow (live demo):**
