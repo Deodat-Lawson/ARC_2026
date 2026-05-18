@@ -73,12 +73,16 @@ export function syncTacticalBasemapSize() {
   }
 }
 
+/** Protomaps-hosted glyph PBFs (same ecosystem as default Firenze PMTiles); avoids flaky demo CDN. */
+const TACTICAL_GLYPHS_URL =
+  "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf";
+
 export function makeTacticalBasemapStyle(presetKey) {
   const pk = presetKey || currentScenePreset || "urban_quake";
   const b = getPresetBasemap(pk);
   return {
     version: 8,
-    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+    glyphs: TACTICAL_GLYPHS_URL,
     sources: {
       protomaps: {
         type: "vector",

@@ -12,7 +12,10 @@ import {
   createSkyDomeMesh,
   createWildfireMeadowRoot,
   FOG_COLOR_HEX,
+  MEADOW_FOG_FAR,
+  MEADOW_FOG_NEAR,
   SKY_BOTTOM,
+  WILDFIRE_LIGHT_LEGACY_SCALE,
 } from "./wildfire-meadow-scene.js";
 
 let wfScene = null;
@@ -30,6 +33,8 @@ let wfBootGeneration = 0;
 
 /** EZ-Tree instances currently bound (wind animation). */
 let wfEzTrees = [];
+/** @type {THREE.Group | null} */
+let wfForestRoot = null;
 
 function povColumnEl() {
   return document.querySelector(".map-pov-col");
@@ -97,6 +102,7 @@ function animateWildfire() {
   if (!wfRenderer || !wfScene || !wfCamera || !wfControls) return;
   const elapsed = (typeof performance !== "undefined" ? performance.now() : Date.now()) * 0.001;
   grassWindTimeUniform.value = elapsed;
+  wfForestRoot?.userData?.tickWildfireBurn?.(elapsed);
   for (let i = 0; i < wfEzTrees.length; i++) wfEzTrees[i]?.update?.(elapsed);
   wfControls.update();
   wfRenderer.render(wfScene, wfCamera);
@@ -117,7 +123,8 @@ function bootWildfireForest(bootId, canvas, povFrame) {
     alpha: false,
     powerPreference: "high-performance",
   });
-  wfRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  /** Meadow is fill-rate heavy; modest cap trims fragment cost on retina without large visual loss. */
+  wfRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.55));
   wfRenderer.setSize(w, h, false);
 
   const horizon = SKY_BOTTOM.clone().multiplyScalar(0.92).getHex();
@@ -131,16 +138,18 @@ function bootWildfireForest(bootId, canvas, povFrame) {
 
   wfScene = new THREE.Scene();
   wfScene.background = new THREE.Color(horizon);
-  wfScene.fog = new THREE.Fog(FOG_COLOR_HEX, 22, 238);
+  wfScene.fog = new THREE.Fog(FOG_COLOR_HEX, MEADOW_FOG_NEAR, MEADOW_FOG_FAR);
 
   wfScene.add(createSkyDomeMesh());
 
+  const Ls = WILDFIRE_LIGHT_LEGACY_SCALE;
+
   wfScene.add(new THREE.HemisphereLight(0xd6eeff, 0x5c4a36, 1.08));
   const sun = new THREE.DirectionalLight(0xfff8ea, 1.42);
-  sun.position.set(52, 76, 38);
+  sun.position.set(52 * Ls, 76 * Ls, 38 * Ls);
   wfScene.add(sun);
   const fillSun = new THREE.DirectionalLight(0xd4e8ff, 0.42);
-  fillSun.position.set(-44, 38, -42);
+  fillSun.position.set(-44 * Ls, 38 * Ls, -42 * Ls);
   wfScene.add(fillSun);
   wfScene.add(new THREE.AmbientLight(0xd8eaf5, 0.38));
 
@@ -163,18 +172,20 @@ function bootWildfireForest(bootId, canvas, povFrame) {
   if (bootId !== wfBootGeneration) return;
 
   try {
-    const { root: forestRoot, trees } = createWildfireMeadowRoot();
-    wfEzTrees = trees;
-    const maxAniso = wfRenderer.capabilities.getMaxAnisotropy();
-    forestRoot.traverse((o) => {
-      if (!o.isMesh || !o.material?.map) return;
-      o.material.map.anisotropy = Math.min(14, maxAniso);
+    const texAnisoCeil = Math.min(8, wfRenderer.capabilities.getMaxAnisotropy());
+    const { root: forestRoot, trees } = createWildfireMeadowRoot({
+      maxMapAniso: texAnisoCeil,
+      shouldAbort: () => bootId !== wfBootGeneration,
+      onTreeMountComplete: () => frameCameraOnContent(wfCamera, wfControls, forestRoot),
     });
+    wfEzTrees = trees;
+    wfForestRoot = forestRoot;
     wfScene.add(forestRoot);
     frameCameraOnContent(wfCamera, wfControls, forestRoot);
   } catch (err) {
     console.error("[wildfire ez-tree]", err);
     wfEzTrees = [];
+    wfForestRoot = null;
     emitToast("default", "EZ-Tree forest failed — check console.");
   }
 
@@ -184,15 +195,19 @@ function bootWildfireForest(bootId, canvas, povFrame) {
 function disposeSceneResources(scene) {
   const seenGeo = new Set();
   scene?.traverse((obj) => {
-    if (obj.isInstancedMesh || obj.isMesh) {
-      const g = obj.geometry;
-      if (g && !seenGeo.has(g)) {
-        g.dispose();
-        seenGeo.add(g);
-      }
-      const mats = obj.material;
-      if (Array.isArray(mats)) mats.forEach((mat) => mat?.dispose?.());
-      else mats?.dispose?.();
+    if (!obj.isInstancedMesh && !obj.isMesh && !obj.isPoints) return;
+
+    const g = obj.geometry;
+    if (g && !seenGeo.has(g)) {
+      g.dispose();
+      seenGeo.add(g);
+    }
+    const mats = obj.material;
+    const list = Array.isArray(mats) ? mats : [mats];
+    for (const mat of list) {
+      if (!mat) continue;
+      if (typeof mat.map?.dispose === "function") mat.map.dispose();
+      mat.dispose?.();
     }
   });
 }
@@ -232,8 +247,10 @@ export function teardown3D() {
   wfControls = null;
 
   wfEzTrees = [];
+  wfForestRoot = null;
 
   if (wfScene) {
+    wfScene.getObjectByName("wildfire_ez_forest")?.userData?.cancelWildfireEzTreeMount?.();
     disposeSceneResources(wfScene);
     wfScene.clear();
     wfScene = null;

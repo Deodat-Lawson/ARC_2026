@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/sync-simulation-vendor.mjs",
+    "prebuild": "node scripts/sync-simulation-vendor.mjs",
+    "postinstall": "node scripts/sync-simulation-vendor.mjs",
     "dev": "next dev --turbo",
     "litert:server": "python scripts/litert_openai_server.py",
     "build": "next build",

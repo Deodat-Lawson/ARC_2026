@@ -70,6 +70,11 @@ coverage.xml
 *.cover
 *.pywave
 
+# Simulation vendor copies (generated from node_modules by scripts/sync-simulation-vendor.mjs)
+public/simulation/vendor/three/
+public/simulation/vendor/maplibre-gl/
+public/simulation/vendor/.vendor-stamp.json
+
 # Local simulation outputs and scratch assets
 scratch/
 snapshot_*.json

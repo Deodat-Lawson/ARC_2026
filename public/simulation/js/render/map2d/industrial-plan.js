@@ -4,8 +4,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
-
-const INDUSTRIAL_GLTF_REL = "../../../data/industrial/industrial-scene.glb";
+import { resolveIndustrialSceneGltfUrl } from "../../config/industrial-scene-asset.js";
 
 const RASTER_SIZE = 1536;
 
@@ -15,12 +14,7 @@ let cachedRaster = null;
 let loadStarted = false;
 
 function industrialGltfHref() {
-  try {
-    return new URL(INDUSTRIAL_GLTF_REL, import.meta.url).href;
-  } catch {
-    const origin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
-    return origin ? `${origin}/simulation/data/industrial/industrial-scene.glb` : "/simulation/data/industrial/industrial-scene.glb";
-  }
+  return resolveIndustrialSceneGltfUrl();
 }
 
 async function rasterizeIndustrialFacilityTopDown() {

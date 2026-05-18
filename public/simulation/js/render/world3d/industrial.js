@@ -27,12 +27,13 @@ import {
   tacticalFpvPhaseSeed,
 } from "./fleet-fpv-kit.js";
 import { emitToast } from "../../ui/toast.js";
+import {
+  INDUSTRIAL_SCENE_PATH,
+  resolveIndustrialSceneGltfUrl,
+} from "../../config/industrial-scene-asset.js";
 
-/** Path when `public/` is served at site root (e.g. `next dev`). */
-export const LOCAL_INDUSTRIAL_GLTF_PATH = "/simulation/data/industrial/industrial-scene.glb";
-
-/** Resolved from this file → works with Live Server (`public/` or repo root) and Next. */
-const INDUSTRIAL_GLTF_REL_TO_MODULE = "../../../data/industrial/industrial-scene.glb";
+/** @deprecated Use `INDUSTRIAL_SCENE_PATH` from `industrial-scene-asset.js`. */
+export const LOCAL_INDUSTRIAL_GLTF_PATH = INDUSTRIAL_SCENE_PATH;
 
 /**
  * Compress facility along Y (< 1 shortens height). Bottom of bbox stays fixed in world Y.
@@ -289,15 +290,7 @@ function attachIndustrialHeightCalibration(canvas, povFrame, bootId) {
 }
 
 function gltfAssetUrl() {
-  if (typeof window === "undefined") {
-    return LOCAL_INDUSTRIAL_GLTF_PATH;
-  }
-  try {
-    return new URL(INDUSTRIAL_GLTF_REL_TO_MODULE, import.meta.url).href;
-  } catch {
-    const origin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
-    return origin ? `${origin}${LOCAL_INDUSTRIAL_GLTF_PATH}` : LOCAL_INDUSTRIAL_GLTF_PATH;
-  }
+  return resolveIndustrialSceneGltfUrl();
 }
 
 /** Keeps world-space minimum Y after vertical scale (anchor bottom of bbox). */
