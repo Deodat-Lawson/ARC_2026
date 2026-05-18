@@ -171,10 +171,10 @@ export function M2Planning() {
               />
               {isPrimary ? (
                 <foreignObject
-                  x={t.x - 14}
-                  y={t.y - 9}
-                  width="28"
-                  height="18"
+                  x={t.x - 24}
+                  y={t.y - 16}
+                  width="48"
+                  height="32"
                 >
                   <div style={{ width: "100%", height: "100%" }}>
                     <Suspense fallback={null}>

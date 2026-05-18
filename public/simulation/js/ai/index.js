@@ -516,6 +516,9 @@ export function setAiStatusBadge(live) {
   else label.textContent = "… Gemma 4";
 }
 
+const POV_MAX_EDGE = 384;
+let _povScaleCanvas = null;
+
 export function capturePoV() {
   const povCanvas =
     povs[0]?.canvas ||
@@ -523,7 +526,24 @@ export function capturePoV() {
     document.querySelector("[data-pov-canvas]");
   if (!povCanvas || typeof povCanvas.toDataURL !== "function") return null;
   try {
-    return povCanvas.toDataURL("image/jpeg", 0.5);
+    const w = povCanvas.width || povCanvas.clientWidth || 0;
+    const h = povCanvas.height || povCanvas.clientHeight || 0;
+    const longEdge = Math.max(w, h);
+    if (!longEdge || longEdge <= POV_MAX_EDGE) {
+      return povCanvas.toDataURL("image/jpeg", 0.7);
+    }
+    const scale = POV_MAX_EDGE / longEdge;
+    const dw = Math.max(1, Math.round(w * scale));
+    const dh = Math.max(1, Math.round(h * scale));
+    if (!_povScaleCanvas) _povScaleCanvas = document.createElement("canvas");
+    _povScaleCanvas.width = dw;
+    _povScaleCanvas.height = dh;
+    const ctx = _povScaleCanvas.getContext("2d");
+    if (!ctx) return povCanvas.toDataURL("image/jpeg", 0.5);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "medium";
+    ctx.drawImage(povCanvas, 0, 0, dw, dh);
+    return _povScaleCanvas.toDataURL("image/jpeg", 0.7);
   } catch {
     return null;
   }
@@ -560,6 +580,7 @@ export function pushAgentHistory(agent, role, content) {
 }
 
 async function callGemmaChat(agent, message, { history = [], image_base64, stream = false } = {}) {
+  const t0 = performance.now();
   const res = await fetch(AI_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -569,8 +590,15 @@ async function callGemmaChat(agent, message, { history = [], image_base64, strea
     const err = await res.json().catch(() => ({}));
     return { fallback: true, content: "", error: err.error || res.statusText };
   }
-  if (stream) return { fallback: false, stream: res.body };
+  if (stream) {
+    const headerLatency = Number(res.headers.get("X-Arc-Latency-Ms")) || Math.round(performance.now() - t0);
+    console.info(`[gemma] agent=${agent} stream=true ttfb=${headerLatency}ms image=${image_base64 ? "yes" : "no"}`);
+    return { fallback: false, stream: res.body };
+  }
   const data = await res.json();
+  const latency = data?.meta?.latency_ms ?? Math.round(performance.now() - t0);
+  const tokens = data?.meta?.tokens ?? null;
+  console.info(`[gemma] agent=${agent} latency=${latency}ms tokens=${tokens} image=${image_base64 ? "yes" : "no"}`);
   return data;
 }
 

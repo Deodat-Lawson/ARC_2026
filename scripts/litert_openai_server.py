@@ -10,7 +10,7 @@ Env:
   LITERT_MODEL_PATH     — default: repo_root/models/gemma-4-E4B-it.litertlm
   LITERT_BACKEND        — cpu | gpu (LLM backend, default cpu)
   LITERT_VISION_BACKEND — cpu | gpu (vision tower, default cpu; required for image+blob)
-  LITERT_MAX_TOKENS     — default 2048
+  LITERT_MAX_TOKENS     — default 512 (raise for long completions; bounds worst-case latency)
   LITERT_SERVER_HOST    — default 127.0.0.1
   LITERT_SERVER_PORT    — default 8787
 """
@@ -87,7 +87,7 @@ def get_engine():
         ensure_model_file(path)
         main_backend = _pick_backend(os.environ.get("LITERT_BACKEND", "cpu"))
         vision_backend = _pick_backend(os.environ.get("LITERT_VISION_BACKEND", "cpu"))
-        max_tok = int(os.environ.get("LITERT_MAX_TOKENS", "2048"))
+        max_tok = int(os.environ.get("LITERT_MAX_TOKENS", "512"))
         logger.info(
             "Loading LiteRT Engine (Gemma 4 E4B) backend=%s vision_backend=%s path=%s",
             main_backend.name,

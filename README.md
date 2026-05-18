@@ -58,6 +58,14 @@ curl http://localhost:3000/api/gemma-chat
 # → {"ok":true,"backend":"litert","model":"gemma-4-E4B-it-litertlm",...}
 ```
 
+**Apple Silicon (M1/M2/M3/M4):** `.env.example` enables `LITERT_BACKEND=gpu` /
+`LITERT_VISION_BACKEND=gpu` by default — Metal is dramatically faster than CPU.
+Comment those lines out on Intel/AMD machines without a supported GPU build.
+
+**Measure latency:** `bash scripts/bench_gemma.sh` runs three prompts per agent
+and reports min/median/max from the `X-Arc-Latency-Ms` header. The browser
+console also logs `[gemma] agent=… latency=…ms tokens=…` during a live round.
+
 ---
 
 ## What this repo contains

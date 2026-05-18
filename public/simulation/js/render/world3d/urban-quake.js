@@ -87,7 +87,7 @@ export const world = {
   perimeterBuildings: null,
   scenarioBuildingsGroup: null,
   roadsGroup: null,
-  smokePuffs: [],
+  smokeSteps: [],
   fireGlows: [],
   brokenBranches: [],
   skyClouds: [],
@@ -268,8 +268,8 @@ function buildHorizonSilhouette(scenario) {
  *  POVs (cars, rescuers) never see the world's edge. Uses the same building
  *  templates as the in-scene scenario buildings so the look stays consistent.
  *  Pure visual fill — never queried by sim or planner. */
-function addPerimeterBuildings(scenario, buildingTemplates) {
-  if (!buildingTemplates?.length || !world.scene) return;
+function addPerimeterBuildings(scenario, templateMeta) {
+  if (!templateMeta?.length || !world.scene) return;
   const [cols, rows] = scenario.map.size;
 
   if (world.perimeterBuildings) {
@@ -334,18 +334,11 @@ function addPerimeterBuildings(scenario, buildingTemplates) {
 
   for (let side = 0; side < 4; side += 1) buildStrip(side);
 
-  const group = new THREE.Group();
-  group.name = "perimeter-buildings";
   for (const e of placements) {
-    const tIdx = Math.floor(hash01(e.x, e.z, 611) * buildingTemplates.length)
-      % buildingTemplates.length;
-    const template = buildingTemplates[tIdx];
-    const asset = template.clone(true);
-    scaleAssetBuildingToFootprint(asset, [0, 0, e.w, e.d], e.h);
-    asset.position.set(e.x, groundedY(asset) + 0.025, e.z);
-    asset.rotation.y = e.yaw;
-    group.add(asset);
+    e.templateIndex = Math.floor(hash01(e.x, e.z, 611) * templateMeta.length)
+      % templateMeta.length;
   }
+  const group = placeBuildingsInstanced("perimeter-buildings", templateMeta, placements);
   world.scene.add(group);
   world.perimeterBuildings = group;
 }
@@ -832,10 +825,236 @@ function addDamageDecals(group, footprint, height, damage, fire, mats) {
   }
 }
 
+// ── Wildfire-style smoke plume (Points particles with rise + sway + turbulence) ──
+// Ported from wildfire-meadow-scene.js::attachWildfireBurnInferno, scaled for the
+// urban grid plume (radius ~3–6 cells vs the meadow's tens of metres).
+
+/** @type {THREE.CanvasTexture | null} */
+let _urbanSmokeMap = null;
+/** @type {THREE.CanvasTexture | null} */
+let _urbanSmokeWispMap = null;
+
+function bakeUrbanSmokeBillow(which) {
+  const s = which === "smoke_wisp" ? 112 : 96;
+  const canvas = document.createElement("canvas");
+  canvas.width = s;
+  canvas.height = s;
+  const cx = canvas.getContext("2d");
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  if (!cx) {
+    tex.needsUpdate = true;
+    return tex;
+  }
+  cx.clearRect(0, 0, s, s);
+  if (which === "smoke_wisp") {
+    for (let k = 0; k < 7; k++) {
+      const gx = s * (0.22 + Math.random() * 0.56);
+      const gy = s * (0.22 + Math.random() * 0.56);
+      const gr = s * (0.07 + Math.random() * 0.22);
+      const grad = cx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+      grad.addColorStop(0, "rgba(245,240,233,0.42)");
+      grad.addColorStop(0.45, "rgba(130,125,120,0.18)");
+      grad.addColorStop(1, "rgba(40,38,40,0)");
+      cx.fillStyle = grad;
+      cx.beginPath();
+      cx.arc(gx, gy, gr, 0, Math.PI * 2);
+      cx.fill();
+    }
+  } else {
+    const g0 = cx.createRadialGradient(s * 0.5, s * 0.52, s * 0.02, s * 0.5, s * 0.52, s * 0.44);
+    g0.addColorStop(0, "rgba(240,237,231,0.38)");
+    g0.addColorStop(0.32, "rgba(120,115,112,0.22)");
+    g0.addColorStop(0.68, "rgba(60,58,58,0.1)");
+    g0.addColorStop(1, "rgba(42,41,43,0)");
+    cx.fillStyle = g0;
+    cx.fillRect(0, 0, s, s);
+  }
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function getUrbanSmokeMaps() {
+  if (!_urbanSmokeMap) _urbanSmokeMap = bakeUrbanSmokeBillow("smoke");
+  if (!_urbanSmokeWispMap) _urbanSmokeWispMap = bakeUrbanSmokeBillow("smoke_wisp");
+  return { smokeMap: _urbanSmokeMap, smokeWispMap: _urbanSmokeWispMap };
+}
+
+/**
+ * Three Points-based smoke plume at (baseX, baseZ). Returns a step(t, driftX, driftZ)
+ * function — wind is supplied per-frame by the parent so multiple plumes oscillate in sync,
+ * matching the wildfire inferno's behaviour. Particle motion: rise w/ lift jitter,
+ * wind sway, turbulent swirl, recycle when above ceiling or beyond the radial limit.
+ */
+function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
+  const { smokeMap, smokeWispMap } = getUrbanSmokeMaps();
+
+  const group = new THREE.Group();
+  group.name = "urban_smoke_plume";
+  group.position.set(baseX, 0, baseZ);
+  scene.add(group);
+
+  function spawnLayer(n, tex, conf) {
+    const {
+      radialMul, minY, spreadY, capY, rise, sway, size, opacity, colorHex,
+      renderOrder, name, turbAmp, turbHz, liftJitter, windMul = 1,
+    } = conf;
+
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(n * 3);
+    const swirl = new Float32Array(n);
+    const liftMul = new Float32Array(n);
+    const radialLimit = radius * radialMul;
+
+    const reposition = (ix) => {
+      const i3 = ix * 3;
+      const rr = Math.sqrt(Math.random()) * radialLimit;
+      const th = Math.random() * Math.PI * 2;
+      pos[i3] = Math.cos(th) * rr;
+      pos[i3 + 2] = Math.sin(th) * rr;
+      pos[i3 + 1] = minY + Math.random() * spreadY;
+      swirl[ix] = Math.random() * Math.PI * 2;
+      liftMul[ix] = 1 + (Math.random() * 2 - 1) * liftJitter;
+    };
+
+    for (let ix = 0; ix < n; ix++) reposition(ix);
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+
+    const mat = new THREE.PointsMaterial({
+      map: tex,
+      color: colorHex,
+      opacity,
+      size,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      sizeAttenuation: true,
+      fog: true,
+      toneMapped: false,
+    });
+
+    const pts = new THREE.Points(geo, mat);
+    pts.name = name;
+    pts.frustumCulled = false;
+    pts.renderOrder = renderOrder;
+    group.add(pts);
+
+    return (dt, wPhase, driftX, driftZ) => {
+      const wx = driftX * windMul * dt;
+      const wz = driftZ * windMul * dt;
+      for (let ix = 0; ix < n; ix++) {
+        const i3 = ix * 3;
+        const lift =
+          rise * dt * liftMul[ix] *
+          (1 + 0.095 * Math.sin(wPhase * 8.95 + swirl[ix]) +
+            0.05 * Math.sin(wPhase * 17.3 + ix * 0.31));
+        pos[i3 + 1] += lift;
+        pos[i3] += wx * sway;
+        pos[i3 + 2] += wz * sway;
+        if (turbAmp > 0) {
+          const tp = wPhase * turbHz + swirl[ix] * 4.17 + ix * 0.051;
+          const tu = turbAmp * dt * (0.85 + 0.15 * Math.sin(wPhase * 2.2 + ix));
+          pos[i3] += Math.sin(tp) * tu;
+          pos[i3 + 2] += Math.cos(tp * 0.88) * tu;
+          pos[i3 + 1] += Math.sin(tp * 0.37) * tu * 0.22;
+        }
+        const dist = Math.hypot(pos[i3], pos[i3 + 2]);
+        if (pos[i3 + 1] > capY || dist > radialLimit * 1.08) reposition(ix);
+      }
+      geo.attributes.position.needsUpdate = true;
+    };
+  }
+
+  // Four layers matching the wildfire inferno smoke 1:1: low haze, midrange wisps,
+  // dense thick column, and a wide low ash drift. Particle counts + sizes scaled
+  // down to fit a ~5-unit urban plume vs the meadow's ~14m burn radius.
+  const ceilingY = Math.max(28, radius * 7);
+  const stepHaze = spawnLayer(160, smokeMap, {
+    radialMul: 1.32,
+    minY: 0.3,
+    spreadY: 9,
+    capY: ceilingY,
+    rise: 5.6,
+    sway: 0.58,
+    size: 7,
+    opacity: 0.22,
+    colorHex: 0x5d5756,
+    renderOrder: -4,
+    name: "urban_smoke_haze",
+    turbAmp: 0.95,
+    turbHz: 4.2,
+    liftJitter: 0.22,
+  });
+  const stepWisp = spawnLayer(110, smokeWispMap, {
+    radialMul: 1.18,
+    minY: 0.6,
+    spreadY: 7,
+    capY: ceilingY * 0.86,
+    rise: 4.4,
+    sway: 0.52,
+    size: 9,
+    opacity: 0.135,
+    colorHex: 0x4a4542,
+    renderOrder: -3,
+    name: "urban_smoke_wisp",
+    turbAmp: 1.25,
+    turbHz: 3.4,
+    liftJitter: 0.35,
+  });
+  const stepThick = spawnLayer(70, smokeMap, {
+    radialMul: 1.2,
+    minY: 0.5,
+    spreadY: 12,
+    capY: ceilingY * 0.8,
+    rise: 8.8,
+    sway: 0.5,
+    size: 11,
+    opacity: 0.1,
+    colorHex: 0x2e2c2a,
+    renderOrder: -2,
+    name: "urban_smoke_thick",
+    turbAmp: 0.55,
+    turbHz: 2.8,
+    liftJitter: 0.18,
+  });
+  // Wide, low ash drift — same as the wildfire "burn_ash_near" layer.
+  const stepAsh = spawnLayer(80, smokeMap, {
+    radialMul: 1.45,
+    minY: 0,
+    spreadY: radius * 0.5,
+    capY: Math.max(2, radius * 1.4),
+    rise: 1.4,
+    sway: 0.72,
+    size: 0.55,
+    opacity: 0.16,
+    colorHex: 0x716b66,
+    renderOrder: -1,
+    name: "urban_smoke_ash_near",
+    turbAmp: 1.05,
+    turbHz: 2.05,
+    liftJitter: 0.4,
+    windMul: 1.65,
+  });
+
+  let prevT = NaN;
+  return (t, driftX, driftZ) => {
+    const dt = Number.isFinite(prevT)
+      ? Math.min(Math.max(t - prevT, 1e-4), 1 / 18)
+      : 1 / 55;
+    prevT = t;
+    stepHaze(dt, t, driftX, driftZ);
+    stepWisp(dt, t, driftX, driftZ);
+    stepThick(dt, t, driftX, driftZ);
+    stepAsh(dt, t, driftX, driftZ);
+  };
+}
+
 function addFireSmoke(scenario) {
   const fireZones = (scenario?.map?.risk_zones || []).filter((z) => z.type === "fire");
   if (!fireZones.length) return;
-  world.smokePuffs = world.smokePuffs || [];
+  world.smokeSteps = world.smokeSteps || [];
   world.fireGlows = world.fireGlows || [];
 
   for (const z of fireZones) {
@@ -855,39 +1074,11 @@ function addFireSmoke(scenario) {
     world.scene.add(ember);
     world.fireGlows.push({ ember, _isEmber: true, x: baseX, z: baseZ });
 
-    // Per-zone wind direction so multiple fires plume in slightly different ways
-    const windAng = Math.sin(z.center[0] * 12.9 + z.center[1] * 78.2) * Math.PI * 2;
-    const windX = Math.cos(windAng);
-    const windZ = Math.sin(windAng);
-
-    // Denser, layered plume — 14 puffs per fire, randomized lateral seed so each
-    // particle traces a different helical path rather than all sharing a phase ring.
-    const puffCount = 14;
-    const plumeHeight = 18;
-    for (let i = 0; i < puffCount; i += 1) {
-      const phase = i / puffCount;
-      const lateralSeed = (Math.sin(z.center[0] * 37 + z.center[1] * 91 + i * 13.7) * 0.5 + 0.5) * Math.PI * 2;
-      const swirlRadius = 0.4 + ((Math.sin(i * 5.7) * 0.5 + 0.5)) * 0.6;
-      const sphere = new THREE.Mesh(
-        new THREE.SphereGeometry(0.42 + (Math.sin(i * 3.3) * 0.5 + 0.5) * 0.18, 8, 6),
-        new THREE.MeshBasicMaterial({ color: 0x1f1c19, transparent: true, opacity: 0.7, depthWrite: false, fog: true })
-      );
-      sphere.position.set(baseX, 0.6 + phase * plumeHeight, baseZ);
-      world.scene.add(sphere);
-      world.smokePuffs.push({
-        mesh: sphere,
-        baseX,
-        baseZ,
-        baseY: 0.6,
-        height: plumeHeight,
-        phase,
-        lateralSeed,
-        swirlRadius,
-        windX,
-        windZ,
-        zoneId: z.id,
-      });
-    }
+    // Plume radius scales with the fire zone footprint (default ~3 cells).
+    // Wind is supplied per-frame by updateSmokeAndGlows so every plume oscillates
+    // together — same pattern as the wildfire inferno smoke.
+    const radius = Math.max(2.5, (z.radius ?? 3) * 0.9);
+    world.smokeSteps.push(attachUrbanSmokePlume(world.scene, baseX, baseZ, radius));
 
     // Low-altitude fire glow puffs — small orange spheres that breathe at the base
     // of the plume so the bottom of the column reads as hot, not just dark smoke.
@@ -907,43 +1098,13 @@ function addFireSmoke(scenario) {
 }
 
 function updateSmokeAndGlows(t) {
-  if (world.smokePuffs) {
-    // Slower lifecycle reads as heavier, more weighted smoke (was 0.045).
-    const ageNorm = (t * 0.032) % 1;
-    for (const p of world.smokePuffs) {
-      const localT = (p.phase + ageNorm) % 1;
-      // Ease-out rise: smoke accelerates then slows as it expands and cools.
-      const rise = 1 - Math.pow(1 - localT, 1.7);
-      p.mesh.position.y = p.baseY + rise * p.height;
-
-      // Helical swirl: each puff rotates around its own offset axis as it ascends,
-      // and gets pushed steadily downwind. Reads as turbulent air, not just sway.
-      const swirlAngle = p.lateralSeed + t * 0.4 + localT * 2.2;
-      const swirlAmp = p.swirlRadius * (0.3 + localT * 1.4);
-      const drift = localT * 2.2;
-      p.mesh.position.x = p.baseX + Math.cos(swirlAngle) * swirlAmp + p.windX * drift;
-      p.mesh.position.z = p.baseZ + Math.sin(swirlAngle) * swirlAmp + p.windZ * drift;
-
-      // Scale grows non-linearly so the plume reads as a billowing fan, not a column.
-      p.mesh.scale.setScalar(0.6 + localT * 2.6 + Math.sin(t * 1.4 + p.phase * 9) * 0.18);
-
-      const mat = p.mesh.material;
-      if (mat) {
-        // Color: hot orange/red at the base, fading through brown to ash-gray as it rises.
-        if (localT < 0.18) {
-          const heat = 1 - localT / 0.18;
-          mat.color.setRGB(0.38 + heat * 0.32, 0.18 + heat * 0.16, 0.08);
-        } else {
-          const cool = (localT - 0.18) / 0.82;
-          const dark = 0.22 - cool * 0.16;
-          mat.color.setRGB(dark + 0.04, dark + 0.02, dark);
-        }
-        // Opacity: ramps up fast from the source, then thins as smoke dissipates.
-        const fadeIn = Math.min(1, localT / 0.08);
-        const fadeOut = Math.max(0, 1 - (localT - 0.4) / 0.6);
-        mat.opacity = fadeIn * fadeOut * 0.78;
-      }
-    }
+  if (world.smokeSteps?.length) {
+    // Oscillating shared wind — same pattern as wildfire inferno
+    // (driftX = sin(w*4.05) * 12.5, driftZ = cos(w*3.07) * 11.2 in metres).
+    // Urban units are ~10× smaller, so amplitudes are scaled down to ~1.25 / 1.12.
+    const driftX = Math.sin(t * 4.05) * 1.25;
+    const driftZ = Math.cos(t * 3.07) * 1.12;
+    for (const step of world.smokeSteps) step(t, driftX, driftZ);
   }
   if (world.fireGlows) {
     for (const g of world.fireGlows) {
@@ -1441,34 +1602,86 @@ function groundedY(obj) {
   return -bbox.min.y;
 }
 
-function templateForBuildingKind(kind, buildingTemplates) {
-  const byKind = {
-    apartment: 0,
-    civic: 1,
-    lowrise: 2,
-    warehouse: 3
-  };
+/** Walks each pre-fitted building template once and snapshots its meshes:
+ *  bounding-box size, base Y (for ground lift), and every mesh's
+ *  (geometry, material, world-relative localMatrix). Lets us draw N building
+ *  copies as one InstancedMesh per (template, mesh) pair instead of N×K clones. */
+function prepBuildingTemplateMeta(templates) {
+  return templates.map((root) => {
+    root.position.set(0, 0, 0);
+    root.rotation.set(0, 0, 0);
+    root.updateMatrixWorld(true);
+    const bbox = new THREE.Box3().setFromObject(root);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    const children = [];
+    root.traverse((obj) => {
+      if (obj.isMesh && obj.geometry) {
+        children.push({
+          geometry: obj.geometry,
+          material: obj.material,
+          localMatrix: obj.matrixWorld.clone(),
+        });
+      }
+    });
+    return { size, baseMinY: bbox.min.y, children };
+  });
+}
+
+function templateIndexForKind(kind, count) {
+  const byKind = { apartment: 0, civic: 1, lowrise: 2, warehouse: 3 };
   const idx = byKind[kind] ?? 0;
-  return buildingTemplates[idx % buildingTemplates.length] || buildingTemplates[0];
+  return idx % count;
 }
 
-function scaleAssetBuildingToFootprint(obj, footprint, targetHeight) {
-  const [, , w, d] = footprint;
-  obj.updateMatrixWorld(true);
-  const bbox = new THREE.Box3().setFromObject(obj);
-  const size = new THREE.Vector3();
-  bbox.getSize(size);
-  const sx = Math.max(0.01, (w - 0.14) / Math.max(size.x, 0.01));
-  const sz = Math.max(0.01, (d - 0.14) / Math.max(size.z, 0.01));
-  const sy = Math.max(0.01, targetHeight / Math.max(size.y, 0.01));
-  obj.scale.x *= sx;
-  obj.scale.y *= sy;
-  obj.scale.z *= sz;
+/** Build a Group containing one InstancedMesh per (template, child-mesh) pair.
+ *  `placements` carry the world position, anisotropic footprint, height, yaw,
+ *  and the templateIndex selecting which prototype to draw. */
+function placeBuildingsInstanced(groupName, templateMeta, placements) {
+  const byTemplate = new Map();
+  for (const p of placements) {
+    const idx = p.templateIndex % templateMeta.length;
+    let arr = byTemplate.get(idx);
+    if (!arr) { arr = []; byTemplate.set(idx, arr); }
+    arr.push(p);
+  }
+  const group = new THREE.Group();
+  group.name = groupName;
+  const outerM = new THREE.Matrix4();
+  const instM = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+  const yAxis = new THREE.Vector3(0, 1, 0);
+  for (const [tIdx, list] of byTemplate) {
+    const meta = templateMeta[tIdx];
+    if (!meta || !meta.children.length) continue;
+    for (const ch of meta.children) {
+      const inst = new THREE.InstancedMesh(ch.geometry, ch.material, list.length);
+      inst.frustumCulled = false;
+      for (let i = 0; i < list.length; i += 1) {
+        const p = list[i];
+        const sx = Math.max(0.01, (p.w - 0.14) / Math.max(meta.size.x, 0.01));
+        const sy = Math.max(0.01, p.h / Math.max(meta.size.y, 0.01));
+        const sz = Math.max(0.01, (p.d - 0.14) / Math.max(meta.size.z, 0.01));
+        const yLift = -meta.baseMinY * sy + 0.025;
+        pos.set(p.x, yLift, p.z);
+        quat.setFromAxisAngle(yAxis, p.yaw);
+        scl.set(sx, sy, sz);
+        outerM.compose(pos, quat, scl);
+        instM.multiplyMatrices(outerM, ch.localMatrix);
+        inst.setMatrixAt(i, instM);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      group.add(inst);
+    }
+  }
+  return group;
 }
 
-function upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, palette = {}) {
+function upgradeScenarioBuildingsToAssets(scenario, templateMeta) {
   const buildings = scenarioBuildingEntries(scenario);
-  if (!buildings.length || !buildingTemplates?.length) return;
+  if (!buildings.length || !templateMeta?.length) return;
 
   if (world.scenarioBuildingsGroup) {
     world.scene.remove(world.scenarioBuildingsGroup);
@@ -1476,27 +1689,25 @@ function upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, palette =
     world.scenarioBuildingsGroup = null;
   }
 
-  const group = new THREE.Group();
-  group.name = "scenario-buildings-assets";
-
+  const placements = [];
   for (const b of buildings) {
     const [x, y, w, d] = b.footprint;
     if (w <= 0 || d <= 0) continue;
     const profile = buildingProfile(b.kind);
-    const cx = x + w / 2;
-    const cz = y + d / 2;
     const targetHeight = profile.minH + hash01(x, y, 130) * (profile.maxH - profile.minH);
-
-    const footprint = buildingRenderFootprint(x, y, w, d, targetHeight);
-    const template = templateForBuildingKind(b.kind, buildingTemplates);
-    const asset = template.clone(true);
-    scaleAssetBuildingToFootprint(asset, footprint, targetHeight);
-    asset.position.set(cx, groundedY(asset) + 0.025, cz);
-    asset.rotation.y = Math.floor(hash01(x, y, 136) * 4) * (Math.PI / 2);
-
-    group.add(asset);
+    const [rx, ry, rw, rd] = buildingRenderFootprint(x, y, w, d, targetHeight);
+    placements.push({
+      templateIndex: templateIndexForKind(b.kind, templateMeta.length),
+      x: rx + rw / 2,
+      z: ry + rd / 2,
+      w: rw,
+      d: rd,
+      h: targetHeight,
+      yaw: Math.floor(hash01(x, y, 136) * 4) * (Math.PI / 2),
+    });
   }
 
+  const group = placeBuildingsInstanced("scenario-buildings-assets", templateMeta, placements);
   world.scene.add(group);
   world.scenarioBuildingsGroup = group;
 }
@@ -1624,8 +1835,9 @@ async function upgradeToAssets(scenario) {
     return root;
   });
 
-  upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, { rubbleMat });
-  addPerimeterBuildings(scenario, buildingTemplates);
+  const buildingTemplateMeta = prepBuildingTemplateMeta(buildingTemplates);
+  upgradeScenarioBuildingsToAssets(scenario, buildingTemplateMeta);
+  addPerimeterBuildings(scenario, buildingTemplateMeta);
 
   // Swap blockades for rubble GLB
   for (const blk of scenario.map.blocked_cells) {
@@ -1969,7 +2181,7 @@ export function update3D(t, sim) {
       m.arm.material.emissive.setHex(color);
     }
     if (m.group) {
-      m.group.position.y = isAlive ? Math.abs(Math.sin(t * 2)) * 0.05 : 0;
+      m.group.position.y = 0;
     }
   }
 
@@ -2132,7 +2344,7 @@ export function teardown3D() {
   world.perimeterBuildings = null;
   world.scenarioBuildingsGroup = null;
   world.roadsGroup = null;
-  world.smokePuffs = [];
+  world.smokeSteps = [];
   world.fireGlows = [];
   world.initialized = false;
 }

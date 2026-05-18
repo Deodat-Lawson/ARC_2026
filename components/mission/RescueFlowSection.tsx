@@ -1,6 +1,8 @@
 "use client";
 
+import { Suspense } from "react";
 import { useInView } from "@/lib/useInView";
+import { InjuredSoldierIcon3D } from "@/components/system-demo/visualizations/InjuredSoldierIcon3D";
 
 const STEPS = [
   {
@@ -37,19 +39,53 @@ export function RescueFlowSection() {
           inView ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
         }`}
       >
-        <div className="mb-10 max-w-3xl">
-          <div className="mb-6 flex items-center gap-3 font-mono text-xs uppercase tracking-[0.28em] text-arc-accent">
-            <span className="inline-block size-1.5 rounded-full bg-arc-accent shadow-[0_0_6px_2px_rgba(93,255,180,0.5)]" />
-            Rescue logic
+        <div className="mb-10 grid gap-8 md:grid-cols-[minmax(0,1fr)_18rem] md:items-end md:gap-12">
+          <div className="max-w-3xl">
+            <div className="mb-6 flex items-center gap-3 font-mono text-xs uppercase tracking-[0.28em] text-arc-accent">
+              <span className="inline-block size-1.5 rounded-full bg-arc-accent shadow-[0_0_6px_2px_rgba(93,255,180,0.5)]" />
+              Rescue logic
+            </div>
+            <h2 className="text-3xl font-medium leading-[1.1] tracking-tight text-arc-fg md:text-5xl">
+              From disaster to rescue in three steps.
+            </h2>
+            <p className="mt-5 max-w-2xl text-base text-arc-muted md:text-lg">
+              ARC is not just more drones. It turns post-disaster response into a closed loop:
+              detect life signals, coordinate heterogeneous assets, then guide human rescuers
+              to the places where they can save the most lives.
+            </p>
           </div>
-          <h2 className="text-3xl font-medium leading-[1.1] tracking-tight text-arc-fg md:text-5xl">
-            From disaster to rescue in three steps.
-          </h2>
-          <p className="mt-5 max-w-2xl text-base text-arc-muted md:text-lg">
-            ARC is not just more drones. It turns post-disaster response into a closed loop:
-            detect life signals, coordinate heterogeneous assets, then guide human rescuers
-            to the places where they can save the most lives.
-          </p>
+
+          {/* Featured casualty render — the person the cluster exists to find. */}
+          <figure className="relative overflow-hidden rounded-md border border-white/10 bg-[#0e1014] p-4 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.8)]">
+            <div className="mb-3 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.22em]">
+              <span className="text-arc-muted">Target · T-01</span>
+              <span className="flex items-center gap-2 text-arc-accent">
+                <span
+                  aria-hidden
+                  className="inline-block size-1.5 rounded-full bg-arc-accent shadow-[0_0_6px_2px_rgba(93,255,180,0.5)]"
+                />
+                Trapped
+              </span>
+            </div>
+            <div className="relative aspect-[3/2] w-full overflow-hidden rounded-sm bg-[#06080c]">
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "radial-gradient(120% 80% at 50% 110%, rgba(255,120,60,0.12) 0%, rgba(255,90,40,0.04) 35%, transparent 70%)",
+                }}
+              />
+              <div className="absolute inset-0">
+                <Suspense fallback={null}>
+                  <InjuredSoldierIcon3D />
+                </Suspense>
+              </div>
+            </div>
+            <figcaption className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-arc-muted">
+              Casualty profile · prone · 87% survival window
+            </figcaption>
+          </figure>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
