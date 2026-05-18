@@ -70,7 +70,7 @@ useLoader.preload(InjuredSoldierPackLoader, MODEL_ASSET_URL);
 // Auto-scaled so the OBJ's longest axis becomes FIGURE_EXTENT in world units.
 // The relay drone POV sits at ~22m altitude — anything smaller than ~8m on the
 // ground gets lost in the warm fog, so we err on the side of large here.
-const FIGURE_EXTENT = 12.0;
+const FIGURE_EXTENT = 2.2;
 
 export function Survivors() {
   const prototype = useLoader(InjuredSoldierPackLoader, MODEL_ASSET_URL);
@@ -194,8 +194,8 @@ function SurvivorMarker({
         </group>
       </group>
 
-      <mesh ref={heatPlume} position={[0, 7.5, 0]}>
-        <cylinderGeometry args={[0.5, 1.1, 15.0, 12, 1, true]} />
+      <mesh ref={heatPlume} position={[0, 1.4, 0]}>
+        <cylinderGeometry args={[0.09, 0.2, 2.8, 12, 1, true]} />
         <meshStandardMaterial
           color="#ff7040"
           emissive="#ff7040"
@@ -207,7 +207,7 @@ function SurvivorMarker({
       </mesh>
 
       <mesh ref={pulseRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <ringGeometry args={[3.2, 3.9, 36]} />
+        <ringGeometry args={[0.6, 0.72, 36]} />
         <meshBasicMaterial color="#ffa040" transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>
