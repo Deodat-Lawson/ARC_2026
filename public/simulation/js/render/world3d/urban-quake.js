@@ -88,6 +88,7 @@ export const world = {
   roadsGroup: null,
   smokePuffs: [],
   fireGlows: [],
+  brokenBranches: [],
   initialized: false,
 };
 
@@ -380,6 +381,125 @@ function addBuildingRubble(group, footprint, damage, rubbleMat) {
   }
 }
 
+/** Scatter concrete chunks, stone clusters, and rubble piles along every road
+ *  segment so the streets read as post-earthquake instead of clean asphalt. */
+function addRoadDebris(scenario, rubbleMat, rubbleGlbSrc) {
+  const roads = get3DRoads(scenario);
+  if (!roads.length || !rubbleMat) return;
+
+  const riskZones = scenario.map.risk_zones || [];
+  const [bxBase, byBase] = scenario.map.base || [-99, -99];
+  const baseCx = bxBase + 0.5;
+  const baseCz = byBase + 0.5;
+
+  const group = new THREE.Group();
+  group.name = "road-debris";
+
+  const stoneGeoSmall = new THREE.DodecahedronGeometry(0.06, 0);
+  const stoneGeoMid = new THREE.DodecahedronGeometry(0.085, 0);
+
+  for (const road of roads) {
+    const isMain = road.kind === "main";
+    const width = isMain ? 1.0 : 0.7;
+    const pts = road.points || [];
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const ax = a[0] + 0.5;
+      const az = a[1] + 0.5;
+      const bx = b[0] + 0.5;
+      const bz = b[1] + 0.5;
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 0.01) continue;
+      const dirX = dx / len;
+      const dirZ = dz / len;
+      const perpX = -dirZ;
+      const perpZ = dirX;
+
+      const step = 0.4;
+      const stops = Math.max(1, Math.floor(len / step));
+      for (let s = 0; s <= stops; s += 1) {
+        const t = s / Math.max(1, stops);
+        const sx = ax + dx * t;
+        const sz = az + dz * t;
+        const cellX = Math.floor(sx);
+        const cellY = Math.floor(sz);
+        const damage = cellDamageLevel(cellX, cellY, riskZones);
+
+        // Density: ~45% baseline, ramped to ~95% in heavily damaged cells.
+        const placeProb = 0.45 + damage * 0.5;
+        if (hash01(sx, sz, 380) > placeProb) continue;
+
+        // Keep the spawn pad clear.
+        const dxBase = sx - baseCx;
+        const dzBase = sz - baseCz;
+        if (dxBase * dxBase + dzBase * dzBase < 1.0) continue;
+
+        // Lateral placement: lane / curb / sidewalk, weighted toward curb.
+        const laneRoll = hash01(sx, sz, 381);
+        let lateral;
+        if (laneRoll < 0.25) lateral = (hash01(sx, sz, 382) - 0.5) * width * 0.6;
+        else if (laneRoll < 0.7) lateral = (width / 2 + 0.04) * (hash01(sx, sz, 383) > 0.5 ? 1 : -1);
+        else lateral = (width / 2 + 0.18) * (hash01(sx, sz, 384) > 0.5 ? 1 : -1);
+
+        const px = sx + perpX * lateral + (hash01(sx, sz, 385) - 0.5) * 0.08;
+        const pz = sz + perpZ * lateral + (hash01(sx, sz, 386) - 0.5) * 0.08;
+
+        const variantRoll = hash01(sx, sz, 387);
+
+        if (variantRoll < 0.55) {
+          // Small concrete chunk
+          const rw = 0.06 + hash01(sx, sz, 388) * 0.12;
+          const rh = 0.04 + hash01(sx, sz, 389) * 0.08;
+          const rd = 0.06 + hash01(sx, sz, 390) * 0.12;
+          const chunk = new THREE.Mesh(new THREE.BoxGeometry(rw, rh, rd), rubbleMat);
+          chunk.position.set(px, rh / 2 + 0.04, pz);
+          chunk.rotation.set(
+            (hash01(sx, sz, 391) - 0.5) * 0.8,
+            hash01(sx, sz, 392) * Math.PI * 2,
+            (hash01(sx, sz, 393) - 0.5) * 0.8
+          );
+          group.add(chunk);
+        } else if (variantRoll < 0.85) {
+          // Stone cluster (3–4 small dodecahedra)
+          const clusterCount = 3 + Math.floor(hash01(sx, sz, 394) * 2);
+          for (let k = 0; k < clusterCount; k += 1) {
+            const ox = (hash01(sx + k, sz, 395) - 0.5) * 0.22;
+            const oz = (hash01(sx, sz + k, 396) - 0.5) * 0.22;
+            const geom = hash01(sx + k, sz + k, 397) > 0.5 ? stoneGeoMid : stoneGeoSmall;
+            const stone = new THREE.Mesh(geom, rubbleMat);
+            const stoneScale = 0.7 + hash01(sx + k, sz - k, 398) * 0.6;
+            stone.scale.setScalar(stoneScale);
+            stone.position.set(px + ox, 0.04 + hash01(sx + k, sz + k, 399) * 0.03, pz + oz);
+            stone.rotation.set(
+              hash01(sx + k, sz, 400) * Math.PI,
+              hash01(sx, sz + k, 401) * Math.PI * 2,
+              hash01(sx + k, sz + k, 402) * Math.PI
+            );
+            group.add(stone);
+          }
+        } else if (rubbleGlbSrc) {
+          // Large rubble pile (occasional); push toward curb so it doesn't sit on the centerline.
+          const sideSign = lateral === 0 ? (hash01(sx, sz, 403) > 0.5 ? 1 : -1) : Math.sign(lateral);
+          const cx = sx + perpX * (width / 2 + 0.05) * sideSign;
+          const cz = sz + perpZ * (width / 2 + 0.05) * sideSign;
+          const pile = rubbleGlbSrc.clone(true);
+          const targetSize = 0.18 + hash01(sx, sz, 404) * 0.1;
+          pile.traverse((obj) => { if (obj.isMesh) obj.material = rubbleMat; });
+          fitToSize(pile, targetSize);
+          pile.position.set(cx, groundedY(pile) + 0.005, cz);
+          pile.rotation.y = hash01(sx, sz, 405) * Math.PI * 2;
+          group.add(pile);
+        }
+      }
+    }
+  }
+
+  world.scene.add(group);
+}
+
 function addRooftopDetails(group, footprint, height, damage, mats) {
   if (height < 1.1 || damage > 0.82) return;
   const [x, y, w, d] = footprint;
@@ -627,9 +747,41 @@ function addStreetFurniture(scenario) {
   const roadCellSet = computeRoadCells(scenario);
   const baseXY = scenario.map.base || [-99, -99];
 
+  // Fallback wood material — upgradeToAssets swaps these meshes to the textured
+  // woodMat once the async texture set finishes loading.
+  const fallbackWoodMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.92, metalness: 0.05 });
+
+  const addBrokenBranches = (tx, tz, saltBase, count) => {
+    for (let k = 0; k < count; k += 1) {
+      const ox = (hash01(tx + k, tz, saltBase + 20) - 0.5) * 0.7;
+      const oz = (hash01(tx, tz + k, saltBase + 21) - 0.5) * 0.7;
+      const length = 0.18 + hash01(tx + k, tz + k, saltBase + 22) * 0.18;
+      const branch = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.035, length, 6),
+        fallbackWoodMat
+      );
+      branch.rotation.z = Math.PI / 2;
+      branch.rotation.y = hash01(tx + k, tz - k, saltBase + 23) * Math.PI * 2;
+      branch.position.set(tx + ox, 0.035, tz + oz);
+      world.scene.add(branch);
+      world.brokenBranches.push(branch);
+    }
+  };
+
   const placeTree = (tx, tz, saltBase) => {
     const damage = cellDamageLevel(Math.floor(tx), Math.floor(tz), riskZones);
-    const fallen = damage > 0.4 && hash01(tx, tz, saltBase + 4) > 0.4;
+    // Pick damage state: snapped > fallen > leaning > upright.
+    // Baseline percentages even in undamaged cells so the citywide quake reads.
+    const stateRoll = hash01(tx, tz, saltBase + 4);
+    const snappedThresh = 0.7 - damage * 0.3;     // ~30% baseline, ~60% in heavy damage
+    const fallenThresh = 0.35 - damage * 0.25;    // ~35% baseline, ~60% in heavy damage
+    const leaningThresh = 0.05 - damage * 0.05;   // ~30% baseline, almost everything in damage zones
+    let state;
+    if (stateRoll > snappedThresh) state = "snapped";
+    else if (stateRoll > fallenThresh) state = "fallen";
+    else if (stateRoll > leaningThresh) state = "leaning";
+    else state = "upright";
+
     const presetName = treePresets[Math.floor(hash01(tx, tz, saltBase + 6) * treePresets.length) % treePresets.length];
     const opts = structuredClone(TreePreset[presetName] || TreePreset["Oak Small"]);
     opts.seed = Math.floor((hash01(tx, tz, saltBase + 7) * 1e6)) >>> 0;
@@ -641,10 +793,25 @@ function addStreetFurniture(scenario) {
     const tree = new Tree();
     tree.loadFromJson(opts);
     tree.position.set(tx, 0, tz);
-    tree.scale.setScalar(0.02 + hash01(tx, tz, saltBase + 3) * 0.015);
+    const baseScale = 0.02 + hash01(tx, tz, saltBase + 3) * 0.015;
+    tree.scale.setScalar(baseScale);
     tree.rotation.y = hash01(tx, tz, saltBase + 8) * Math.PI * 2;
-    if (fallen) tree.rotation.z = (Math.PI / 2) * (hash01(tx, tz, saltBase + 5) > 0.5 ? 1 : -1) * 0.85;
+
+    if (state === "leaning") {
+      const sign = hash01(tx, tz, saltBase + 9) > 0.5 ? 1 : -1;
+      tree.rotation.z = (0.2 + hash01(tx, tz, saltBase + 10) * 0.25) * sign;
+    } else if (state === "fallen") {
+      tree.rotation.z = (Math.PI / 2) * (hash01(tx, tz, saltBase + 5) > 0.5 ? 1 : -1) * 0.85;
+    } else if (state === "snapped") {
+      tree.scale.y *= 0.18;
+    }
+
     world.scene.add(tree);
+
+    if (state === "fallen" || state === "snapped") {
+      const branchCount = 1 + Math.floor(hash01(tx, tz, saltBase + 11) * 3);
+      addBrokenBranches(tx, tz, saltBase, branchCount);
+    }
   };
 
   // First pass: grass + plaza + rubble terrain patches (was grass-only)
@@ -739,27 +906,6 @@ export function init3D(scenario, presetKey, povCols) {
   addTerrainPatches3D(scenario);
   addCityGroundDetail(scenario);
   // Primitive building shells removed; upgradeScenarioBuildingsToAssets populates GLB clones.
-
-  // Base marker
-  const [bx, by] = scenario.map.base;
-  const base = new THREE.Group();
-  const pad = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.55, 0.55, 0.08, 16),
-    new THREE.MeshStandardMaterial({
-      color: 0xffe44d,
-      emissive: 0xffe44d,
-      emissiveIntensity: 0.9,
-      roughness: 0.4
-    })
-  );
-  pad.position.y = 0.04;
-  base.add(pad);
-  const beacon = new THREE.PointLight(0xffe44d, 0.9, 8);
-  beacon.position.y = 1.5;
-  base.add(beacon);
-  base.position.set(bx + 0.5, 0, by + 0.5);
-  world.scene.add(base);
-  world.baseMesh = base;
 
   // Blockades — primitive boxes that the GLB upgrade pass replaces with rubble-large.glb clones.
   for (const blk of scenario.map.blocked_cells) {
@@ -1171,7 +1317,7 @@ async function upgradeToAssets(scenario) {
       world.scene.remove(old.group);
     }
     // 1.2u long fits comfortably between debris piles at the 1-unit cell scale.
-    const soldier = createInjuredSoldierInstance(soldierPrototype, 1.2);
+    const soldier = createInjuredSoldierInstance(soldierPrototype, 0.24);
     soldier.rotation.y = (v.id.charCodeAt(1) || 0) * 0.7;
     const grp = new THREE.Group();
     grp.add(soldier);
@@ -1186,6 +1332,17 @@ async function upgradeToAssets(scenario) {
     });
     world.scene.add(grp);
     world.victimMeshes.set(v.id, { group: grp, flare, meshes, isAsset: true });
+  }
+
+  // Scatter rubble, stones, and concrete chunks across roads and sidewalks
+  addRoadDebris(scenario, rubbleMat, rubbleGlb.scene);
+
+  // Upgrade any broken-branch primitives placed during synchronous tree setup
+  // to the textured wood material now that it's ready.
+  if (world.brokenBranches?.length) {
+    for (const branch of world.brokenBranches) {
+      branch.material = woodMat;
+    }
   }
 
   // Dress the starting area with realistic GLB clones so the spawn pad reads as a city block
@@ -1338,7 +1495,7 @@ function addInjuredProps(scenario, soldierPrototype) {
       const z = cy + 0.5;
       if (blocked(x, z)) continue;
 
-      const soldier = createInjuredSoldierInstance(soldierPrototype, 1.2);
+      const soldier = createInjuredSoldierInstance(soldierPrototype, 0.24);
       soldier.rotation.y = hash01(cx, cy, 511) * Math.PI * 2;
       soldier.position.set(x, 0, z);
       world.scene.add(soldier);

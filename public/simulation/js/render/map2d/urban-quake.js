@@ -51,8 +51,6 @@ export function drawMap2D(env) {
 
     drawGrid(cols, rows, cell);
     drawCommunication(cell, t);
-    drawBuildingDamage(cell, t);
-    drawRiskZones(cell, t);
     drawBlockades(cell);
     drawVictims(cell, t);
     drawBase(cell);
@@ -82,10 +80,11 @@ function drawGrid(cols, rows, cell) {
 
   const c2 = (PRESET_VISUAL[E.scenePreset] || PRESET_VISUAL.urban_quake).canvas2d;
   const terrainUnderCanvas = E.tacticalBaseMapReady;
-  const fillBg = terrainUnderCanvas ? c2.overlay : "#04060a";
-  E.ctx.fillStyle = fillBg;
-  E.ctx.fillRect(0, 0, E.canvas.width, E.canvas.height);
-  if (!terrainUnderCanvas) drawFallbackRoadSegments(cell);
+  if (!terrainUnderCanvas) {
+    E.ctx.fillStyle = "#04060a";
+    E.ctx.fillRect(0, 0, E.canvas.width, E.canvas.height);
+    drawFallbackRoadSegments(cell);
+  }
   E.ctx.strokeStyle = c2.gridStroke || "rgba(255, 255, 255, 0.04)";
   E.ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
@@ -100,11 +99,7 @@ function drawGrid(cols, rows, cell) {
     E.ctx.lineTo(E.canvas.width, i * cell);
     E.ctx.stroke();
   }
-  if (terrainUnderCanvas) {
-    E.ctx.fillStyle = c2.arterial;
-    for (let y = 2; y < rows; y += 5) E.ctx.fillRect(0, y * cell + cell * 0.28, E.canvas.width, cell * 0.44);
-    for (let x = 2; x < cols; x += 6) E.ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, E.canvas.height);
-  } else if (!E.fallbackRoadSegments?.length) {
+  if (!terrainUnderCanvas && !E.fallbackRoadSegments?.length) {
     E.ctx.fillStyle = "rgba(60, 80, 110, 0.32)";
     for (let y = 2; y < rows; y += 5) E.ctx.fillRect(0, y * cell + cell * 0.28, E.canvas.width, cell * 0.44);
     for (let x = 2; x < cols; x += 6) E.ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, E.canvas.height);
@@ -210,7 +205,6 @@ function buildingSeedHash(id) {
 function drawBuildingDamage(cell, t) {
   const buildings = E.state.tacticalBuildings;
   if (!buildings || !buildings.length) return;
-  let smokeBudget = 14;
   for (const b of buildings) {
     if (b.damage === "intact") continue;
     const seed = buildingSeedHash(b.id);
@@ -268,54 +262,16 @@ function drawBuildingDamage(cell, t) {
         E.ctx.restore();
       }
     } else if (b.damage === "burning") {
-      // Bright glowing fill that pulses dramatically
-      const pulse = 0.55 + Math.sin(t * 2.2 + seed * 0.001) * 0.25;
       tracePolygonPath(b.polygon, cell);
-      E.ctx.fillStyle = `rgba(255, 130, 55, ${0.55 * pulse})`;
+      E.ctx.fillStyle = "rgba(115, 55, 32, 0.11)";
       E.ctx.fill();
-      // Inner core glow
-      tracePolygonPath(b.polygon, cell);
-      const [cx, cy] = b.centroid;
-      const innerGlow = E.ctx.createRadialGradient(
-        cx * cell, cy * cell, 0,
-        cx * cell, cy * cell, Math.max((b.bounds.maxX - b.bounds.minX), (b.bounds.maxY - b.bounds.minY)) * cell * 0.7
-      );
-      innerGlow.addColorStop(0, `rgba(255, 220, 130, ${0.55 * pulse})`);
-      innerGlow.addColorStop(0.5, `rgba(255, 100, 40, ${0.30 * pulse})`);
-      innerGlow.addColorStop(1, "rgba(180, 50, 20, 0)");
       E.ctx.save();
-      E.ctx.fillStyle = innerGlow;
-      E.ctx.fill();
-      E.ctx.restore();
-      // Glowing outline
-      E.ctx.save();
-      E.ctx.strokeStyle = `rgba(255, 130, 50, ${0.85 * pulse})`;
-      E.ctx.lineWidth = 1.6;
-      E.ctx.shadowColor = "rgba(255, 110, 30, 0.75)";
-      E.ctx.shadowBlur = 12;
+      E.ctx.strokeStyle = "rgba(200, 118, 70, 0.5)";
+      E.ctx.lineWidth = 1;
+      E.ctx.setLineDash([4, 3]);
       tracePolygonPath(b.polygon, cell);
       E.ctx.stroke();
       E.ctx.restore();
-      if (smokeBudget > 0) {
-        smokeBudget -= 1;
-        const [cx, cy] = b.centroid;
-        for (let i = 0; i < 6; i += 1) {
-          const drift = Math.sin(t * 0.4 + seed * 0.001 + i * 1.7);
-          const rise = (t * 0.45 + i * 0.32 + rnd(i + 10)) % 2.0;
-          const ox = drift * (1 + rise * 2);
-          const oy = -rise * 5;
-          const px = (cx + ox) * cell;
-          const py = (cy + oy) * cell;
-          const radius = (3.5 + rise * 9) * (cell / 12);
-          E.ctx.save();
-          E.ctx.globalAlpha = Math.max(0, 0.55 - rise * 0.28);
-          E.ctx.fillStyle = "rgba(28, 22, 22, 1)";
-          E.ctx.beginPath();
-          E.ctx.arc(px, py, radius, 0, Math.PI * 2);
-          E.ctx.fill();
-          E.ctx.restore();
-        }
-      }
     } else if (b.damage === "damaged") {
       E.ctx.save();
       E.ctx.strokeStyle = "rgba(255, 217, 93, 0.55)";
@@ -352,24 +308,20 @@ function zoneSeedHash(id) {
 }
 
 export function drawRiskZones(cell, t) {
-  // Pre-pass: large translucent ash haze for every zone, painted first so other
-  // overlays sit on top. Gives the whole quadrant a "dust in the air" wash.
+  // Pre-pass: ash haze for collapse / non-fire hazards. Fire skips this so the map stays readable.
   for (const zone of E.state.map.risk_zones) {
     const px = zone.center[0] * cell;
     const py = zone.center[1] * cell;
     const r = zone.radius * cell;
-    const hazeR = r * 2.4;
     const isFire = zone.type === "fire";
+    // Fire hazards: skip the heavy pre-pass ash wash (it dominated the tactical map).
+    if (isFire) continue;
+
+    const hazeR = r * 2.4;
     const haze = E.ctx.createRadialGradient(px, py, r * 0.4, px, py, hazeR);
-    if (isFire) {
-      haze.addColorStop(0, "rgba(80, 25, 10, 0.42)");
-      haze.addColorStop(0.55, "rgba(60, 30, 20, 0.18)");
-      haze.addColorStop(1, "rgba(40, 30, 25, 0)");
-    } else {
-      haze.addColorStop(0, "rgba(35, 30, 25, 0.48)");
-      haze.addColorStop(0.55, "rgba(40, 38, 38, 0.22)");
-      haze.addColorStop(1, "rgba(35, 35, 40, 0)");
-    }
+    haze.addColorStop(0, "rgba(35, 30, 25, 0.48)");
+    haze.addColorStop(0.55, "rgba(40, 38, 38, 0.22)");
+    haze.addColorStop(1, "rgba(35, 35, 40, 0)");
     E.ctx.fillStyle = haze;
     E.ctx.beginPath();
     E.ctx.arc(px, py, hazeR, 0, Math.PI * 2);
@@ -388,60 +340,22 @@ export function drawRiskZones(cell, t) {
     };
 
     if (isFire) {
-      // Flickering orange core
-      const pulse = 0.55 + Math.sin(t * 1.8 + seed * 0.001) * 0.15;
       const core = E.ctx.createRadialGradient(px, py, 0, px, py, r);
-      core.addColorStop(0, `rgba(255, 150, 60, ${0.55 * pulse})`);
-      core.addColorStop(0.45, `rgba(255, 90, 30, ${0.42 * pulse})`);
-      core.addColorStop(1, "rgba(180, 50, 20, 0)");
+      core.addColorStop(0, "rgba(150, 75, 40, 0.1)");
+      core.addColorStop(0.55, "rgba(110, 50, 32, 0.05)");
+      core.addColorStop(1, "rgba(110, 50, 32, 0)");
       E.ctx.fillStyle = core;
       E.ctx.beginPath();
       E.ctx.arc(px, py, r, 0, Math.PI * 2);
       E.ctx.fill();
 
-      // Ember sparks across the zone — many small bright dots, animated
-      const emberCount = Math.floor(r * 0.6);
-      for (let i = 0; i < emberCount; i += 1) {
-        const ang = rnd(i * 2) * Math.PI * 2;
-        const rad = Math.sqrt(rnd(i * 2 + 1)) * r * 0.95;
-        const flicker = 0.5 + Math.sin(t * 4.0 + i * 1.7 + seed * 0.001) * 0.5;
-        const ex = px + Math.cos(ang) * rad;
-        const ey = py + Math.sin(ang) * rad;
-        E.ctx.fillStyle = `rgba(255, ${160 + Math.floor(flicker * 70)}, 40, ${0.35 + flicker * 0.5})`;
-        E.ctx.fillRect(ex - 0.9, ey - 0.9, 1.8, 1.8);
-      }
-
-      // Multiple smoke plumes rising from random anchor points across the zone
-      const plumeCount = 5 + Math.floor(rnd(99) * 3);
-      for (let i = 0; i < plumeCount; i += 1) {
-        const ang = rnd(i * 3 + 30) * Math.PI * 2;
-        const rad = Math.sqrt(rnd(i * 3 + 31)) * r * 0.8;
-        const sx = px + Math.cos(ang) * rad;
-        const sy = py + Math.sin(ang) * rad;
-        const drift = Math.sin(t * 0.4 + seed * 0.001 + i * 1.3);
-        for (let j = 0; j < 5; j += 1) {
-          const rise = ((t * 0.35 + j * 0.4 + rnd(i * 5 + j)) % 1.7);
-          const ox = drift * (1.5 + rise * 2.5);
-          const oy = -rise * (r * 1.2);
-          const radius = (3 + rise * 8) * (cell / 14);
-          E.ctx.save();
-          E.ctx.globalAlpha = Math.max(0, 0.55 - rise * 0.32);
-          E.ctx.fillStyle = "rgba(28, 22, 22, 1)";
-          E.ctx.beginPath();
-          E.ctx.arc(sx + ox, sy + oy, radius, 0, Math.PI * 2);
-          E.ctx.fill();
-          E.ctx.restore();
-        }
-      }
-
-      // Bright glowing perimeter ring
       E.ctx.save();
-      E.ctx.strokeStyle = `rgba(255, 120, 40, ${0.6 + Math.sin(t * 2) * 0.18})`;
-      E.ctx.lineWidth = 1.4;
-      E.ctx.shadowColor = "rgba(255, 90, 30, 0.55)";
-      E.ctx.shadowBlur = 10;
+      E.ctx.strokeStyle = "rgba(200, 120, 70, 0.42)";
+      E.ctx.lineWidth = 1;
+      E.ctx.setLineDash([5, 4]);
+      E.ctx.lineDashOffset = -t * 6;
       E.ctx.beginPath();
-      E.ctx.arc(px, py, r, 0, Math.PI * 2);
+      E.ctx.arc(px, py, r * 0.92, 0, Math.PI * 2);
       E.ctx.stroke();
       E.ctx.restore();
     } else {
@@ -532,7 +446,7 @@ export function drawRiskZones(cell, t) {
     }
 
     // Label — wildfire presets carry `meadowLabel` from 3D burn patch IDs
-    E.ctx.fillStyle = isFire ? "rgba(255, 200, 130, 0.95)" : "rgba(220, 200, 175, 0.92)";
+    E.ctx.fillStyle = isFire ? "rgba(215, 170, 120, 0.88)" : "rgba(220, 200, 175, 0.92)";
     E.ctx.font = "bold 9px 'JetBrains Mono', 'Courier New', monospace";
     const tag =
       typeof zone.meadowLabel === "string" ? zone.meadowLabel.toUpperCase().slice(0, 11) : zone.type.toUpperCase();
