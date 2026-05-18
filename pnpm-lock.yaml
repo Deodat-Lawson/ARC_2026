@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@dgreenheck/ez-tree':
+        specifier: ^1.1.0
+        version: 1.1.0(three@0.170.0)
       '@react-three/drei':
         specifier: ^10.0.0
         version: 10.7.7(@react-three/fiber@9.6.1(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(three@0.170.0))(@types/react@19.2.14)(@types/three@0.170.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(three@0.170.0)
@@ -129,6 +132,11 @@ packages:
 
   '@dabh/diagnostics@2.0.8':
     resolution: {integrity: sha512-R4MSXTVnuMzGD7bzHdW2ZhhdPC/igELENcq5IjEverBvq5hn1SXCWcsi6eSsdWP0/Ur+SItRRjAktmdoX/8R/Q==}
+
+  '@dgreenheck/ez-tree@1.1.0':
+    resolution: {integrity: sha512-6pvS6hD6B6h00dm0SnkgYeT4ABU5Y1Z9M44p1tXiV5C0eKrQy2sKECXshoaUv0qAOqYVL68w/PwadUxDFDiHUg==}
+    peerDependencies:
+      three: '>=0.167'
 
   '@donmccurdy/caporal@0.0.10':
     resolution: {integrity: sha512-VdaJjOqYFYcDTM5We2x8cL+B+U9UFQvq0iW2ypqEGX31SDf2oYFjEg7INEJorBwJJnFNXV8jXoYGzJyLeYl1EQ==}
@@ -3558,6 +3566,10 @@ snapshots:
       '@so-ric/colorspace': 1.1.6
       enabled: 2.0.0
       kuler: 2.0.0
+
+  '@dgreenheck/ez-tree@1.1.0(three@0.170.0)':
+    dependencies:
+      three: 0.170.0
 
   '@donmccurdy/caporal@0.0.10':
     dependencies:

@@ -3,6 +3,19 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ["three"],
+  async headers() {
+    return [
+      {
+        source: "/simulation/data/:path*.glb",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, must-revalidate",
+          },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return [
       // Mission-command simulation (static HTML + module JS) served from /public/simulation.
