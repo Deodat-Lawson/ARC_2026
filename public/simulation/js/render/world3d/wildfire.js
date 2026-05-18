@@ -279,6 +279,17 @@ function bootstrapWildfirePovs(scenario, povCols, horizonHex) {
     ro.observe(povFrame);
     entry.resizeObserver = ro;
 
+    // Skip the per-POV render path when the viewport is scrolled off-screen.
+    // Also lets update3D short-circuit the burn-zone particle tick when nothing
+    // on screen would observe the result.
+    entry.visible = true;
+    if (typeof IntersectionObserver !== "undefined") {
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) entry.visible = e.isIntersecting;
+      }, { rootMargin: "200px" });
+      io.observe(col);
+    }
+
     povs.push(entry);
     resizeWildfirePov(entry);
   }
@@ -462,9 +473,22 @@ export function update3D(t, sim) {
   if (!wfScene || !sim?.state || povs.length === 0) return;
 
   grassWindTimeUniform.value = t;
-  wfForestRoot?.userData?.tickWildfireBurn?.(t);
+
+  // Particle stepping (burn-zone smoke/flame) and procedural tree sway are the two
+  // heaviest per-frame costs; both can skip entirely while every wildfire POV is
+  // scrolled off-screen. prevT inside the inferno step clamps dt on resume so
+  // particles don't visibly teleport.
+  let anyWfPovVisible = false;
+  for (const entry of povs) {
+    if (entry.wildfirePov === true && entry.visible !== false) {
+      anyWfPovVisible = true;
+      break;
+    }
+  }
+
+  if (anyWfPovVisible) wfForestRoot?.userData?.tickWildfireBurn?.(t);
   // EZ-Tree update is procedural and main-thread heavy; 30 Hz sway is indistinguishable from 60.
-  if ((wfTreeUpdateFrame++ & 1) === 0) {
+  if (anyWfPovVisible && (wfTreeUpdateFrame++ & 1) === 0) {
     for (let i = 0; i < wfEzTrees.length; i += 1) wfEzTrees[i]?.update?.(t);
   }
 
@@ -480,6 +504,7 @@ export function update3D(t, sim) {
 
   for (const entry of povs) {
     if (!entry.renderer || !entry.camera || entry.wildfirePov !== true) continue;
+    if (entry.visible === false) continue;
 
     const driver =
       state.agents.find((a) => a.id === entry.selectedId) || state.agents[0];

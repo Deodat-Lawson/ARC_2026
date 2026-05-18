@@ -642,13 +642,18 @@ function attachWildfireBurnInferno(meadowRoot, ox, oz, burntRadiusMetres, opts) 
   const lampLightMul = THREE.MathUtils.clamp(0.34 + Ieff * 0.82, 0.28, 1.08);
   const flickAmpOverall = THREE.MathUtils.clamp(0.38 + Ieff * 0.78, 0.25, 1.15);
 
+  // Global ~40% trim on every smoke/flame layer — the per-frame JS step over each
+  // Points layer (sin/cos/hypot per particle) was dominating update3D. Trimming
+  // through these two helpers keeps the existing per-layer count mix intact while
+  // halving the work for the dense base layers.
+  const COUNT_TRIM = 0.6;
   /** @returns {number} */
   function nSmoke(base) {
-    return Math.max(22, Math.round(base * nMulSmoke));
+    return Math.max(18, Math.round(base * nMulSmoke * COUNT_TRIM));
   }
   /** @returns {number} */
   function nFlame(base) {
-    return Math.max(10, Math.round(base * nMulFlame));
+    return Math.max(8, Math.round(base * nMulFlame * COUNT_TRIM));
   }
 
   /** Per-zone temporal offset — keeps hotspots from pulsing in lockstep. */

@@ -67,19 +67,11 @@ class InjuredSoldierPackLoader extends Loader<Group> {
 
 useLoader.preload(InjuredSoldierPackLoader, MODEL_ASSET_URL);
 
-// The injured-soldier OBJ is a posed (prone) figure. Its source bbox is
-// roughly X=428, Y=92, Z=240 — Y is the smallest axis (body thickness when
-// lying down), not the height. Scaling by Y alone would stretch the body to
-// ~8m wide. We scale by the LONGEST dimension so the whole figure fits into
-// FIGURE_EXTENT regardless of which axis the source uses for length.
-const FIGURE_EXTENT = 6.0; // length of the prone body in world units (≈ metres)
+// Auto-scaled so the OBJ's longest axis becomes FIGURE_EXTENT in world units.
+// The relay drone POV sits at ~22m altitude — anything smaller than ~8m on the
+// ground gets lost in the warm fog, so we err on the side of large here.
+const FIGURE_EXTENT = 12.0;
 
-/**
- * Visualizes the two trapped survivors at `SURVIVORS[]` placement: an
- * injured-soldier OBJ (posed prone — already lying down in the source),
- * plus a thermal plume and pulse ring driven by identification / rescue
- * times.
- */
 export function Survivors() {
   const prototype = useLoader(InjuredSoldierPackLoader, MODEL_ASSET_URL);
 
@@ -98,18 +90,17 @@ function idToHash(id: string): number {
   return Math.abs(h);
 }
 
-/** Tint to a fatigued olive-drab and pre-warm an emissive for the heat pulse. */
+/** Bright warm tint + strong emissive — the MTL ships a flat 50% gray, which
+ *  reads as "invisible" against the dark warm fog from the relay POV. */
 function prepareMaterials(root: Group, materialsRef: Material[]): void {
   materialsRef.length = 0;
   root.traverse((obj) => {
     const mesh = obj as Mesh;
     if (!mesh.isMesh || Array.isArray(mesh.material)) return;
     const m = mesh.material as MeshPhongMaterial;
-    // Olive-drab fatigues — readable against the dark warm fog, not so bright
-    // it competes with the drones.
-    m.color = new Color("#4a4233");
-    m.emissive = new Color("#2a1408");
-    m.emissiveIntensity = 0.35;
+    m.color = new Color("#d4a85a");
+    m.emissive = new Color("#ff7030");
+    m.emissiveIntensity = 1.1;
     materialsRef.push(m);
   });
 }
@@ -125,7 +116,6 @@ function SurvivorMarker({
   const pulseRing = useRef<Mesh>(null);
   const innerRef = useRef<Group>(null);
 
-  /** Materials mutated in useFrame — one list per survivor instance */
   const materialsRef = useRef<Material[]>([]);
 
   const cloned = useMemo(() => {
@@ -142,10 +132,6 @@ function SurvivorMarker({
     bbox.getSize(size);
     const longest = Math.max(size.x, size.y, size.z);
     if (longest <= 0) return;
-    // Scale uniformly so the source bbox's longest axis (the body length on
-    // a prone figure) becomes FIGURE_EXTENT. Centre over the survivor's
-    // ground position and rest the bottom of the bbox on local y=0 so the
-    // figure sits on the ground rather than floating or sinking.
     const s = FIGURE_EXTENT / longest;
     const center = new Vector3();
     bbox.getCenter(center);
@@ -194,17 +180,12 @@ function SurvivorMarker({
     }
 
     for (const m of materialsRef.current) {
-      // Baseline emissive (0.35) keeps the body legible against the warm
-      // fog; the rescue confirmation adds an extra warm glow on top.
-      (m as MeshPhongMaterial).emissiveIntensity = 0.35 + confirm * 0.6;
+      (m as MeshPhongMaterial).emissiveIntensity = 1.1 + confirm * 0.6;
     }
   });
 
   const yaw = (idToHash(data.id) % 360) * (Math.PI / 180);
 
-  // Marker anchors at ground (y=0). `data.position.y` is used by other
-  // mission code (dog/drone overwatch references) but here the figure must
-  // physically rest on the ground regardless.
   return (
     <group position={[data.position[0], 0, data.position[2]]}>
       <group rotation={[0, yaw, 0]}>
@@ -213,8 +194,8 @@ function SurvivorMarker({
         </group>
       </group>
 
-      <mesh ref={heatPlume} position={[0, 3.8, 0]}>
-        <cylinderGeometry args={[0.25, 0.55, 7.6, 12, 1, true]} />
+      <mesh ref={heatPlume} position={[0, 7.5, 0]}>
+        <cylinderGeometry args={[0.5, 1.1, 15.0, 12, 1, true]} />
         <meshStandardMaterial
           color="#ff7040"
           emissive="#ff7040"
@@ -226,7 +207,7 @@ function SurvivorMarker({
       </mesh>
 
       <mesh ref={pulseRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <ringGeometry args={[1.6, 1.95, 36]} />
+        <ringGeometry args={[3.2, 3.9, 36]} />
         <meshBasicMaterial color="#ffa040" transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>

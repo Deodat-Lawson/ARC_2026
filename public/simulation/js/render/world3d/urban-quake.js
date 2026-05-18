@@ -535,11 +535,12 @@ function addRoadDebris(scenario, rubbleMat, rubbleGlbSrc) {
   const baseCx = bxBase + 0.5;
   const baseCz = byBase + 0.5;
 
-  const group = new THREE.Group();
-  group.name = "road-debris";
-
-  const stoneGeoSmall = new THREE.DodecahedronGeometry(0.06, 0);
-  const stoneGeoMid = new THREE.DodecahedronGeometry(0.085, 0);
+  // Collect placements; build all chunks/stones as InstancedMeshes (one draw call each).
+  // Per ~30u-long road segment at step 0.22 that's ~135 spawn rolls, ~80% chance to place,
+  // so thousands of individual debris meshes on a typical scenario before instancing.
+  const chunks = []; // { px, pz, w, h, d, rx, ry, rz }
+  const stones = []; // { px, py, pz, s, rx, ry, rz }
+  const piles = []; // { px, pz, targetSize, yaw }
 
   for (const road of roads) {
     const isMain = road.kind === "main";
@@ -571,16 +572,13 @@ function addRoadDebris(scenario, rubbleMat, rubbleGlbSrc) {
         const cellY = Math.floor(sz);
         const damage = cellDamageLevel(cellX, cellY, riskZones);
 
-        // Density: ~75% baseline, ramped to ~100% in heavily damaged cells.
         const placeProb = 0.75 + damage * 0.25;
         if (hash01(sx, sz, 380) > placeProb) continue;
 
-        // Keep the spawn pad clear.
         const dxBase = sx - baseCx;
         const dzBase = sz - baseCz;
         if (dxBase * dxBase + dzBase * dzBase < 1.0) continue;
 
-        // Lateral placement: lane / curb / sidewalk, weighted toward curb.
         const laneRoll = hash01(sx, sz, 381);
         let lateral;
         if (laneRoll < 0.25) lateral = (hash01(sx, sz, 382) - 0.5) * width * 0.6;
@@ -593,50 +591,101 @@ function addRoadDebris(scenario, rubbleMat, rubbleGlbSrc) {
         const variantRoll = hash01(sx, sz, 387);
 
         if (variantRoll < 0.55) {
-          // Small concrete chunk
-          const rw = 0.06 + hash01(sx, sz, 388) * 0.12;
           const rh = 0.04 + hash01(sx, sz, 389) * 0.08;
-          const rd = 0.06 + hash01(sx, sz, 390) * 0.12;
-          const chunk = new THREE.Mesh(new THREE.BoxGeometry(rw, rh, rd), rubbleMat);
-          chunk.position.set(px, rh / 2 + 0.04, pz);
-          chunk.rotation.set(
-            (hash01(sx, sz, 391) - 0.5) * 0.8,
-            hash01(sx, sz, 392) * Math.PI * 2,
-            (hash01(sx, sz, 393) - 0.5) * 0.8
-          );
-          group.add(chunk);
+          chunks.push({
+            px, pz,
+            w: 0.06 + hash01(sx, sz, 388) * 0.12,
+            h: rh,
+            d: 0.06 + hash01(sx, sz, 390) * 0.12,
+            py: rh / 2 + 0.04,
+            rx: (hash01(sx, sz, 391) - 0.5) * 0.8,
+            ry: hash01(sx, sz, 392) * Math.PI * 2,
+            rz: (hash01(sx, sz, 393) - 0.5) * 0.8,
+          });
         } else if (variantRoll < 0.85) {
-          // Stone cluster (3–4 small dodecahedra)
           const clusterCount = 3 + Math.floor(hash01(sx, sz, 394) * 2);
           for (let k = 0; k < clusterCount; k += 1) {
             const ox = (hash01(sx + k, sz, 395) - 0.5) * 0.22;
             const oz = (hash01(sx, sz + k, 396) - 0.5) * 0.22;
-            const geom = hash01(sx + k, sz + k, 397) > 0.5 ? stoneGeoMid : stoneGeoSmall;
-            const stone = new THREE.Mesh(geom, rubbleMat);
-            const stoneScale = 0.7 + hash01(sx + k, sz - k, 398) * 0.6;
-            stone.scale.setScalar(stoneScale);
-            stone.position.set(px + ox, 0.04 + hash01(sx + k, sz + k, 399) * 0.03, pz + oz);
-            stone.rotation.set(
-              hash01(sx + k, sz, 400) * Math.PI,
-              hash01(sx, sz + k, 401) * Math.PI * 2,
-              hash01(sx + k, sz + k, 402) * Math.PI
-            );
-            group.add(stone);
+            // Original code picked between 0.06u and 0.085u dodecahedra. Use a single 0.085u
+            // unit geometry and scale per-instance so we can collapse into one InstancedMesh.
+            const sizeMul = hash01(sx + k, sz + k, 397) > 0.5 ? 1.0 : 0.06 / 0.085;
+            const stoneScale = (0.7 + hash01(sx + k, sz - k, 398) * 0.6) * sizeMul;
+            stones.push({
+              px: px + ox,
+              py: 0.04 + hash01(sx + k, sz + k, 399) * 0.03,
+              pz: pz + oz,
+              s: stoneScale,
+              rx: hash01(sx + k, sz, 400) * Math.PI,
+              ry: hash01(sx, sz + k, 401) * Math.PI * 2,
+              rz: hash01(sx + k, sz + k, 402) * Math.PI,
+            });
           }
         } else if (rubbleGlbSrc) {
-          // Large rubble pile (occasional); push toward curb so it doesn't sit on the centerline.
           const sideSign = lateral === 0 ? (hash01(sx, sz, 403) > 0.5 ? 1 : -1) : Math.sign(lateral);
-          const cx = sx + perpX * (width / 2 + 0.05) * sideSign;
-          const cz = sz + perpZ * (width / 2 + 0.05) * sideSign;
-          const pile = rubbleGlbSrc.clone(true);
-          const targetSize = 0.18 + hash01(sx, sz, 404) * 0.1;
-          pile.traverse((obj) => { if (obj.isMesh) obj.material = rubbleMat; });
-          fitToSize(pile, targetSize);
-          pile.position.set(cx, groundedY(pile) + 0.005, cz);
-          pile.rotation.y = hash01(sx, sz, 405) * Math.PI * 2;
-          group.add(pile);
+          piles.push({
+            px: sx + perpX * (width / 2 + 0.05) * sideSign,
+            pz: sz + perpZ * (width / 2 + 0.05) * sideSign,
+            targetSize: 0.18 + hash01(sx, sz, 404) * 0.1,
+            yaw: hash01(sx, sz, 405) * Math.PI * 2,
+          });
         }
       }
+    }
+  }
+
+  const group = new THREE.Group();
+  group.name = "road-debris";
+  const tmpM = new THREE.Matrix4();
+  const tmpQ = new THREE.Quaternion();
+  const tmpV = new THREE.Vector3();
+  const tmpS = new THREE.Vector3();
+  const tmpE = new THREE.Euler();
+
+  if (chunks.length) {
+    const unitBox = new THREE.BoxGeometry(1, 1, 1);
+    const inst = new THREE.InstancedMesh(unitBox, rubbleMat, chunks.length);
+    inst.frustumCulled = false;
+    for (let i = 0; i < chunks.length; i += 1) {
+      const c = chunks[i];
+      tmpV.set(c.px, c.py, c.pz);
+      tmpE.set(c.rx, c.ry, c.rz, "XYZ");
+      tmpQ.setFromEuler(tmpE);
+      tmpS.set(c.w, c.h, c.d);
+      tmpM.compose(tmpV, tmpQ, tmpS);
+      inst.setMatrixAt(i, tmpM);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  }
+
+  if (stones.length) {
+    const unitStone = new THREE.DodecahedronGeometry(0.085, 0);
+    const inst = new THREE.InstancedMesh(unitStone, rubbleMat, stones.length);
+    inst.frustumCulled = false;
+    for (let i = 0; i < stones.length; i += 1) {
+      const st = stones[i];
+      tmpV.set(st.px, st.py, st.pz);
+      tmpE.set(st.rx, st.ry, st.rz, "XYZ");
+      tmpQ.setFromEuler(tmpE);
+      tmpS.set(st.s, st.s, st.s);
+      tmpM.compose(tmpV, tmpQ, tmpS);
+      inst.setMatrixAt(i, tmpM);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  }
+
+  // Large rubble piles stay as GLB clones — they're a small fraction (~5% of debris) but
+  // collapsing them too would require a uniform-scale GLB instancer.
+  if (piles.length && rubbleGlbSrc) {
+    for (const p of piles) {
+      const pile = rubbleGlbSrc.clone(true);
+      pile.traverse((obj) => { if (obj.isMesh) obj.material = rubbleMat; });
+      fitToSize(pile, p.targetSize);
+      pile.position.set(p.px, groundedY(pile) + 0.005, p.pz);
+      pile.rotation.y = p.yaw;
+      group.add(pile);
     }
   }
 
@@ -650,84 +699,113 @@ function addRoadDebris(scenario, rubbleMat, rubbleGlbSrc) {
 function addGroundMess(scenario, rubbleMat, damageMat) {
   if (!rubbleMat) return;
   const [cols, rows] = scenario.map.size;
-  const riskZones = scenario.map.risk_zones || [];
+  const riskFlat = scenario.map.risk_zones || [];
   const [bxBase, byBase] = scenario.map.base || [-99, -99];
   const baseCx = bxBase + 0.5;
   const baseCz = byBase + 0.5;
   const roadCellSet = computeRoadCells(scenario);
   const buildingRects = buildingAvoidanceRects(scenario);
 
-  const group = new THREE.Group();
-  group.name = "ground-mess";
-
   // Tint the dirt material slightly darker than rubble for variety.
   const dirtMat = (damageMat || rubbleMat).clone();
   dirtMat.color = (damageMat || rubbleMat).color.clone();
 
+  // Collect placements first, then build a single InstancedMesh per (geometry, material).
+  // Without this, each cell could spawn 4+ separate meshes — on a 30×30 map that's ~3.5k draw calls
+  // for ground clutter alone, multiplied by every active POV render.
+  const patches = []; // { px, pz, w, d, yaw, lift }
+  const rubblePieces = []; // { px, py, pz, w, h, d, rx, ry, rz }
+
   for (let cy = 0; cy < rows; cy += 1) {
     for (let cx = 0; cx < cols; cx += 1) {
-      const damage = cellDamageLevel(cx, cy, riskZones);
+      const damage = cellDamageLevel(cx, cy, riskFlat);
       const isRoad = roadCellSet.has(`${cx},${cy}`);
-
-      // 2–4 dirt patches per cell, more on damaged/road cells.
-      const patches = 2 + Math.floor(hash01(cx, cy, 500) * 2) + (isRoad ? 1 : 0) + Math.floor(damage * 2);
-      for (let i = 0; i < patches; i += 1) {
-        // Cell-relative jittered placement.
+      const perCell = 2 + Math.floor(hash01(cx, cy, 500) * 2) + (isRoad ? 1 : 0) + Math.floor(damage * 2);
+      for (let i = 0; i < perCell; i += 1) {
         const px = cx + 0.15 + hash01(cx + i, cy, 501 + i) * 0.7;
         const pz = cy + 0.15 + hash01(cx, cy + i, 502 + i) * 0.7;
-
-        // Keep dirt away from the spawn pad.
-        const dx = px - baseCx;
-        const dz = pz - baseCz;
-        if (dx * dx + dz * dz < 1.2) continue;
-
-        // Skip if this lands inside a building footprint.
+        const dxBase = px - baseCx;
+        const dzBase = pz - baseCz;
+        if (dxBase * dxBase + dzBase * dzBase < 1.2) continue;
         if (pointNearBuilding(px, pz, buildingRects, -0.05)) continue;
 
-        // 60% dirt-patch decals (flat brown planes), 25% dust mounds (low box),
-        // 15% small cracked-concrete shards near road cells.
         const variantRoll = hash01(px, pz, 503);
-
         if (variantRoll < 0.6) {
-          // Flat dirt patch — slightly above ground to avoid z-fighting.
-          const w = 0.3 + hash01(px, pz, 504) * 0.7;
-          const d = 0.3 + hash01(px, pz, 505) * 0.7;
-          const patch = new THREE.Mesh(
-            new THREE.PlaneGeometry(w, d),
-            dirtMat
-          );
-          patch.rotation.x = -Math.PI / 2;
-          patch.rotation.z = hash01(px, pz, 506) * Math.PI * 2;
-          // Layer height varies a hair so overlapping patches still render correctly.
-          patch.position.set(px, 0.052 + hash01(px, pz, 507) * 0.004, pz);
-          group.add(patch);
+          patches.push({
+            px, pz,
+            w: 0.3 + hash01(px, pz, 504) * 0.7,
+            d: 0.3 + hash01(px, pz, 505) * 0.7,
+            yaw: hash01(px, pz, 506) * Math.PI * 2,
+            lift: 0.052 + hash01(px, pz, 507) * 0.004,
+          });
         } else if (variantRoll < 0.85) {
-          // Low dust mound.
-          const w = 0.18 + hash01(px, pz, 508) * 0.3;
           const h = 0.04 + hash01(px, pz, 509) * 0.06;
-          const d = 0.18 + hash01(px, pz, 510) * 0.3;
-          const mound = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), rubbleMat);
-          mound.position.set(px, h / 2 + 0.05, pz);
-          mound.rotation.y = hash01(px, pz, 511) * Math.PI * 2;
-          mound.rotation.x = (hash01(px, pz, 512) - 0.5) * 0.2;
-          mound.rotation.z = (hash01(px, pz, 513) - 0.5) * 0.2;
-          group.add(mound);
+          rubblePieces.push({
+            px, py: h / 2 + 0.05, pz,
+            w: 0.18 + hash01(px, pz, 508) * 0.3,
+            h,
+            d: 0.18 + hash01(px, pz, 510) * 0.3,
+            rx: (hash01(px, pz, 512) - 0.5) * 0.2,
+            ry: hash01(px, pz, 511) * Math.PI * 2,
+            rz: (hash01(px, pz, 513) - 0.5) * 0.2,
+          });
         } else {
-          // Small cracked-concrete shard.
-          const rw = 0.05 + hash01(px, pz, 514) * 0.1;
           const rh = 0.025 + hash01(px, pz, 515) * 0.05;
-          const rd = 0.05 + hash01(px, pz, 516) * 0.1;
-          const shard = new THREE.Mesh(new THREE.BoxGeometry(rw, rh, rd), rubbleMat);
-          shard.position.set(px, rh / 2 + 0.045, pz);
-          shard.rotation.set(
-            (hash01(px, pz, 517) - 0.5) * 0.6,
-            hash01(px, pz, 518) * Math.PI * 2,
-            (hash01(px, pz, 519) - 0.5) * 0.6
-          );
-          group.add(shard);
+          rubblePieces.push({
+            px, py: rh / 2 + 0.045, pz,
+            w: 0.05 + hash01(px, pz, 514) * 0.1,
+            h: rh,
+            d: 0.05 + hash01(px, pz, 516) * 0.1,
+            rx: (hash01(px, pz, 517) - 0.5) * 0.6,
+            ry: hash01(px, pz, 518) * Math.PI * 2,
+            rz: (hash01(px, pz, 519) - 0.5) * 0.6,
+          });
         }
       }
     }
+  }
+
+  const group = new THREE.Group();
+  group.name = "ground-mess";
+  const tmpM = new THREE.Matrix4();
+  const tmpQ = new THREE.Quaternion();
+  const tmpV = new THREE.Vector3();
+  const tmpS = new THREE.Vector3();
+  const tmpE = new THREE.Euler();
+
+  if (patches.length) {
+    // Unit XZ-plane: PlaneGeometry is XY by default, rotate -π/2 around X so it lies flat.
+    const unitPlane = new THREE.PlaneGeometry(1, 1);
+    unitPlane.rotateX(-Math.PI / 2);
+    const inst = new THREE.InstancedMesh(unitPlane, dirtMat, patches.length);
+    inst.frustumCulled = false;
+    for (let i = 0; i < patches.length; i += 1) {
+      const p = patches[i];
+      tmpV.set(p.px, p.lift, p.pz);
+      tmpQ.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.yaw);
+      tmpS.set(p.w, 1, p.d);
+      tmpM.compose(tmpV, tmpQ, tmpS);
+      inst.setMatrixAt(i, tmpM);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  }
+
+  if (rubblePieces.length) {
+    const unitBox = new THREE.BoxGeometry(1, 1, 1);
+    const inst = new THREE.InstancedMesh(unitBox, rubbleMat, rubblePieces.length);
+    inst.frustumCulled = false;
+    for (let i = 0; i < rubblePieces.length; i += 1) {
+      const p = rubblePieces[i];
+      tmpV.set(p.px, p.py, p.pz);
+      tmpE.set(p.rx, p.ry, p.rz, "XYZ");
+      tmpQ.setFromEuler(tmpE);
+      tmpS.set(p.w, p.h, p.d);
+      tmpM.compose(tmpV, tmpQ, tmpS);
+      inst.setMatrixAt(i, tmpM);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
   }
 
   world.scene.add(group);
@@ -1033,9 +1111,11 @@ function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
 
   // Four layers matching the wildfire inferno smoke 1:1: low haze, midrange wisps,
   // dense thick column, and a wide low ash drift. Particle counts + sizes scaled
-  // down to fit a ~5-unit urban plume vs the meadow's ~14m burn radius.
+  // down to fit a ~5-unit urban plume vs the meadow's ~14m burn radius. Counts cut
+  // ~45% from the wildfire baseline — each plume's per-frame JS step was the hottest
+  // path in update3D before this trim.
   const ceilingY = Math.max(28, radius * 7);
-  const stepHaze = spawnLayer(160, smokeMap, {
+  const stepHaze = spawnLayer(90, smokeMap, {
     radialMul: 1.32,
     minY: 0.3,
     spreadY: 9,
@@ -1051,7 +1131,7 @@ function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
     turbHz: 4.2,
     liftJitter: 0.22,
   });
-  const stepWisp = spawnLayer(110, smokeWispMap, {
+  const stepWisp = spawnLayer(60, smokeWispMap, {
     radialMul: 1.18,
     minY: 0.6,
     spreadY: 7,
@@ -1067,7 +1147,7 @@ function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
     turbHz: 3.4,
     liftJitter: 0.35,
   });
-  const stepThick = spawnLayer(70, smokeMap, {
+  const stepThick = spawnLayer(40, smokeMap, {
     radialMul: 1.2,
     minY: 0.5,
     spreadY: 12,
@@ -1084,7 +1164,7 @@ function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
     liftJitter: 0.18,
   });
   // Wide, low ash drift — same as the wildfire "burn_ash_near" layer.
-  const stepAsh = spawnLayer(80, smokeMap, {
+  const stepAsh = spawnLayer(45, smokeMap, {
     radialMul: 1.45,
     minY: 0,
     spreadY: radius * 0.5,
@@ -1102,6 +1182,98 @@ function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
     windMul: 1.65,
   });
 
+  // Flame / ember / spark layers — ported from wildfire inferno, particle counts
+  // and sizes shrunk for the urban scale (radius in cells vs 14m). These replace
+  // the sphere-based fake flame puffs that previously sat at the base of the plume.
+  const stepFlameSheet = spawnLayer(55, flareMap, {
+    radialMul: 0.96,
+    minY: 0,
+    spreadY: 2.2,
+    capY: radius * 3.65,
+    rise: 5.8,
+    sway: 0.16,
+    size: Math.min(1.8, radius * 1.02),
+    opacity: 0.26,
+    colorHex: 0xffd4a8,
+    varyColorHex: 0xff8428,
+    renderOrder: 0,
+    name: "urban_flame_sheet",
+    turbAmp: 0.48,
+    turbHz: 9.5,
+    liftJitter: 0.28,
+  });
+  const stepFlameNear = spawnLayer(65, flareMap, {
+    radialMul: 1,
+    minY: 0,
+    spreadY: 0.8,
+    capY: radius * 2.72,
+    rise: 7.8,
+    sway: 0.13,
+    size: Math.min(1.3, radius * 0.68),
+    opacity: 0.2,
+    colorHex: 0xff9646,
+    varyColorHex: 0xff5a1c,
+    renderOrder: 1,
+    name: "urban_flame_near",
+    turbAmp: 0.36,
+    turbHz: 11.2,
+    liftJitter: 0.2,
+  });
+  const stepFlameCore = spawnLayer(32, flareCoreMap, {
+    radialMul: 0.72,
+    minY: 0,
+    spreadY: 0.4,
+    capY: radius * 1.55,
+    rise: 6.2,
+    sway: 0.08,
+    size: Math.min(0.72, radius * 0.36),
+    opacity: 0.88,
+    colorHex: 0xffeecc,
+    varyColorHex: 0xffa040,
+    renderOrder: 3,
+    name: "urban_flame_core",
+    turbAmp: 0.22,
+    turbHz: 14.5,
+    liftJitter: 0.15,
+    additive: true,
+  });
+  const stepEmberBurst = spawnLayer(65, flareMap, {
+    radialMul: 1,
+    minY: 0,
+    spreadY: 0.5,
+    capY: radius * 2.25,
+    rise: 9.2,
+    sway: 0.07,
+    size: Math.min(0.88, radius * 0.48),
+    opacity: 0.78,
+    colorHex: 0xff7a42,
+    varyColorHex: 0xff3400,
+    renderOrder: 4,
+    name: "urban_ember_burst",
+    turbAmp: 0.28,
+    turbHz: 12.8,
+    liftJitter: 0.32,
+    additive: true,
+  });
+  const stepSparks = spawnLayer(32, sparkMap, {
+    radialMul: 0.92,
+    minY: 0.05,
+    spreadY: 0.4,
+    capY: radius * 8.25,
+    rise: 11.8,
+    sway: 0.22,
+    size: Math.min(0.42, radius * 0.26),
+    opacity: 0.95,
+    colorHex: 0xfff2c4,
+    varyColorHex: 0xff9040,
+    renderOrder: 6,
+    name: "urban_sparks",
+    turbAmp: 0.95,
+    turbHz: 18.7,
+    liftJitter: 0.55,
+    additive: true,
+  });
+
   let prevT = NaN;
   return (t, driftX, driftZ) => {
     const dt = Number.isFinite(prevT)
@@ -1112,6 +1284,11 @@ function attachUrbanSmokePlume(scene, baseX, baseZ, radius) {
     stepWisp(dt, t, driftX, driftZ);
     stepThick(dt, t, driftX, driftZ);
     stepAsh(dt, t, driftX, driftZ);
+    stepFlameSheet(dt, t, driftX, driftZ);
+    stepFlameNear(dt, t, driftX, driftZ);
+    stepFlameCore(dt, t, driftX, driftZ);
+    stepEmberBurst(dt, t, driftX, driftZ);
+    stepSparks(dt, t, driftX, driftZ);
   };
 }
 
@@ -1125,39 +1302,18 @@ function addFireSmoke(scenario) {
     const baseX = z.center[0] + 0.5;
     const baseZ = z.center[1] + 0.5;
 
+    // Warm wash so flames + nearby façades read as lit by the fire.
     const glow = new THREE.PointLight(0xff6020, 2.0, 9, 1.8);
     glow.position.set(baseX, 0.6, baseZ);
     world.scene.add(glow);
     world.fireGlows.push(glow);
 
-    const ember = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 8, 6),
-      new THREE.MeshBasicMaterial({ color: 0xff8c30, transparent: true, opacity: 0.85, depthWrite: false, fog: false })
-    );
-    ember.position.set(baseX, 0.25, baseZ);
-    world.scene.add(ember);
-    world.fireGlows.push({ ember, _isEmber: true, x: baseX, z: baseZ });
-
     // Plume radius scales with the fire zone footprint (default ~3 cells).
     // Wind is supplied per-frame by updateSmokeAndGlows so every plume oscillates
-    // together — same pattern as the wildfire inferno smoke.
+    // together. The plume includes flame, ember & spark Points layers, replacing
+    // the old sphere-based fake-flame puffs.
     const radius = Math.max(2.5, (z.radius ?? 3) * 0.9);
     world.smokeSteps.push(attachUrbanSmokePlume(world.scene, baseX, baseZ, radius));
-
-    // Low-altitude fire glow puffs — small orange spheres that breathe at the base
-    // of the plume so the bottom of the column reads as hot, not just dark smoke.
-    const emberPuffs = 4;
-    for (let i = 0; i < emberPuffs; i += 1) {
-      const ang = (i / emberPuffs) * Math.PI * 2;
-      const r = 0.25 + (Math.sin(i * 7.3) * 0.5 + 0.5) * 0.2;
-      const flame = new THREE.Mesh(
-        new THREE.SphereGeometry(0.22, 8, 6),
-        new THREE.MeshBasicMaterial({ color: 0xff7a28, transparent: true, opacity: 0.85, depthWrite: false, fog: false })
-      );
-      flame.position.set(baseX + Math.cos(ang) * r, 0.4, baseZ + Math.sin(ang) * r);
-      world.scene.add(flame);
-      world.fireGlows.push({ ember: flame, _isFlame: true, x: baseX, z: baseZ, phase: i });
-    }
   }
 }
 
@@ -1171,23 +1327,10 @@ function updateSmokeAndGlows(t) {
     for (const step of world.smokeSteps) step(t, driftX, driftZ);
   }
   if (world.fireGlows) {
+    // Only PointLights remain in fireGlows now that fake-flame spheres are gone —
+    // flicker the warm wash so flames feel alive even from a distance.
     for (const g of world.fireGlows) {
-      if (g._isFlame) {
-        // Low-altitude flame puffs flicker faster and brighter than ember balls.
-        const flicker = 0.8 + Math.sin(t * 14 + g.phase * 2.3) * 0.25 + Math.sin(t * 22 + g.phase * 5.1) * 0.18;
-        g.ember.scale.setScalar(Math.max(0.45, flicker));
-        const mat = g.ember.material;
-        if (mat) {
-          mat.opacity = 0.55 + Math.sin(t * 17 + g.phase * 3) * 0.3;
-          const heat = 0.7 + Math.sin(t * 11 + g.phase) * 0.25;
-          mat.color.setRGB(1.0, 0.5 * heat, 0.15 * heat);
-        }
-      } else if (g._isEmber) {
-        const flicker = 0.7 + Math.sin(t * 9 + g.x) * 0.3 + Math.sin(t * 14 + g.z) * 0.2;
-        g.ember.scale.setScalar(Math.max(0.4, flicker));
-        const mat = g.ember.material;
-        if (mat) mat.opacity = 0.6 + Math.sin(t * 11) * 0.25;
-      } else if (g.intensity !== undefined) {
+      if (g.intensity !== undefined) {
         g.intensity = 1.6 + Math.sin(t * 8 + g.position.x) * 0.5 + Math.sin(t * 13 + g.position.z) * 0.3;
       }
     }
@@ -1232,6 +1375,27 @@ function addStreetFurniture(scenario) {
   /** Skip lamp posts on cells adjacent to the base so they don't stand in the spawn pad. */
   const baseX = scenario.map.base?.[0];
   const baseY = scenario.map.base?.[1];
+
+  // Shared lit/unlit head materials so the instanced heads can share a single material per variant.
+  // PointLights were dropped — with ~100 intersections each adding a PointLight, every PBR material
+  // shader was paying for every lamp's light contribution, and the visible effect at distance was
+  // already dominated by the emissive head.
+  const litHeadMat = new THREE.MeshStandardMaterial({
+    color: 0xffe9b0, emissive: 0xffd080, emissiveIntensity: 0.9, roughness: 0.7,
+  });
+  const darkHeadMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1614, roughness: 0.7,
+  });
+
+  // Pre-baked part geometries — one shared layout, arm points in +X model space.
+  const lampParts = [
+    { geom: new THREE.CylinderGeometry(0.06, 0.07, 0.04, 10), mat: postMat, ly: 0.02, lx: 0, rotZ: 0 },
+    { geom: new THREE.CylinderGeometry(0.02, 0.03, 0.7, 10), mat: postMat, ly: 0.39, lx: 0, rotZ: 0 },
+    { geom: new THREE.CylinderGeometry(0.028, 0.028, 0.02, 10), mat: armMat, ly: 0.74, lx: 0, rotZ: 0 },
+    { geom: new THREE.CylinderGeometry(0.009, 0.011, 0.14, 6), mat: armMat, ly: 0.75, lx: 0.08, rotZ: Math.PI / 2 },
+    { geom: new THREE.ConeGeometry(0.065, 0.045, 10, 1, true), mat: armMat, ly: 0.73, lx: 0.15, rotZ: 0 },
+  ];
+  const lamps = [];
   for (const y of hLines) {
     for (const x of vLines) {
       if (x === 0 || x === cols - 1 || y === 0 || y === rows - 1) continue;
@@ -1241,47 +1405,66 @@ function addStreetFurniture(scenario) {
       const lampPick = hash01(x, y, 70);
       const lampCorners = [[-1, -1], [1, 1], [-1, 1], [1, -1]];
       const [ox, oz] = lampCorners[Math.floor(lampPick * 4) % 4];
-      {
-        const lamp = new THREE.Group();
-        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.04, 10), postMat);
-        base.position.y = 0.02;
-        lamp.add(base);
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.7, 10), postMat);
-        post.position.y = 0.39;
-        lamp.add(post);
-        const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.02, 10), armMat);
-        collar.position.y = 0.74;
-        lamp.add(collar);
-        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.14, 6), armMat);
-        arm.rotation.z = Math.PI / 2;
-        arm.position.set(-ox * 0.08, 0.75, 0);
-        lamp.add(arm);
-        const isLit = damage < 0.4 && hash01(x, y, 50 + ox + oz * 2) > 0.15;
-        const lampMat = new THREE.MeshStandardMaterial({
-          color: isLit ? 0xffe9b0 : 0x1a1614,
-          emissive: isLit ? 0xffd080 : 0x000000,
-          emissiveIntensity: isLit ? 0.9 : 0,
-          roughness: 0.7
-        });
-        const hood = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.045, 10, 1, true), armMat);
-        hood.position.set(-ox * 0.15, 0.73, 0);
-        lamp.add(hood);
-        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.052, 0.055, 10), lampMat);
-        head.position.set(-ox * 0.15, 0.68, 0);
-        lamp.add(head);
-        if (isLit) {
-          const light = new THREE.PointLight(0xffd080, 0.55, 3);
-          light.position.set(-ox * 0.15, 0.65, 0);
-          lamp.add(light);
-        }
-        lamp.position.set(x + 0.5 + ox * 0.55, 0, y + 0.5 + oz * 0.55);
-        if (damage > 0.45) {
-          lamp.rotation.z = (hash01(x, y, 51 + ox + oz * 2) - 0.5) * 0.6;
-          lamp.rotation.x = (hash01(x, y, 52 + ox + oz * 2) - 0.5) * 0.3;
-        }
-        world.scene.add(lamp);
-      }
+      const isLit = damage < 0.4 && hash01(x, y, 50 + ox + oz * 2) > 0.15;
+      const damageZ = damage > 0.45 ? (hash01(x, y, 51 + ox + oz * 2) - 0.5) * 0.6 : 0;
+      const damageX = damage > 0.45 ? (hash01(x, y, 52 + ox + oz * 2) - 0.5) * 0.3 : 0;
+      lamps.push({
+        px: x + 0.5 + ox * 0.55,
+        pz: y + 0.5 + oz * 0.55,
+        // ox=1 lamps are mirrored along X: rotate 180° around Y so the shared +X-arm layout faces inward.
+        yaw: ox === 1 ? Math.PI : 0,
+        damageX, damageZ, isLit,
+      });
     }
+  }
+
+  if (lamps.length) {
+    const lampGroup = new THREE.Group();
+    lampGroup.name = "street-lamps";
+    const tmpOuter = new THREE.Matrix4();
+    const tmpInst = new THREE.Matrix4();
+    const tmpYaw = new THREE.Matrix4();
+    const tmpDamage = new THREE.Matrix4();
+    const tmpPos = new THREE.Matrix4();
+    const tmpEuler = new THREE.Euler();
+    const buildPartInstance = (geom, mat, partLocal, filter = null) => {
+      const list = filter ? lamps.filter(filter) : lamps;
+      if (!list.length) return;
+      const inst = new THREE.InstancedMesh(geom, mat, list.length);
+      inst.frustumCulled = false;
+      for (let i = 0; i < list.length; i += 1) {
+        const L = list[i];
+        // outer = T(pos) * R_y(yaw) * R_euler(damageX, 0, damageZ) — yaw before damage so the
+        // mirrored ox=1 lamps tilt the same way as their non-mirrored mates.
+        tmpPos.makeTranslation(L.px, 0, L.pz);
+        tmpYaw.makeRotationY(L.yaw);
+        tmpEuler.set(L.damageX, 0, L.damageZ, "XYZ");
+        tmpDamage.makeRotationFromEuler(tmpEuler);
+        tmpOuter.identity().multiply(tmpPos).multiply(tmpYaw).multiply(tmpDamage);
+        tmpInst.multiplyMatrices(tmpOuter, partLocal);
+        inst.setMatrixAt(i, tmpInst);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      lampGroup.add(inst);
+    };
+    // Precompute each part's local matrix (translation + Z-rot for the arm).
+    const makeLocal = (lx, ly, rotZ) => {
+      const m = new THREE.Matrix4();
+      const t = new THREE.Vector3(lx, ly, 0);
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), rotZ);
+      const s = new THREE.Vector3(1, 1, 1);
+      m.compose(t, q, s);
+      return m;
+    };
+    for (const p of lampParts) {
+      buildPartInstance(p.geom, p.mat, makeLocal(p.lx, p.ly, p.rotZ));
+    }
+    // Heads split into lit / unlit so each can share a single material.
+    const headGeom = new THREE.CylinderGeometry(0.042, 0.052, 0.055, 10);
+    const headLocal = makeLocal(0.15, 0.68, 0);
+    buildPartInstance(headGeom, litHeadMat, headLocal, (L) => L.isLit);
+    buildPartInstance(headGeom, darkHeadMat, headLocal, (L) => !L.isLit);
+    world.scene.add(lampGroup);
   }
 
   /** EZ-Tree generation — same procedural library used by the wildfire scene.
@@ -2173,7 +2356,15 @@ export function update3D(t, sim) {
   const frac = Math.min(1, Math.max(0, (performance.now() - lastTickAt) / msPerTick));
 
   // ── Shared scene updates ────────────────────────────────────────────────
-  updateSmokeAndGlows(t);
+  // Particle stepping is by far the hottest per-frame cost — skip it entirely when
+  // every POV is scrolled off-screen (each fire zone runs ~450 particles through
+  // sin/cos/hypot every frame). prevT inside each plume clamps the resulting dt
+  // when the visuals resume so particles don't teleport.
+  let anyPovVisible = false;
+  for (const entry of povs) {
+    if (entry.visible !== false) { anyPovVisible = true; break; }
+  }
+  if (anyPovVisible) updateSmokeAndGlows(t);
 
   for (const a of state.agents) {
     const mesh = world.agentMeshes.get(a.id);
