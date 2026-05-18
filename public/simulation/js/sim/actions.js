@@ -113,10 +113,11 @@ export function executeActions(state, actions, deps) {
         agent.type === "ground_rescue" ||
         agent.type === "ground_armored" ||
         agent.type === "ground_clear";
+      const rescueRadius = currentScenePreset === "urban_quake" ? 2.5 : 1.5;
       if (
         isGroundRescuer &&
         (victim.status === "trapped" || victim.status === "unknown") &&
-        nearCell(agent.location, victim.location, 1.5)
+        nearCell(agent.location, victim.location, rescueRadius)
       ) {
         victim.status = "rescued";
         state.rescued += 1;
