@@ -328,11 +328,7 @@ function updateWildfireAgentMeshes(sim, frac, meadowFn, pitchScale, t) {
 
     let targetY;
     if (ag.type === "drone") {
-      targetY =
-        pitchScale *
-        (1.5 +
-          Math.sin(t * 1.0 + ag.id.charCodeAt(0)) * 0.5 +
-          Math.sin(t * 0.4 + ag.id.charCodeAt(0) * 0.5) * 0.25);
+      targetY = pitchScale * tacticalFpvAltitudeUrbanUnits(ag, t);
     } else if (ag.type === "balloon") {
       targetY =
         pitchScale *

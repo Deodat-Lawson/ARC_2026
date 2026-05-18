@@ -200,6 +200,6 @@ export function buildingAvoidanceRects(scenario) {
     const profile = buildingProfile(b.kind);
     const h = profile.minH + hash01(x, y, 130) * (profile.maxH - profile.minH);
     const [rx, rz, rw, rd] = buildingRenderFootprint(x, y, w, d, h);
-    return { x: rx, z: rz, w: rw, d: rd };
+    return { x: rx, z: rz, w: rw, d: rd, heightUnits: h };
   });
 }

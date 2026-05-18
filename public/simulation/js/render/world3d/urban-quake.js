@@ -13,6 +13,7 @@ import { lerp } from "../../sim/math.js";
 import { createAgentMesh, agentBaseAltitude } from "./fleet-agents-mesh.js";
 import {
   lerpAngleDeg,
+  tacticalFpvAltitudeUrbanUnits,
   tacticalFpvEyeWorldPosition,
   tacticalFpvForwardVector,
   tacticalFpvHudAltUrbanGrid,
@@ -1383,7 +1384,7 @@ export function update3D(t, sim) {
     const phase = a.id.charCodeAt(0);
     let targetY;
     if (a.type === "drone") {
-      targetY = 1.5 + Math.sin(t * 1.0 + phase) * 0.5 + Math.sin(t * 0.4 + phase * 0.5) * 0.25;
+      targetY = tacticalFpvAltitudeUrbanUnits(a, t);
     } else if (a.type === "balloon") {
       // hovers high, very slow gentle drift
       targetY = 3.6 + Math.sin(t * 0.35 + phase) * 0.18 + Math.sin(t * 0.18 + phase * 0.5) * 0.12;

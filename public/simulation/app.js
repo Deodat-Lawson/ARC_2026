@@ -25,8 +25,10 @@ import {
 import { drawMap2D } from "./js/render/map2d/index.js";
 import { generatePlan } from "./js/sim/plan.js";
 import { executeActions, moveAgentToward } from "./js/sim/actions.js";
+import { occupancyGridRouteStep } from "./js/sim/path-planners.js";
 import { updateVictims, updateBlockades } from "./js/sim/tick.js";
 import { roundCoord } from "./js/sim/math.js";
+import { pointNearBuilding } from "./js/sim/collision.js";
 import { simBridge } from "./js/sim/bridge.js";
 import { MS_PER_TICK } from "./js/sim/timing.js";
 import {
@@ -102,6 +104,31 @@ bindWorld3dUi({
 });
 bindAiDom({ thinkingFeedEl, briefText });
 
+/** Match right-rail “Fleet Status” block height to center “Fleet dialogue & CoT” (`.vp-mission`). */
+function wireRailFleetHeightToCot() {
+  const cot = document.querySelector(".vp-mission");
+  const fleet = document.querySelector(".rail-fleet");
+  const railR = document.querySelector(".cc-rail-r");
+  if (!cot || !fleet) return;
+
+  const apply = () => {
+    if (!railR || getComputedStyle(railR).display === "none") {
+      fleet.style.removeProperty("height");
+      fleet.style.removeProperty("flex");
+      return;
+    }
+    const h = Math.round(cot.getBoundingClientRect().height);
+    if (h < 1) return;
+    fleet.style.flex = "0 0 auto";
+    fleet.style.height = `${h + 100}px`;
+  };
+
+  const ro = new ResizeObserver(() => requestAnimationFrame(apply));
+  ro.observe(cot);
+  window.addEventListener("resize", apply);
+  requestAnimationFrame(apply);
+}
+
 let initialScenario;
 let state;
 let timer = null;
@@ -117,6 +144,8 @@ let defaultScenario;
 let roadExportBase = null;
 let ugvRoadNetwork = null;
 const roadRouteCache = new Map();
+const industrialGridRouteCache = new Map();
+let industrialVictimsRelocatedForObstacleSig = "";
 
 registerTacticalGridDims(() => (state?.map?.size ? state.map.size : [30, 30]));
 
@@ -168,6 +197,96 @@ function agentUsesRoadRouting(agent) {
   const t = String(agent.type || "").toLowerCase();
   if (t === "drone" || t === "balloon") return false;
   return t === "ground_rescue" || t === "ground_clear" || t === "ground_armored" || t === "ugv";
+}
+
+/** Ground units on industrial preset use occupancy-grid A* instead of the civic road graph. */
+function agentUsesIndustrialGrid(agent) {
+  if (currentScenePreset !== "industrial") return false;
+  const t = String(agent.type || "").toLowerCase();
+  if (t === "drone" || t === "balloon") return false;
+  return t === "ground_rescue" || t === "ground_clear" || t === "ground_armored" || t === "ugv";
+}
+
+function moveAgentOnIndustrialGrid(agent, targetCell, targetKey) {
+  const speed = agent.speed || 1;
+  const current = [agent.location[0], agent.location[1]];
+  const target = [targetCell[0], targetCell[1]];
+  const cached = industrialGridRouteCache.get(agent.id);
+  const [nextPt, routeState] = occupancyGridRouteStep(
+    current,
+    target,
+    speed,
+    targetKey,
+    cached,
+    state,
+    buildingAvoidanceRects,
+  );
+  industrialGridRouteCache.set(agent.id, routeState);
+
+  const farFromGoal = Math.hypot(target[0] - current[0], target[1] - current[1]) > 0.35;
+  const barelyMoved = Math.hypot(nextPt[0] - current[0], nextPt[1] - current[1]) < 0.03;
+  const noWp = !routeState.waypoints?.length;
+  if (barelyMoved && farFromGoal && noWp) {
+    if (!buildingAvoidanceRects(state).length) {
+      moveAgentToward(agent, targetCell, state, buildingAvoidanceRects);
+    }
+    return;
+  }
+
+  agent.location = [roundCoord(nextPt[0]), roundCoord(nextPt[1])];
+}
+
+function industrialObstacleSignature(rects) {
+  return rects
+    .map((r) => `${roundCoord(r.x)}:${roundCoord(r.z)}:${roundCoord(r.w)}:${roundCoord(r.d)}`)
+    .join("|");
+}
+
+function nearestIndustrialPassableCell(point, rects) {
+  if (!state?.map?.size) return point;
+  const [cols, rows] = state.map.size;
+  const blockedCells = new Set(
+    (state.map.blocked_cells || [])
+      .filter((b) => b.status === "blocked")
+      .map((b) => `${Math.round(b.location[0])},${Math.round(b.location[1])}`),
+  );
+  let best = null;
+  let bestSq = Infinity;
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < cols; x += 1) {
+      if (blockedCells.has(`${x},${y}`)) continue;
+      if (pointNearBuilding(x, y, rects, 0.42)) continue;
+      const dsq = (x - point[0]) ** 2 + (y - point[1]) ** 2;
+      if (dsq < bestSq) {
+        bestSq = dsq;
+        best = [x, y];
+      }
+    }
+  }
+  return best || point;
+}
+
+function ensureIndustrialVictimsOnPassableCells() {
+  if (currentScenePreset !== "industrial" || !state?.victims?.length) return;
+  const rects = buildingAvoidanceRects(state);
+  if (!rects.length) return;
+  const sig = industrialObstacleSignature(rects);
+  if (sig === industrialVictimsRelocatedForObstacleSig) return;
+
+  let moved = false;
+  for (const victim of state.victims) {
+    if (victim.status === "rescued" || victim.status === "dead") continue;
+    if (!pointNearBuilding(victim.location[0], victim.location[1], rects, 0.42)) continue;
+    const free = nearestIndustrialPassableCell(victim.location, rects);
+    if (free[0] === victim.location[0] && free[1] === victim.location[1]) continue;
+    victim.location = free;
+    moved = true;
+  }
+  if (moved) {
+    industrialGridRouteCache.clear();
+    plan = generatePlan(state);
+  }
+  industrialVictimsRelocatedForObstacleSig = sig;
 }
 
 function moveAgentOnRoad(agent, targetCell, targetKey) {
@@ -290,6 +409,8 @@ function reset() {
   lastTickAt = performance.now();
 
   roadRouteCache.clear();
+  industrialGridRouteCache.clear();
+  industrialVictimsRelocatedForObstacleSig = "";
   trails.clear();
   for (const agent of state.agents) {
     agent.prevLocation = [...agent.location];
@@ -331,10 +452,13 @@ function step() {
 
   updateVictims(state);
   updateBlockades(state);
+  ensureIndustrialVictimsOnPassableCells();
   plan = generatePlan(state);
   executeActions(state, plan.mission_plan, {
     moveAgentOnRoad,
     agentUsesRoadRouting,
+    agentUsesIndustrialGrid,
+    moveAgentOnIndustrialGrid,
     getBuildingRects: buildingAvoidanceRects,
   });
   for (const agent of state.agents) {
@@ -402,6 +526,8 @@ function rebuildSimulation(cfg) {
     });
   }
   roadRouteCache.clear();
+  industrialGridRouteCache.clear();
+  industrialVictimsRelocatedForObstacleSig = "";
 
   teardown3D();
   const pk = cfg.preset || "urban_quake";
@@ -496,4 +622,5 @@ initTacticalBasemap({
   },
 });
 wireTacticalBasemapResize();
+wireRailFleetHeightToCot();
 requestAnimationFrame(() => syncTacticalBasemapSize());

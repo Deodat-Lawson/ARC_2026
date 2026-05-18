@@ -345,25 +345,26 @@
             </div>
           </article>
 
-          <article class="vp vp-brief panel">
-            <header class="vp-head compact">
-              <div>
-                <span class="kicker">Gemma 4 · Mission Synthesis</span>
-                <h2>Commander Brief</h2>
-              </div>
-              <span class="panel-tag">AUTO</span>
-            </header>
-            <div id="briefText" class="brief-body" aria-live="polite"></div>
-          </article>
-
           <article class="vp vp-trend panel">
             <header class="vp-head compact">
               <div>
-                <span class="kicker">Fleet posture · rolling window</span>
-                <h2>Survival Curve</h2>
+                <span class="kicker">Fleet posture · survival &amp; risk</span>
+                <h2>Survival &amp; Risk</h2>
               </div>
+              <span class="count-pill" id="threatCount">0</span>
             </header>
-            <canvas id="survivalChart" width="380" height="160"></canvas>
+            <div class="survival-risk-grid">
+              <div class="survival-chart-frame">
+                <canvas id="survivalChart" width="380" height="160"></canvas>
+              </div>
+              <aside class="survival-risk-panel" aria-label="Survival priority ranking">
+                <div class="survival-risk-title">
+                  <span>Priority</span>
+                  <small>risk ranking</small>
+                </div>
+                <div id="priorityList" class="priority-list priority-list-compact"></div>
+              </aside>
+            </div>
           </article>
 
           <article class="vp vp-mission panel">
@@ -402,55 +403,31 @@
 
         <!-- ──── RIGHT RAIL · OPS BOARD ──── -->
         <aside class="cc-rail cc-rail-r" aria-label="Operations board">
-          <section class="rail-section rail-decision">
+          <section class="rail-section rail-ai-command">
             <header class="rail-section-head">
               <div>
-                <span class="kicker">Allocator · Chain-of-thought</span>
-                <h2>Decision Hub</h2>
+                <span class="kicker">Gemma 4 · Command stack</span>
+                <h2>AI Command Stack</h2>
               </div>
+              <span class="panel-tag">AUTO</span>
             </header>
-            <div id="thinkingText" class="thinking-feed" aria-live="polite"></div>
-          </section>
-
-          <section class="rail-section rail-legend">
-            <header class="rail-section-head compact-head">
-              <div>
-                <span class="kicker">Legend</span>
-                <h2>Fleet &amp; sites</h2>
+            <div class="command-stack-block command-stack-brief">
+              <div class="command-stack-title">
+                <span>Commander Brief</span>
+                <small>current intent</small>
               </div>
-            </header>
-            <div class="fleet-legend-mini" aria-label="Map legend">
-              <div class="fleet-legend-row">
-                <span class="fleet-dot" style="background:var(--info);box-shadow:0 0 6px rgba(130,200,255,.55)"></span>
-                <span>UAV — scout / relay</span>
+              <div id="briefText" class="brief-body" aria-live="polite"></div>
+            </div>
+            <div class="command-stack-block command-stack-decision">
+              <div class="command-stack-title">
+                <span>Decision Hub</span>
+                <small>allocation log</small>
               </div>
-              <div class="fleet-legend-row">
-                <span class="fleet-dot" style="background:var(--accent);box-shadow:0 0 6px var(--accent-glow)"></span>
-                <span>UGV — rescue &amp; clearance</span>
-              </div>
-              <div class="fleet-legend-row">
-                <span class="fleet-dot fleet-dot-square" style="background:#2a3e58"></span>
-                <span>Road corridor (tactical)</span>
-              </div>
-              <div class="fleet-legend-row">
-                <span class="fleet-dot" style="background:#ff8a8a;box-shadow:0 0 5px rgba(255,138,138,.45)"></span>
-                <span>Victim / survivor</span>
-              </div>
+              <div id="thinkingText" class="thinking-feed" aria-live="polite"></div>
             </div>
           </section>
 
-          <section class="rail-section">
-            <header class="rail-section-head">
-              <div>
-                <span class="kicker">M03 · Survival ranking</span>
-                <h2>Threat Board</h2>
-              </div>
-              <span class="count-pill" id="threatCount">0</span>
-            </header>
-            <div id="priorityList" class="priority-list"></div>
-          </section>
-
-          <section class="rail-section">
+          <section class="rail-section rail-fleet">
             <header class="rail-section-head">
               <div>
                 <span class="kicker">M02 · Distributed task allocation</span>
@@ -461,7 +438,7 @@
             <div id="agentList" class="agent-list"></div>
           </section>
 
-          <section class="rail-section grow">
+          <section class="rail-section rail-events">
             <header class="rail-section-head">
               <div>
                 <span class="kicker">M05 · Mesh · Relay</span>

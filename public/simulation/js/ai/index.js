@@ -1,4 +1,5 @@
 import { rankVictims } from "../sim/plan.js";
+import { currentScenePreset } from "../config/presets.js";
 import { povs } from "../render/world3d/index.js";
 import { simBridge } from "../sim/bridge.js";
 import { emitToast } from "../ui/toast.js";
@@ -98,6 +99,113 @@ export const FLEET_DIALOGUE_COT_BUILTIN = {
       text: "No new task edges this heartbeat — autonomous patrol, battery-balanced loiter, and watch dormant thermal tiles.",
     },
   },
+  scenes: {
+    urban_quake: {
+      dialogue: {
+        orchestrator: {
+          heartbeatFused: "${padT}: Gemma 4 fused collapse geometry, blocked corridors, and weak life-signal channels.",
+          leadVictim: "Lead ${id}: survival ${survivalPct}% (${survivalSteps}t), comm ${comm}; structural-entry candidate ${bestAgent}.",
+          policy: "Policy: bind ${taskCount} tasks with collapse-risk gating and drone confirmation before ground ingress.",
+        },
+        agentSlide: {
+          riskNote: "Structural risk note: ${note}",
+          radioDroneOut: "${agent} → ${radioTo}: confirming ${target}; checking facade shadows, dust occlusion, and thermal/audio consistency.",
+          radioUgvOut: "${agent} → ${radioTo}: moving by routed corridor toward ${target}; reject cells intersecting collapse or rubble footprint.",
+        },
+        trafficNote: {
+          lineBlock: "${blockId} constrains the rescue corridor; Gemma 4 keeps ground units off unstable debris until cleared.",
+          lineRecommend: "Recommend drone cross-check of the corridor before committing the next extraction leg.",
+        },
+      },
+      decisionHub: {
+        summary: "Gemma 4 Decision Hub: collapse map, victim stack, and corridor status fused for ${sceneLabel}.",
+        priority: "Priority: ${topId} leads at ${topScore}; signal fusion favors ${bestAgent} with comms ${comm}.",
+        route: "Route feasibility: ${blockedCount} blocked corridor(s), ${rescueCount} rescue edge(s), collapse gates remain active.",
+        task: "${agent}: ${taskHuman} ${target}; structural safety gate retained.",
+        gate: "Commander gate: ${gate}",
+        event: "Status event: ${lostCount} lost, ${rescued}/${totalVictims} extracted; keep drone confirmation ahead of UGV entry.",
+        idle: "No active rescue edge; maintain acoustic/thermal sweep and preserve battery.",
+      },
+      commanderBrief: {
+        active: "Gemma 4 fused signal confidence, collapse exposure, and corridor access. ${topId} is the lead objective; ${rescueAgent} should execute the safest ground approach while ${scoutAgent} verifies structural shadows. ${relaySentence}${blockadeSentence}",
+        allClear: "All known urban-quake victims are resolved. Keep drones scanning secondary voids and hold ground teams outside unstable collapse cells.",
+        relay: "Relay coverage is required before close approach. ",
+        noRelay: "Relay coverage is adequate for the next move. ",
+        blockade: "${blockId} still limits the corridor; clear it only if it blocks the active extraction. ",
+        noBlockade: "Primary corridors are open enough for immediate extraction. ",
+      },
+    },
+    wildfire: {
+      dialogue: {
+        orchestrator: {
+          heartbeatFused: "${padT}: Gemma 4 fused fireline geometry, smoke/thermal ambiguity, relay coverage, and survivor urgency.",
+          leadVictim: "Lead ${id}: survival ${survivalPct}% (${survivalSteps}t), comm ${comm}; fire-edge mover ${bestAgent}.",
+          policy: "Policy: emit ${taskCount} tasks with thermal false-positive checks and smoke-safe relay geometry.",
+        },
+        agentSlide: {
+          riskNote: "Wildfire risk note: ${note}",
+          radioDroneOut: "${agent} → ${radioTo}: eyes on ${target}; separating survivor heat from flame reflections and smoke shimmer.",
+          radioUgvOut: "${agent} → ${radioTo}: advancing around burn perimeter toward ${target}; request fresh wind/fireline picture each leg.",
+        },
+        trafficNote: {
+          lineBlock: "${blockId} blocks the ground edge of the fire perimeter; convoy risk rises until bypass or clearance.",
+          lineRecommend: "Recommend relay hold outside the smoke dropout zone before the next ground push.",
+        },
+      },
+      decisionHub: {
+        summary: "Gemma 4 Decision Hub: fireline, smoke dropout, and thermal confidence fused for ${sceneLabel}.",
+        priority: "Priority: ${topId} leads at ${topScore}; thermal ambiguity checked against comms ${comm}.",
+        route: "Route feasibility: ${blockedCount} blocked cell(s), burn perimeter avoidance active, relay demand ${relayNeed}.",
+        task: "${agent}: ${taskHuman} ${target}; maintain smoke-safe offset.",
+        gate: "Commander gate: ${gate}",
+        event: "Status event: ${lostCount} lost, ${rescued}/${totalVictims} extracted; avoid treating flame reflections as survivor contact.",
+        idle: "No active rescue edge; continue perimeter scan and battery-balanced loiter.",
+      },
+      commanderBrief: {
+        active: "Gemma 4 fused fireline position, thermal ambiguity, and relay coverage. ${topId} is the lead objective; ${scoutAgent} should verify heat signature quality while ${rescueAgent} follows the burn-safe corridor. ${relaySentence}${blockadeSentence}",
+        allClear: "All known wildfire contacts are resolved. Hold relay coverage and keep drones watching for new ember-spot detections.",
+        relay: "Relay must hold outside the smoke dropout zone. ",
+        noRelay: "Relay coverage is stable for the next move. ",
+        blockade: "${blockId} constrains the ground edge; clear or bypass only if it blocks the active rescue. ",
+        noBlockade: "Ground corridors are open enough around the active fire edge. ",
+      },
+    },
+    industrial: {
+      dialogue: {
+        orchestrator: {
+          heartbeatFused: "${padT}: Gemma 4 fused GLB facility occlusion, low-clearance obstacles, route cells, and casualty urgency.",
+          leadVictim: "Lead ${id}: survival ${survivalPct}% (${survivalSteps}t), comm ${comm}; reachable contact candidate ${bestAgent}.",
+          policy: "Policy: bind ${taskCount} tasks after checking facility passability and hazardous equipment zones.",
+        },
+        agentSlide: {
+          riskNote: "Industrial risk note: ${note}",
+          radioDroneOut: "${agent} → ${radioTo}: confirming ${target}; checking platform occlusion and reachable contact cell.",
+          radioUgvOut: "${agent} → ${radioTo}: advancing through low-clearance passable lane toward ${target}; rejecting solid equipment footprints.",
+        },
+        trafficNote: {
+          lineBlock: "${blockId} blocks a service lane; Gemma 4 distinguishes solid equipment from overhead structure.",
+          lineRecommend: "Recommend rerouting only around low-level obstacles; overhead platforms are pass-through if vehicle envelope clears.",
+        },
+      },
+      decisionHub: {
+        summary: "Gemma 4 Decision Hub: GLB occlusion, vehicle envelope, and facility route cells fused for ${sceneLabel}.",
+        priority: "Priority: ${topId} leads at ${topScore}; reachable-contact logic assigns ${bestAgent}.",
+        route: "Route feasibility: ${blockedCount} service blockage(s), low-clearance obstacle filter active, contact-cell validation enabled.",
+        task: "${agent}: ${taskHuman} ${target}; use solid-footprint avoidance, not overhead platform avoidance.",
+        gate: "Commander gate: ${gate}",
+        event: "Status event: ${lostCount} lost, ${rescued}/${totalVictims} extracted; victims are constrained to passable facility cells.",
+        idle: "No active rescue edge; hold UGVs in service lanes and continue facility scan.",
+      },
+      commanderBrief: {
+        active: "Gemma 4 fused facility occlusion, low-clearance obstacle geometry, and reachable contact points. ${topId} is the lead objective; ${rescueAgent} should use the passable service lane while ${scoutAgent} verifies platform occlusion. ${relaySentence}${blockadeSentence}",
+        allClear: "All known industrial contacts are resolved. Keep UGVs in service lanes and monitor hazardous equipment zones.",
+        relay: "Relay coverage is required across the facility shadow. ",
+        noRelay: "Relay coverage is sufficient inside the facility. ",
+        blockade: "${blockId} still blocks a service lane; clear it only if it gates the active contact point. ",
+        noBlockade: "Low-clearance routing reports a reachable contact lane. ",
+      },
+    },
+  },
 };
 
 /** Resolved from JSON fetch when available; defaults to builtin (mirrors `fleet-dialogue-cot.json`). */
@@ -119,6 +227,81 @@ export function cotFeedMaxBlocks() {
 
 export function cotFeedSlideMax() {
   return fleetDialogueCot?.feedSlideMax ?? 6;
+}
+
+function mergeTemplateSection(base = {}, override = {}) {
+  const out = { ...base };
+  for (const [key, value] of Object.entries(override || {})) {
+    out[key] =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? mergeTemplateSection(base?.[key] || {}, value)
+        : value;
+  }
+  return out;
+}
+
+export function activeSceneMock() {
+  const scenes = fleetDialogueCot?.scenes ?? FLEET_DIALOGUE_COT_BUILTIN.scenes ?? {};
+  return scenes[currentScenePreset] || scenes.urban_quake || {};
+}
+
+function activeDialogueTemplates() {
+  return mergeTemplateSection(
+    fleetDialogueCot?.dialogue ?? FLEET_DIALOGUE_COT_BUILTIN.dialogue,
+    activeSceneMock().dialogue || {},
+  );
+}
+
+function actionHuman(task) {
+  return String(task || "task").replace(/_/g, " ");
+}
+
+function sceneLabelForPreset() {
+  const labels = {
+    urban_quake: "urban quake",
+    wildfire: "wildfire WUI",
+    industrial: "industrial collapse",
+  };
+  return labels[currentScenePreset] || currentScenePreset || "mission";
+}
+
+function firstActionMatching(plan, predicate) {
+  return (plan?.mission_plan || []).find(predicate) || null;
+}
+
+function sceneVars(plan) {
+  const state = simBridge.state;
+  const candidates = state ? rankVictims(state) : [];
+  const top = candidates[0] || null;
+  const firstRescue = firstActionMatching(plan, (a) => a.task === "ground_rescue");
+  const firstScout = firstActionMatching(plan, (a) => a.task === "aerial_confirmation");
+  const firstRelay = firstActionMatching(plan, (a) => a.task === "deploy_relay");
+  const activeBlock = state?.map?.blocked_cells?.find((b) => b.status === "blocked") || null;
+  const totalVictims = state?.victims?.length || 0;
+  const rescued = state?.rescued ?? 0;
+  const lostCount = state?.victims?.filter((v) => v.status === "dead").length || 0;
+  return {
+    sceneLabel: sceneLabelForPreset(),
+    topId: top?.id || "no active victim",
+    topScore: top?.score != null ? top.score.toFixed(2) : "—",
+    bestAgent: top?.best_agent || firstRescue?.agent || "ground team",
+    comm: top?.communication_status || "unknown",
+    rescueAgent: firstRescue?.agent || top?.best_agent || "ground team",
+    scoutAgent: firstScout?.agent || "Drone-1",
+    relayNeed: firstRelay ? "required" : "not required",
+    blockId: activeBlock?.id || "no blockade",
+    blockadeSentence: "",
+    relaySentence: "",
+    blockedCount: state?.map?.blocked_cells?.filter((b) => b.status === "blocked").length || 0,
+    rescueCount: (plan?.mission_plan || []).filter((a) => a.task === "ground_rescue").length,
+    lostCount,
+    rescued,
+    totalVictims,
+  };
+}
+
+function renderSceneTemplate(template, plan, extra = {}) {
+  return interpolate(template, { ...sceneVars(plan), ...extra });
 }
 
 /** Apply panel chrome from `fleet-dialogue-cot.json` (kicker, title, buttons, meta). */
@@ -735,6 +918,30 @@ export function appendBriefingRow(el, step, text) {
 
 export function buildThinkingNarrative(plan) {
   if (!plan || !simBridge.state) return "Standing by — no planner output yet.";
+  const scene = activeSceneMock();
+  const dh = scene.decisionHub;
+  if (dh) {
+    const parts = [];
+    parts.push(renderSceneTemplate(dh.summary, plan));
+    parts.push(renderSceneTemplate(dh.priority, plan));
+    parts.push(renderSceneTemplate(dh.route, plan));
+    const actions = plan.mission_plan || [];
+    for (const action of actions.slice(0, 5)) {
+      parts.push(renderSceneTemplate(dh.task, plan, {
+        agent: action.agent,
+        taskHuman: actionHuman(action.task),
+        target: action.target,
+      }));
+    }
+    for (const line of plan.human_confirmation_required || []) {
+      if (line && !/^no\s/i.test(line)) {
+        parts.push(renderSceneTemplate(dh.gate, plan, { gate: line }));
+      }
+    }
+    parts.push(renderSceneTemplate(dh.event, plan));
+    if (!actions.length && dh.idle) parts.push(renderSceneTemplate(dh.idle, plan));
+    return parts.filter(Boolean).join(" ");
+  }
   const state = simBridge.state;
   const parts = [];
   const po = plan.priority_order || [];
@@ -791,11 +998,28 @@ export function syncBriefingFeed(plan) {
     if (liveAiConnected === null || liveAiInFlight) return;
     return;
   }
-  if (!plan.commander_briefing) return;
-  const text = plan.commander_briefing;
+  const text = buildMockCommanderBrief(plan) || plan.commander_briefing;
+  if (!text) return;
   if (briefingSeen.has(text)) return;
   briefingSeen.add(text);
   appendBriefingRow(briefText, state.timestep, text);
+}
+
+export function buildMockCommanderBrief(plan) {
+  const state = simBridge.state;
+  if (!state || !plan) return "";
+  const cb = activeSceneMock().commanderBrief;
+  if (!cb) return "";
+  const candidates = rankVictims(state);
+  if (!candidates.length) return renderSceneTemplate(cb.allClear, plan);
+
+  const firstRelay = firstActionMatching(plan, (a) => a.task === "deploy_relay");
+  const activeBlock = state.map?.blocked_cells?.find((b) => b.status === "blocked");
+  const relaySentence = renderSceneTemplate(firstRelay ? cb.relay : cb.noRelay, plan);
+  const blockadeSentence = renderSceneTemplate(activeBlock ? cb.blockade : cb.noBlockade, plan, {
+    blockId: activeBlock?.id || "no blockade",
+  });
+  return renderSceneTemplate(cb.active, plan, { relaySentence, blockadeSentence });
 }
 
 /** UI-only placeholders while waiting for real Gemma output (not MOCK decision text). */
@@ -920,7 +1144,7 @@ export function buildFleetDialogueSlides(plan) {
     return liveAiCache.fleetSlides;
   }
 
-  const dDlg = fleetDialogueCot?.dialogue ?? FLEET_DIALOGUE_COT_BUILTIN.dialogue;
+  const dDlg = activeDialogueTemplates();
   const standby = dDlg.standby ?? FLEET_DIALOGUE_COT_BUILTIN.dialogue.standby;
   if (!state || !plan) {
     return [
@@ -977,7 +1201,7 @@ export function buildFleetDialogueSlides(plan) {
     const agent = agents.find((a) => a.id === action.agent);
     const peer = pickDialoguePeer(action, agents);
     const cls = agentDialogueClass(agent);
-    const taskHuman = action.task.replace(/_/g, " ");
+    const taskHuman = actionHuman(action.task);
     const loc = agent?.location?.map((n) => Math.round(n)).join(", ") || "—";
     const cotLines = [
       interpolate(ag.goal, { padT, agent: action.agent, taskHuman, target: action.target }),

@@ -519,8 +519,8 @@ a.ico.back:hover svg { transform: translateX(-2px); }
 .cc-rail-l::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 
 .cc-rail-r {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
@@ -768,19 +768,103 @@ input[type="range"]::-moz-range-thumb {
 .rail-section.grow { flex: 1; min-height: 0; }
 .rail-section:last-child { border-bottom: none; }
 
-.rail-section.rail-decision {
-  max-height: 260px;
-  flex-shrink: 0;
-}
-.rail-section.rail-legend {
-  flex-shrink: 0;
-  padding-bottom: 10px;
+.rail-section.rail-ai-command {
+  flex: 1 1 auto;
+  gap: 8px;
+  min-height: 260px;
+  max-height: none;
+  border-bottom-color: rgba(93, 255, 180, 0.2);
+  background:
+    linear-gradient(180deg, rgba(93, 255, 180, 0.035), rgba(93, 255, 180, 0)),
+    rgba(0, 0, 0, 0.08);
 }
 .rail-section-head.compact-head {
   margin-bottom: 6px;
 }
 .rail-section-head.compact-head h2 {
   font-size: 11px;
+}
+
+.command-stack-block {
+  min-height: 0;
+  border: 1px solid rgba(93, 255, 180, 0.12);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 7px;
+}
+
+.command-stack-brief {
+  flex: 0 0 auto;
+}
+
+.command-stack-decision {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.command-stack-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.command-stack-title span {
+  color: var(--fg);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.command-stack-title small {
+  color: var(--muted);
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.rail-ai-command .brief-body {
+  min-height: 118px;
+  max-height: 172px;
+  padding: 0;
+  overflow-y: auto;
+  background: transparent;
+  border: 0;
+}
+
+.rail-ai-command .briefing-row {
+  margin: 0;
+  padding: 8px 9px;
+}
+
+.rail-ai-command .thinking-feed {
+  flex: 1;
+  min-height: 110px;
+  max-height: none;
+}
+
+.rail-fleet {
+  flex: 0 0 335px;
+  max-height: 335px;
+}
+
+.rail-fleet .agent-list {
+  max-height: 273px;
+}
+
+.rail-section.rail-events {
+  flex: 0 0 184px;
+  min-height: 176px;
+  max-height: 192px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.rail-events .event-log {
+  max-height: 142px;
 }
 
 /* Decision Hub (demo_player-style feed + typewriter rows) */
@@ -838,30 +922,6 @@ input[type="range"]::-moz-range-thumb {
   animation: thinking-cursor 0.9s step-end infinite;
   font-size: 10px;
   vertical-align: middle;
-}
-
-.fleet-legend-mini {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: 10px;
-  color: var(--muted);
-  font-family: var(--mono);
-  letter-spacing: 0.02em;
-}
-.fleet-legend-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.fleet-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.fleet-dot-square {
-  border-radius: 2px;
 }
 
 /* Commander brief — stacked entries (demo_player briefing-text) */
@@ -941,8 +1001,7 @@ input[type="range"]::-moz-range-thumb {
 /* default span */
 .vp-2d      { grid-column: 1 / span 1; grid-row: 1; }
 .vp-3d      { grid-column: 2 / span 2; grid-row: 1; }
-.vp-brief   { grid-column: 1 / span 1; grid-row: 2; }
-.vp-trend   { grid-column: 2 / span 1; grid-row: 2; }
+.vp-trend   { grid-column: 1 / span 2; grid-row: 2; }
 .vp-mission { grid-column: 3 / span 1; grid-row: 2; }
 
 .panel {
@@ -1320,6 +1379,79 @@ canvas#simCanvas {
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+}
+
+.survival-risk-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(168px, 0.34fr);
+  gap: 10px;
+}
+
+.survival-chart-frame {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.survival-risk-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border: 1px solid rgba(130, 200, 255, 0.12);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.survival-risk-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.survival-risk-title span {
+  color: var(--fg);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.survival-risk-title small {
+  color: var(--muted);
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.priority-list-compact {
+  flex: 1;
+  max-height: none;
+}
+
+.priority-list-compact .row {
+  padding: 6px 7px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.priority-list-compact .row strong {
+  font-size: 10px;
+}
+
+.priority-list-compact .row span {
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.priority-list-compact .tag {
+  font-size: 9px;
+  padding: 2px 5px;
 }
 
 /* ── Gemma 4 · Fleet dialogue feed (vertical, newest on top) ─ */
@@ -2130,6 +2262,18 @@ pre::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99
   .cc-top-l { grid-column: 1; }
   .cc-top-ai { grid-column: 2; }
   .cc-top-r { grid-column: 3; }
+  .survival-risk-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .survival-risk-panel {
+    max-height: 96px;
+  }
+  .priority-list-compact {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-y: auto;
+  }
 }
 
 @media (max-width: 1100px) {
@@ -2142,8 +2286,7 @@ pre::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99
   }
   .vp-2d      { grid-column: 1 / span 2; grid-row: 1; }
   .vp-3d      { grid-column: 1 / span 2; grid-row: 2; }
-  .vp-brief   { grid-column: 1; grid-row: 3; }
-  .vp-trend   { grid-column: 2; grid-row: 3; }
+  .vp-trend   { grid-column: 1 / span 2; grid-row: 3; }
   .vp-mission { grid-column: 1 / span 2; grid-row: 4; }
 }
 
