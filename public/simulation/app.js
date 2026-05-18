@@ -49,7 +49,7 @@ import {
   simulationTickIntervalMs,
   applyFetchedFleetDialogueCot,
 } from "./js/ai/index.js";
-import { emitToast } from "./js/ui/toast.js";
+import { emitToast, logEvent, seedEventLog, syncEventLogPlaceholder } from "./js/ui/toast.js";
 import {
   bindPanelsDom,
   renderPanels,
@@ -105,23 +105,35 @@ bindWorld3dUi({
 });
 bindAiDom({ thinkingFeedEl, briefText });
 
-/** Match right-rail “Fleet Status” block height to center “Fleet dialogue & CoT” (`.vp-mission`). */
+/** Match Fleet Status list scroll area to center “Fleet dialogue & CoT” (`.vp-mission`). */
 function wireRailFleetHeightToCot() {
   const cot = document.querySelector(".vp-mission");
   const fleet = document.querySelector(".rail-fleet");
+  const list = fleet?.querySelector(".agent-list");
+  const events = document.querySelector(".rail-events");
   const railR = document.querySelector(".cc-rail-r");
-  if (!cot || !fleet) return;
+  if (!cot || !fleet || !list) return;
 
   const apply = () => {
     if (!railR || getComputedStyle(railR).display === "none") {
-      fleet.style.removeProperty("height");
       fleet.style.removeProperty("flex");
+      list.style.removeProperty("max-height");
       return;
     }
-    const h = Math.round(cot.getBoundingClientRect().height);
-    if (h < 1) return;
+    const cotH = Math.round(cot.getBoundingClientRect().height);
+    if (cotH < 1) return;
+    const head = fleet.querySelector(".rail-section-head");
+    const headH = head ? Math.round(head.getBoundingClientRect().height) : 0;
+    const pad = 28;
+    const railH = Math.round(railR.getBoundingClientRect().height);
+    const eventsH = events ? Math.round(events.getBoundingClientRect().height) : 220;
+    const aiHead = railR.querySelector(".rail-ai-command .rail-section-head");
+    const aiHeadH = aiHead ? Math.round(aiHead.getBoundingClientRect().height) : 48;
+    const aiMin = 180;
+    const listFromCot = cotH - headH - pad;
+    const listFromRail = railH - eventsH - headH - pad - aiMin - aiHeadH;
     fleet.style.flex = "0 0 auto";
-    fleet.style.height = `${h + 100}px`;
+    list.style.maxHeight = `${Math.max(100, Math.min(listFromCot, listFromRail))}px`;
   };
 
   const ro = new ResizeObserver(() => requestAnimationFrame(apply));
@@ -368,6 +380,7 @@ function stopAuto() {
   clearInterval(timer);
   timer = null;
   setRunLabel("RUN");
+  if (state) logEvent("default", "AUTO paused");
 }
 
 function clone(value) {
@@ -409,6 +422,7 @@ function startAuto() {
   primeCotFeedAutoThrottle();
   timer = setInterval(() => step(), simulationTickIntervalMs());
   setRunLabel("PAUSE");
+  if (state) logEvent("default", "AUTO · closed-loop simulation running");
 }
 
 function reset() {
@@ -441,8 +455,13 @@ function reset() {
 
   resetDecisionFeeds();
   resetCotFeedState();
-  const log = document.getElementById("eventLog");
-  if (log) log.innerHTML = "";
+
+  const cfg = readConfig();
+  const preset = cfg.preset || currentScenePreset || "urban_quake";
+  seedEventLog([
+    { type: "default", description: `Mission reset · ${preset}` },
+    { type: "default", description: "Press AUTO or Space to begin timestep loop" },
+  ]);
 
   stopAuto();
   renderOnce();
@@ -485,6 +504,8 @@ function step() {
       emitToast("rescued", `${victim.id} rescued`);
     } else if (before !== "dead" && victim.status === "dead") {
       emitToast("victim_dead", `${victim.id} lost`);
+    } else if (before === "unknown" && victim.status === "trapped") {
+      logEvent("default", `${victim.id} located · trapped`);
     }
   }
   for (const blockade of state.map.blocked_cells) {
@@ -585,6 +606,7 @@ Promise.all([
     });
     if (liveAiModeEnabled) void probeGemmaBackend();
     else setAiStatusBadge(false);
+    syncEventLogPlaceholder();
   })
   .catch((err) => {
     console.error(`[simulation] Bootstrap failed (${scenarioFile}):`, err);

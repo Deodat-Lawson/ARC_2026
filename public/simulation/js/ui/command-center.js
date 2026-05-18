@@ -1,6 +1,6 @@
 import { $, PRESET_DEFAULTS, readConfig, setActivePreset, syncSimulationPresetClass } from "../config/presets.js";
 import { applyTacticalBasemapStylePreset } from "../geo/tactical-basemap.js";
-import { emitToast } from "./toast.js";
+import { emitToast, syncEventLogPlaceholder } from "./toast.js";
 import { formatCotTranscript, scrollLatestCotIntoView, updateMissionLabels } from "./panels.js";
 import { syncAiModeSegmentedUi, applyLiveAiModeFromUser } from "../ai/index.js";
 import { setupTour } from "./tour.js";
@@ -137,6 +137,7 @@ export function setupCommandCenter(ctx) {
   if (clearBtn && logEl) {
     clearBtn.addEventListener("click", () => {
       logEl.innerHTML = "";
+      syncEventLogPlaceholder();
     });
   }
 
