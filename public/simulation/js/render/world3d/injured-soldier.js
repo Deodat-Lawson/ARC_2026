@@ -16,7 +16,52 @@ const MODEL_MTL = "injured-soldier.mtl";
 let prototypePromise = null;
 
 /** Length of the prone figure (longest source axis) in world units. */
-export const INJURED_SOLDIER_LENGTH = 1.9;
+export const INJURED_SOLDIER_LENGTH = 0.38;
+
+// Lazily-built procedural camo texture, shared across every cloned material.
+let camoTexture = null;
+function getCamoTexture() {
+  if (camoTexture) return camoTexture;
+  const size = 64;
+  const cvs = document.createElement("canvas");
+  cvs.width = size;
+  cvs.height = size;
+  const ctx = cvs.getContext("2d");
+  // Base olive
+  ctx.fillStyle = "#4a4233";
+  ctx.fillRect(0, 0, size, size);
+  // Splotch palette: darker olive, khaki, brown, black flecks
+  const splotches = [
+    { color: "#3a3526", count: 18, rMin: 4, rMax: 9 },
+    { color: "#6b6240", count: 14, rMin: 3, rMax: 7 },
+    { color: "#2a2418", count: 12, rMin: 2, rMax: 5 },
+    { color: "#7a6a3a", count: 8, rMin: 2, rMax: 4 },
+  ];
+  // Deterministic pseudo-random so the camo is stable across reloads.
+  let seed = 1337;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0xffffffff;
+  };
+  for (const s of splotches) {
+    ctx.fillStyle = s.color;
+    for (let i = 0; i < s.count; i += 1) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const r = s.rMin + rand() * (s.rMax - s.rMin);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  camoTexture = new THREE.CanvasTexture(cvs);
+  camoTexture.wrapS = THREE.RepeatWrapping;
+  camoTexture.wrapT = THREE.RepeatWrapping;
+  camoTexture.magFilter = THREE.NearestFilter;
+  camoTexture.minFilter = THREE.NearestMipMapLinearFilter;
+  camoTexture.needsUpdate = true;
+  return camoTexture;
+}
 
 /** Promise → cached THREE.Group prototype (loaded once, cloned per victim). */
 export function loadInjuredSoldierPrototype() {
@@ -88,7 +133,14 @@ export function createInjuredSoldierInstance(prototype, length = INJURED_SOLDIER
 
 function cloneAndTint(material, color, emissive) {
   const m = material.clone();
-  if (m.color) m.color.copy(color);
+  if ("map" in m) {
+    m.map = getCamoTexture();
+    // Base color multiplies the texture; keep it white so camo reads cleanly.
+    if (m.color) m.color.setRGB(1, 1, 1);
+    m.needsUpdate = true;
+  } else if (m.color) {
+    m.color.copy(color);
+  }
   if ("emissive" in m && m.emissive) {
     m.emissive.copy(emissive);
     if ("emissiveIntensity" in m) m.emissiveIntensity = 0.35;

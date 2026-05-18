@@ -146,7 +146,7 @@ function bootstrapWildfireVictims(scenario, meadowFn, pitchScale, bootId) {
       // Soldier is sized in metres; meadow units are also metres (pitchScale
       // is metres per cell), so a 1.9m figure reads at correct scale.
       for (const v of scenario.victims || []) {
-        const soldier = createInjuredSoldierInstance(prototype, 1.9);
+        const soldier = createInjuredSoldierInstance(prototype, 0.38);
         soldier.rotation.y = (v.id.charCodeAt(1) || 0) * 0.7;
         const grp = new THREE.Group();
         grp.add(soldier);

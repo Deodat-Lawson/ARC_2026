@@ -288,7 +288,7 @@ function buildIndustrialVictimMeshes(scenario, bootId) {
 
   // ~0.7 of agent footprint reads as "a single person near the agents"
   // without dominating the scene.
-  const figureLen = Math.max(12, industrialCellSpan * 0.36);
+  const figureLen = Math.max(2.4, industrialCellSpan * 0.072);
 
   loadInjuredSoldierPrototype()
     .then((prototype) => {
