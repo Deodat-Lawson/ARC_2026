@@ -87,13 +87,11 @@ export function SystemDemo() {
         ]}
         visualization={<M5Mesh />}
       />
-
-      <DemoCta />
     </div>
   );
 }
 
-function DemoCta() {
+export function LiveReplayCta() {
   return (
     <section className="border-t border-white/5 px-6 py-24 md:px-10 md:py-32">
       <div className="mx-auto flex max-w-7xl flex-col items-start gap-10 md:flex-row md:items-end md:justify-between">
