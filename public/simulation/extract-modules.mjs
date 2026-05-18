@@ -149,7 +149,7 @@ const exportNames = [
   "fetchDroneAlpha",
   "fetchTrackBeta",
   "fetchRelayGamma",
-  "probeLmStudio",
+  "probeGemmaBackend",
   "triggerLiveAiRound",
   "resetLiveAiState",
   "splitThinkingLog",

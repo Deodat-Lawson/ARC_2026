@@ -343,7 +343,7 @@ const thinkingSeen = new Set();
 const briefingSeen = new Set();
 
 /* ------------------------------------------------------------------------- */
-/* Live Gemma 4 · LM Studio / LiteRT (via /api/gemma-chat)                   */
+/* Live Gemma 4 · LiteRT (via /api/gemma-chat)                                */
 /* ------------------------------------------------------------------------- */
 export const AI_ENDPOINT = "/api/gemma-chat";
 export const LIVE_AI_STORAGE_KEY = "arc_sim_ai_mode";
@@ -424,7 +424,7 @@ export function applyLiveAiModeFromUser(enableGemma) {
   } else {
     liveAiConnected = null;
     setAiStatusBadge(null);
-    void probeLmStudio();
+    void probeGemmaBackend();
   }
   const st = simBridge.state;
   const pl = simBridge.plan;
@@ -458,7 +458,7 @@ export const liveAiCache = {
 
 export let liveAiRequestId = 0;
 export let liveAiInFlight = false;
-/** @type {boolean|null} null = probing, true = LM Studio reachable */
+/** @type {boolean|null} null = probing, true = Gemma / LiteRT backend reachable */
 export let liveAiConnected = null;
 /** Latest plan to run after the current Gemma round finishes (simulation keeps stepping). */
 export let liveAiPendingPlan = null;
@@ -791,7 +791,7 @@ async function fetchRelayGamma(droneMsg, betaMsg, contextMsg, requestId) {
   return text;
 }
 
-export async function probeLmStudio() {
+export async function probeGemmaBackend() {
   setAiStatusBadge(null);
   try {
     const res = await fetch(AI_ENDPOINT, { method: "GET", cache: "no-store" });
@@ -810,7 +810,7 @@ async function triggerLiveAiRound(plan) {
   if (liveAiConnected === false) return;
 
   if (liveAiConnected === null) {
-    const up = await probeLmStudio();
+    const up = await probeGemmaBackend();
     if (!up) return;
   }
 
