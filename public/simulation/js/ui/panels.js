@@ -12,6 +12,7 @@ import {
   syncThinkingFeed,
   syncBriefingFeed,
   syncLiveAiHudPending,
+  syncTopBarAiUi,
 } from "../ai/index.js";
 import { COT_FEED_AUTO_MIN_MS } from "../sim/timing.js";
 
@@ -504,8 +505,7 @@ export function updateMissionLabels(cfg) {
   const vis = PRESET_VISUAL[cfg.preset] || PRESET_VISUAL.urban_quake;
   const idEl = $("msnId");
   if (idEl) idEl.textContent = `${cfg.missionId} · ${preset.label.split("· ")[1] || "MISSION"}`;
-  const phaseEl = $("msnPhase");
-  if (phaseEl) phaseEl.textContent = preset.phase;
+  syncTopBarAiUi(preset.phase);
   const gridBadge = $("gridBadge");
   if (gridBadge) gridBadge.textContent = `${cfg.grid} × ${cfg.grid}`;
   const geoEl = $("geoGridBadge");

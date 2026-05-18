@@ -3,6 +3,7 @@ import { currentScenePreset } from "../config/presets.js";
 import { povs } from "../render/world3d/index.js";
 import { simBridge } from "../sim/bridge.js";
 import { emitToast } from "../ui/toast.js";
+import { PRESET_DEFAULTS, readConfig } from "../config/presets.js";
 import {
   MS_PER_TICK,
   GEMMA_MS_PER_TICK,
@@ -378,13 +379,45 @@ export function syncAiModeSegmentedUi() {
   gemmaBtn.classList.toggle("active", liveAiModeEnabled);
   mockBtn.setAttribute("aria-pressed", (!liveAiModeEnabled).toString());
   gemmaBtn.setAttribute("aria-pressed", liveAiModeEnabled.toString());
+  const preset = PRESET_DEFAULTS[readConfig().preset];
+  syncTopBarAiUi(preset?.phase);
+}
+
+/** Header phase text: GEMMA-4 closed-loop vs rule-based MOCK. */
+export function phaseLabelForBar(presetPhase) {
+  if (!presetPhase) {
+    return liveAiModeEnabled ? "CLOSED LOOP · GEMMA-4" : "SIMULATION · RULE-BASED";
+  }
+  if (!liveAiModeEnabled) {
+    return presetPhase.replace(/\s*·\s*GEMMA-4\s*$/i, " · RULE-BASED");
+  }
+  return presetPhase;
+}
+
+/** Sync mission phase pill, hide Gemma chrome in MOCK, tighten top bar layout classes. */
+export function syncTopBarAiUi(presetPhase) {
+  const phaseEl = document.getElementById("msnPhase");
+  if (phaseEl) phaseEl.textContent = phaseLabelForBar(presetPhase);
+
+  const mock = !liveAiModeEnabled;
+  const topBar = document.querySelector(".cc-top");
+  const mainCc = document.querySelector("main.cc");
+  topBar?.classList.toggle("cc-top--mock", mock);
+  topBar?.classList.toggle("cc-top--gemma", !mock);
+  mainCc?.classList.toggle("cc-ai-mock", mock);
+
+  const msnState = document.getElementById("msnState");
+  if (msnState) {
+    msnState.classList.toggle("msn-state--mock", mock);
+    const pulse = msnState.querySelector(".pulse");
+    if (pulse) pulse.hidden = mock;
+  }
 }
 
 export function applyLiveAiModeFromUser(enableGemma) {
   if (liveAiModeEnabled === enableGemma) return;
   liveAiModeEnabled = enableGemma;
   persistLiveAiMode();
-  syncAiModeSegmentedUi();
   resetLiveAiState();
   if (!liveAiModeEnabled) {
     setAiStatusBadge(false);
@@ -400,6 +433,7 @@ export function applyLiveAiModeFromUser(enableGemma) {
     if (liveAiModeEnabled) scheduleLiveAiRound(pl);
   }
   if (simBridge.hooks?.getTimer?.()) simBridge.hooks?.startAuto?.();
+  syncAiModeSegmentedUi();
 }
 
 const agentHistories = {

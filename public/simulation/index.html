@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="/simulation/vendor/maplibre-gl/maplibre-gl.css">
-    <link rel="stylesheet" href="/simulation/styles.css?v=industrial-map-isolate">
+    <link rel="stylesheet" href="/simulation/styles.css?v=rail-layout-fix">
     <script type="importmap">
       {
         "imports": {
@@ -35,7 +35,7 @@
           </a>
           <span class="cc-divider"></span>
           <span class="msn-id" id="msnId">MSN-001 · URBAN-QUAKE</span>
-          <span class="msn-state">
+          <span class="msn-state" id="msnState">
             <span class="pulse" aria-hidden="true"></span>
             <span id="msnPhase">CLOSED LOOP · GEMMA-4</span>
           </span>
@@ -72,6 +72,7 @@
           </div>
         </div>
 
+        <div class="cc-top-actions">
         <div class="cc-top-ai" role="group" aria-label="AI inference mode">
           <button type="button" id="aiModeMock" class="ai-mode-seg-btn">MOCK</button>
           <button type="button" id="aiModeGemma" class="ai-mode-seg-btn">GEMMA4</button>
@@ -106,6 +107,7 @@
           <a class="ico back" href="/" title="Back to homepage" aria-label="Back to homepage">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>
           </a>
+        </div>
         </div>
       </header>
 
