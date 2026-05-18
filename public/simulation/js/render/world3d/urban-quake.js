@@ -84,6 +84,7 @@ export const world = {
   baseMesh: null,
   groundGrid: null,
   horizonSilhouette: null,
+  perimeterBuildings: null,
   scenarioBuildingsGroup: null,
   roadsGroup: null,
   smokePuffs: [],
@@ -261,6 +262,92 @@ function buildHorizonSilhouette(scenario) {
   }
   world.scene.add(group);
   world.horizonSilhouette = group;
+}
+
+/** Ring of building GLB clones hugging the play-area perimeter so ground-level
+ *  POVs (cars, rescuers) never see the world's edge. Uses the same building
+ *  templates as the in-scene scenario buildings so the look stays consistent.
+ *  Pure visual fill — never queried by sim or planner. */
+function addPerimeterBuildings(scenario, buildingTemplates) {
+  if (!buildingTemplates?.length || !world.scene) return;
+  const [cols, rows] = scenario.map.size;
+
+  if (world.perimeterBuildings) {
+    world.scene.remove(world.perimeterBuildings);
+    disposeObject(world.perimeterBuildings);
+    world.perimeterBuildings = null;
+  }
+
+  // Single jittered row hugging each edge — no deep background.
+  const innerMargin = 1.6;
+
+  const placements = [];
+  const placeAt = (x, z, saltBase) => {
+    const w = 2.4 + hash01(x, z, saltBase + 1) * 2.4;
+    const d = 2.4 + hash01(x, z, saltBase + 2) * 2.4;
+    const h = 1.0 + hash01(x, z, saltBase + 4) * 1.2;  // 1.0 – 2.2u
+    const yawSteps = Math.floor(hash01(x, z, saltBase + 5) * 4);
+    placements.push({ x, z, w, d, h, yaw: yawSteps * (Math.PI / 2) });
+  };
+
+  // Scatter one row along each side. `side` 0..3 maps to N/S/W/E.
+  const buildStrip = (side) => {
+    const step = 3.6;
+    let cursor;
+    let end;
+    let fixedAxis;
+    let rowCoord;
+    if (side === 0) {           // North edge: z < 0
+      rowCoord = -innerMargin;
+      fixedAxis = "z";
+      cursor = -innerMargin;
+      end = cols + innerMargin;
+    } else if (side === 1) {    // South edge: z > rows
+      rowCoord = rows + innerMargin;
+      fixedAxis = "z";
+      cursor = -innerMargin;
+      end = cols + innerMargin;
+    } else if (side === 2) {    // West edge: x < 0
+      rowCoord = -innerMargin;
+      fixedAxis = "x";
+      cursor = -innerMargin;
+      end = rows + innerMargin;
+    } else {                    // East edge: x > cols
+      rowCoord = cols + innerMargin;
+      fixedAxis = "x";
+      cursor = -innerMargin;
+      end = rows + innerMargin;
+    }
+    let i = 0;
+    while (cursor < end) {
+      const jitter = (hash01(i, side, 411) - 0.5) * 1.0;
+      const x = fixedAxis === "x" ? rowCoord + (hash01(i, side, 421) - 0.5) * 1.0
+                                  : cursor + jitter;
+      const z = fixedAxis === "z" ? rowCoord + (hash01(i, side, 422) - 0.5) * 1.0
+                                  : cursor + jitter;
+      const gap = hash01(i, side, 430) < 0.10;
+      if (!gap) placeAt(x, z, 500 + side * 7);
+      cursor += step + hash01(i, side, 440) * 1.0;
+      i += 1;
+    }
+  };
+
+  for (let side = 0; side < 4; side += 1) buildStrip(side);
+
+  const group = new THREE.Group();
+  group.name = "perimeter-buildings";
+  for (const e of placements) {
+    const tIdx = Math.floor(hash01(e.x, e.z, 611) * buildingTemplates.length)
+      % buildingTemplates.length;
+    const template = buildingTemplates[tIdx];
+    const asset = template.clone(true);
+    scaleAssetBuildingToFootprint(asset, [0, 0, e.w, e.d], e.h);
+    asset.position.set(e.x, groundedY(asset) + 0.025, e.z);
+    asset.rotation.y = e.yaw;
+    group.add(asset);
+  }
+  world.scene.add(group);
+  world.perimeterBuildings = group;
 }
 
 function buildRoads3D(scenario) {
@@ -1116,11 +1203,16 @@ export function init3D(scenario, presetKey, povCols) {
   rim.position.set(cols / 2, 22, rows / 2);
   world.scene.add(rim);
 
-  // Ground — neon grid placeholder, swapped to concrete after assets load
+  // Ground — neon grid placeholder, swapped to concrete after assets load.
+  // Plane is oversized so the perimeter-building ring + outer horizon don't
+  // float over an abyss when viewed from ground-level POVs.
   const gridTex = makeGridTexture(512, cols, rows, s3.gridTex);
   const gm = s3.gridMat;
+  const groundPad = 12;
+  const groundW = cols + groundPad * 2;
+  const groundH = rows + groundPad * 2;
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(cols, rows),
+    new THREE.PlaneGeometry(groundW, groundH),
     new THREE.MeshStandardMaterial({
       map: gridTex,
       color: gm.color,
@@ -1533,6 +1625,7 @@ async function upgradeToAssets(scenario) {
   });
 
   upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, { rubbleMat });
+  addPerimeterBuildings(scenario, buildingTemplates);
 
   // Swap blockades for rubble GLB
   for (const blk of scenario.map.blocked_cells) {
@@ -1604,9 +1697,14 @@ async function upgradeToAssets(scenario) {
     const groundBase = c2Base.clone();
     const groundNorm = c2Norm.clone();
     const groundRough = c2Rough.clone();
+    // Tile density (~12 reps over a 30-unit play area) — scale with the
+    // oversized plane so the outer apron doesn't stretch into a blur.
+    const gParams = world.groundGrid.geometry.parameters;
+    const repX = Math.max(12, Math.round((gParams?.width ?? 30) * 0.4));
+    const repY = Math.max(12, Math.round((gParams?.height ?? 30) * 0.4));
     for (const tex of [groundBase, groundNorm, groundRough]) {
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(12, 12);
+      tex.repeat.set(repX, repY);
       tex.needsUpdate = true;
     }
     groundBase.colorSpace = THREE.SRGBColorSpace;
@@ -1946,6 +2044,17 @@ export function update3D(t, sim) {
     entry.camera.position.copy(entry.smoothPos);
     entry.camera.lookAt(entry.smoothLook);
 
+    // Per-agent FOV: balloon keeps the wide survey view; drones get a tight
+    // telephoto-style zoom, ground vehicles get a narrower windshield FOV.
+    let targetFov;
+    if (driver.type === "balloon") targetFov = 72;
+    else if (driver.type === "drone") targetFov = 42;
+    else targetFov = 52;
+    if (Math.abs(entry.camera.fov - targetFov) > 0.01) {
+      entry.camera.fov = targetFov;
+      entry.camera.updateProjectionMatrix();
+    }
+
     // HUD telemetry
     const vel = Math.hypot(driver.location[0] - prev[0], driver.location[1] - prev[1]) / (msPerTick / 1000);
     entry.smoothVel = lerp(entry.smoothVel, vel, 0.15);
@@ -2020,6 +2129,7 @@ export function teardown3D() {
   world.baseMesh = null;
   world.groundGrid = null;
   world.horizonSilhouette = null;
+  world.perimeterBuildings = null;
   world.scenarioBuildingsGroup = null;
   world.roadsGroup = null;
   world.smokePuffs = [];

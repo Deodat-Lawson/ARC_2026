@@ -1,6 +1,7 @@
 /** Base simulation pacing. At cell_size_m=10 and agent.speed=3, this gives a
- *  ~12.5 m/s (45 km/h) drone — realistic urban survey pace. */
-export const MS_PER_TICK = 2400;
+ *  ~6.25 m/s (22 km/h) drone — slowed 50% from the original 2400ms pace for
+ *  closer visual inspection of the post-quake city. */
+export const MS_PER_TICK = 4800;
 
 /** Slower auto-step in live Gemma mode so rounds can finish before the next tick. */
 export const GEMMA_MS_PER_TICK = 12000;

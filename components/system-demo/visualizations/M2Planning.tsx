@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { InjuredSoldierIcon3D } from "./InjuredSoldierIcon3D";
 
 /**
  * Module 02 — Task allocation. A top-down tactical map. Drones (triangles) are
@@ -169,20 +170,18 @@ export function M2Planning() {
                 strokeWidth="1"
               />
               {isPrimary ? (
-                <g
-                  transform={`translate(${t.x} ${t.y})`}
-                  stroke="#5dffb4"
-                  strokeWidth="0.9"
-                  strokeLinecap="round"
-                  fill="none"
+                <foreignObject
+                  x={t.x - 14}
+                  y={t.y - 9}
+                  width="28"
+                  height="18"
                 >
-                  <circle cx="-3.5" cy="0" r="1.6" fill="#5dffb4" />
-                  <line x1="-2" y1="0" x2="3" y2="0" />
-                  <line x1="0" y1="0" x2="1.5" y2="-2.4" />
-                  <line x1="0.5" y1="0" x2="2.5" y2="2.2" />
-                  <line x1="3" y1="0" x2="4.8" y2="-1.6" />
-                  <line x1="3" y1="0" x2="4.8" y2="1.8" />
-                </g>
+                  <div style={{ width: "100%", height: "100%" }}>
+                    <Suspense fallback={null}>
+                      <InjuredSoldierIcon3D />
+                    </Suspense>
+                  </div>
+                </foreignObject>
               ) : (
                 <circle cx={t.x} cy={t.y} r="2" fill="#5dffb4" />
               )}

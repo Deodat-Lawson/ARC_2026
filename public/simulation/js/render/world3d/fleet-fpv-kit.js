@@ -19,7 +19,7 @@ export function tacticalFpvAltitudeUrbanUnits(driver, t) {
   const id = driver.id.charCodeAt(0);
   let baseAlt;
   if (driver.type === "drone") {
-    baseAlt = 1.5 + Math.sin(t * 1.0 + id) * 0.5 + Math.sin(t * 0.4 + id * 0.5) * 0.25;
+    baseAlt = 0.6 + Math.sin(t * 1.0 + id) * 0.08 + Math.sin(t * 0.4 + id * 0.5) * 0.05;
     return Math.max(baseAlt, Number(driver._overflightAltitudeUnits) || 0);
   }
   if (driver.type === "balloon") {
