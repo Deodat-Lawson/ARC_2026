@@ -11,6 +11,7 @@ import {
 import { pointNearBuilding } from "../../sim/collision.js";
 import { lerp } from "../../sim/math.js";
 import { createAgentMesh, agentBaseAltitude } from "./fleet-agents-mesh.js";
+import { loadInjuredSoldierPrototype, createInjuredSoldierInstance } from "./injured-soldier.js";
 import {
   lerpAngleDeg,
   tacticalFpvEyeWorldPosition,
@@ -620,35 +621,57 @@ function addStreetFurniture(scenario) {
   /** EZ-Tree generation — same procedural library used by the wildfire scene.
    *  Bounded count so per-tree CPU cost stays small for urban-quake. */
   const treePresets = ["Oak Small", "Aspen Small", "Ash Small"];
-  let treeBudget = 8;
+  let treeBudget = 60;
+  const buildingRects = buildingAvoidanceRects(scenario);
+  const roadCellSet = computeRoadCells(scenario);
+  const baseXY = scenario.map.base || [-99, -99];
+
+  const placeTree = (tx, tz, saltBase) => {
+    const damage = cellDamageLevel(Math.floor(tx), Math.floor(tz), riskZones);
+    const fallen = damage > 0.4 && hash01(tx, tz, saltBase + 4) > 0.4;
+    const presetName = treePresets[Math.floor(hash01(tx, tz, saltBase + 6) * treePresets.length) % treePresets.length];
+    const opts = structuredClone(TreePreset[presetName] || TreePreset["Oak Small"]);
+    opts.seed = Math.floor((hash01(tx, tz, saltBase + 7) * 1e6)) >>> 0;
+    if (opts?.branch?.sections) {
+      for (const k of Object.keys(opts.branch.sections)) {
+        opts.branch.sections[k] = Math.min(opts.branch.sections[k], 5);
+      }
+    }
+    const tree = new Tree();
+    tree.loadFromJson(opts);
+    tree.position.set(tx, 0, tz);
+    tree.scale.setScalar(0.02 + hash01(tx, tz, saltBase + 3) * 0.015);
+    tree.rotation.y = hash01(tx, tz, saltBase + 8) * Math.PI * 2;
+    if (fallen) tree.rotation.z = (Math.PI / 2) * (hash01(tx, tz, saltBase + 5) > 0.5 ? 1 : -1) * 0.85;
+    world.scene.add(tree);
+  };
+
+  // First pass: grass + plaza + rubble terrain patches (was grass-only)
   for (const patch of get3DTerrain(scenario)) {
     if (treeBudget <= 0) break;
-    if (patch.kind !== "grass") continue;
+    if (patch.kind !== "grass" && patch.kind !== "plaza" && patch.kind !== "rubble") continue;
     const [px, py, pw, ph] = patch.footprint;
-    const treeCount = Math.min(treeBudget, Math.max(1, Math.floor(pw * ph * 0.5)));
+    const treeCount = Math.min(treeBudget, Math.max(1, Math.floor(pw * ph * 0.8)));
     for (let i = 0; i < treeCount; i += 1) {
       const tx = px + 0.3 + hash01(px + i, py, 41) * (pw - 0.6);
       const tz = py + 0.3 + hash01(px, py + i, 42) * (ph - 0.6);
-      const damage = cellDamageLevel(Math.floor(tx), Math.floor(tz), riskZones);
-      const fallen = damage > 0.4 && hash01(tx, tz, 44) > 0.4;
-      const presetName = treePresets[Math.floor(hash01(tx, tz, 46) * treePresets.length) % treePresets.length];
-      const opts = structuredClone(TreePreset[presetName] || TreePreset["Oak Small"]);
-      opts.seed = Math.floor((hash01(tx, tz, 47) * 1e6)) >>> 0;
-      /** Cap branch section counts — fewer vertices per tree at this tiny scale. */
-      if (opts?.branch?.sections) {
-        for (const k of Object.keys(opts.branch.sections)) {
-          opts.branch.sections[k] = Math.min(opts.branch.sections[k], 5);
-        }
-      }
-      const tree = new Tree();
-      tree.loadFromJson(opts);
-      tree.position.set(tx, 0, tz);
-      tree.scale.setScalar(0.02 + hash01(tx, tz, 43) * 0.015);
-      tree.rotation.y = hash01(tx, tz, 48) * Math.PI * 2;
-      if (fallen) tree.rotation.z = (Math.PI / 2) * (hash01(tx, tz, 45) > 0.5 ? 1 : -1) * 0.85;
-      world.scene.add(tree);
+      placeTree(tx, tz, 40);
       treeBudget -= 1;
       if (treeBudget <= 0) break;
+    }
+  }
+
+  // Second pass: scatter on empty cells (no roads, no buildings, no base spawn pad)
+  for (let cy = 1; cy < rows - 1 && treeBudget > 0; cy += 1) {
+    for (let cx = 1; cx < cols - 1 && treeBudget > 0; cx += 1) {
+      if (hash01(cx, cy, 360) < 0.78) continue;
+      if (roadCellSet.has(`${cx},${cy}`)) continue;
+      if (Math.abs(cx - baseXY[0]) <= 2 && Math.abs(cy - baseXY[1]) <= 2) continue;
+      const tx = cx + 0.5 + (hash01(cx, cy, 361) - 0.5) * 0.6;
+      const tz = cy + 0.5 + (hash01(cx, cy, 362) - 0.5) * 0.6;
+      if (pointNearBuilding(tx, tz, buildingRects, 0.15)) continue;
+      placeTree(tx, tz, 365);
+      treeBudget -= 1;
     }
   }
 }
@@ -789,7 +812,7 @@ export function init3D(scenario, presetKey, povCols) {
     world.riskMeshes.set(zone.id, { group: grp, ring, halo, column, baseColor, isFire });
   }
 
-  // Victims — primitive post + arm markers that the GLB upgrade pass replaces with survivor.glb clones.
+  // Victims — primitive post + arm markers that the OBJ upgrade pass replaces with injured-soldier clones.
   for (const v of scenario.victims) {
     const grp = new THREE.Group();
     const post = new THREE.Mesh(
@@ -971,17 +994,6 @@ function upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, palette =
 
   const group = new THREE.Group();
   group.name = "scenario-buildings-assets";
-  const riskZones = scenario.map.risk_zones || [];
-  const rubbleMat = palette.rubbleMat || new THREE.MeshStandardMaterial({ color: 0x51483e, roughness: 0.98, metalness: 0.03 });
-  const detailMats = {
-    vent: new THREE.MeshStandardMaterial({ color: 0x303841, roughness: 0.78, metalness: 0.35 }),
-    rail: new THREE.MeshStandardMaterial({ color: 0x20262c, roughness: 0.7, metalness: 0.45 }),
-    tank: new THREE.MeshStandardMaterial({ color: 0x48525d, roughness: 0.62, metalness: 0.55 }),
-    shop: new THREE.MeshBasicMaterial({ color: 0x8fb6c8, transparent: true, opacity: 0.38, side: THREE.DoubleSide }),
-    awning: new THREE.MeshStandardMaterial({ color: 0x6d2b2b, roughness: 0.82, metalness: 0.04 }),
-    crack: new THREE.MeshBasicMaterial({ color: 0x090909, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide }),
-    soot: new THREE.MeshBasicMaterial({ color: 0x040302, transparent: true, opacity: 0.48, depthWrite: false, side: THREE.DoubleSide })
-  };
 
   for (const b of buildings) {
     const [x, y, w, d] = b.footprint;
@@ -989,13 +1001,7 @@ function upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, palette =
     const profile = buildingProfile(b.kind);
     const cx = x + w / 2;
     const cz = y + d / 2;
-    const risk = nearestRiskKind(cx, cz, riskZones);
-    const damage = risk.damage;
-    const fire = risk.kind === "fire" && damage > 0.18;
-    const collapsed = risk.kind === "collapse" && damage > 0.58;
-    let targetHeight = profile.minH + hash01(x, y, 130) * (profile.maxH - profile.minH);
-    if (collapsed) targetHeight *= 0.34 + hash01(x, y, 131) * 0.2;
-    else if (damage > 0.35) targetHeight *= 0.74 + hash01(x, y, 132) * 0.14;
+    const targetHeight = profile.minH + hash01(x, y, 130) * (profile.maxH - profile.minH);
 
     const footprint = buildingRenderFootprint(x, y, w, d, targetHeight);
     const template = templateForBuildingKind(b.kind, buildingTemplates);
@@ -1003,35 +1009,8 @@ function upgradeScenarioBuildingsToAssets(scenario, buildingTemplates, palette =
     scaleAssetBuildingToFootprint(asset, footprint, targetHeight);
     asset.position.set(cx, groundedY(asset) + 0.025, cz);
     asset.rotation.y = Math.floor(hash01(x, y, 136) * 4) * (Math.PI / 2);
-    if (damage > 0.32 && !collapsed) {
-      asset.rotation.x = (hash01(x, y, 133) - 0.5) * damage * 0.16;
-      asset.rotation.z = (hash01(x, y, 134) - 0.5) * damage * 0.16;
-    }
-
-    asset.traverse((node) => {
-      if (!node.isMesh || !node.material) return;
-      const mats = Array.isArray(node.material) ? node.material : [node.material];
-      node.material = mats.map((mat) => {
-        const next = mat.clone();
-        if (next.color) {
-          const tint = fire ? 0.45 : damage > 0.55 ? 0.62 : damage > 0.25 ? 0.78 : 1;
-          next.color.multiplyScalar(tint);
-        }
-        if (next.emissive && fire) {
-          next.emissive.setHex(0x1a0803);
-          next.emissiveIntensity = 0.18;
-        }
-        return next;
-      });
-      if (mats.length === 1) node.material = node.material[0];
-    });
 
     group.add(asset);
-
-    addRooftopDetails(group, footprint, targetHeight, damage, detailMats);
-    addStreetLevelDetails(group, footprint, targetHeight, damage, b.kind, detailMats);
-    addDamageDecals(group, footprint, targetHeight, damage, fire, detailMats);
-    addBuildingRubble(group, footprint, Math.max(damage, collapsed ? 0.8 : 0), rubbleMat);
   }
 
   world.scene.add(group);
@@ -1050,7 +1029,7 @@ async function upgradeToAssets(scenario) {
 
   const [
     aptGlb, facadeGlb, mansionGlb, multiGlb,
-    rubbleGlb, signsGlb, survivorGlb, taxiGlb,
+    rubbleGlb, signsGlb, soldierPrototype, taxiGlb,
     cBase, cNorm, cRough,
     bBase, bNorm, bRough,
     pBase, pNorm, pRough,
@@ -1066,7 +1045,7 @@ async function upgradeToAssets(scenario) {
     loader.loadAsync(`${M}building-multistory.glb`),
     loader.loadAsync(`${M}rubble-large.glb`),
     loader.loadAsync(`${M}street-signs.glb`),
-    loader.loadAsync(`${M}survivor.glb`),
+    loadInjuredSoldierPrototype(),
     loader.loadAsync(`${M}vehicle-taxi.glb`),
     texLoader.loadAsync(`${T}concrete-a_basecolor.jpg`),
     texLoader.loadAsync(`${T}concrete-a_normal.jpg`),
@@ -1183,31 +1162,26 @@ async function upgradeToAssets(scenario) {
     world.blockadeMeshes.set(blk.id, rubble);
   }
 
-  // Swap victims for survivor GLB (lying / posed)
+  // Swap victim primitives for the injured-soldier OBJ (posed prone, olive-tinted).
+  // The helper normalises scale + bottom-aligns to y=0, so callers only set yaw/position.
   for (const v of scenario.victims) {
     const old = world.victimMeshes.get(v.id);
     if (old?.group) {
       world.scene.remove(old.group);
     }
-    const survivor = survivorGlb.scene.clone(true);
-    fitToSize(survivor, 0.9);
+    // 1.2u long fits comfortably between debris piles at the 1-unit cell scale.
+    const soldier = createInjuredSoldierInstance(soldierPrototype, 1.2);
+    soldier.rotation.y = (v.id.charCodeAt(1) || 0) * 0.7;
     const grp = new THREE.Group();
-    grp.add(survivor);
-    survivor.rotation.x = -Math.PI / 2;
-    survivor.rotation.z = (v.id.charCodeAt(1) || 0) * 0.7;
-    survivor.position.y = 0.05;
+    grp.add(soldier);
     const flare = new THREE.PointLight(0xff6666, 0.7, 4);
     flare.position.y = 0.4;
     grp.add(flare);
     grp.position.set(v.location[0] + 0.5, 0, v.location[1] + 0.5);
 
     const meshes = [];
-    survivor.traverse((obj) => {
-      if (obj.isMesh) {
-        obj.material = obj.material.clone();
-        if (!obj.material.emissive) obj.material.emissive = new THREE.Color(0x000000);
-        meshes.push(obj);
-      }
+    soldier.traverse((obj) => {
+      if (obj.isMesh) meshes.push(obj);
     });
     world.scene.add(grp);
     world.victimMeshes.set(v.id, { group: grp, flare, meshes, isAsset: true });
@@ -1215,6 +1189,9 @@ async function upgradeToAssets(scenario) {
 
   // Dress the starting area with realistic GLB clones so the spawn pad reads as a city block
   dressBaseCamp(scenario, taxiGlb.scene, signsGlb.scene, rubbleGlb.scene, { rustMat, rubbleMat });
+
+  // Scatter decorative survivor clones in rubble / collapsed blocks (not tracked by sim)
+  addInjuredProps(scenario, soldierPrototype);
 
   // Texture the ground — use the second concrete variant so it reads distinct from building walls
   if (world.groundGrid) {
@@ -1326,6 +1303,50 @@ function dressBaseCamp(scenario, taxiSrc, signsSrc, rubbleSrc, palette = {}) {
     }
   }
 }
+
+/** Place decorative injured-soldier clones in empty cells across the city
+ *  (rubble patches, away from base/agents/victims/buildings). Purely visual —
+ *  these are not tracked by the sim or the victim state machine. */
+function addInjuredProps(scenario, soldierPrototype) {
+  if (!soldierPrototype) return;
+  const [cols, rows] = scenario.map.size || [30, 30];
+  const buildingRects = buildingAvoidanceRects(scenario);
+  const baseXY = scenario.map.base || [-99, -99];
+  const occupied = [
+    { x: baseXY[0] + 0.5, z: baseXY[1] + 0.5, r: 1.5 },
+    ...((scenario.agents || []).map((a) => ({ x: a.location[0] + 0.5, z: a.location[1] + 0.5, r: 0.7 }))),
+    ...((scenario.victims || []).map((v) => ({ x: v.location[0] + 0.5, z: v.location[1] + 0.5, r: 0.9 }))),
+    ...((scenario.map.blocked_cells || []).map((b) => ({ x: b.location[0] + 0.5, z: b.location[1] + 0.5, r: 0.7 }))),
+  ];
+  const blocked = (x, z) => {
+    if (pointNearBuilding(x, z, buildingRects, 0.25)) return true;
+    for (const o of occupied) {
+      const dx = x - o.x;
+      const dz = z - o.z;
+      if (dx * dx + dz * dz < o.r * o.r) return true;
+    }
+    return false;
+  };
+
+  let placed = 0;
+  const target = 14;
+  for (let cy = 1; cy < rows - 1 && placed < target; cy += 1) {
+    for (let cx = 1; cx < cols - 1 && placed < target; cx += 1) {
+      if (hash01(cx, cy, 510) < 0.92) continue;
+      const x = cx + 0.5;
+      const z = cy + 0.5;
+      if (blocked(x, z)) continue;
+
+      const soldier = createInjuredSoldierInstance(soldierPrototype, 1.2);
+      soldier.rotation.y = hash01(cx, cy, 511) * Math.PI * 2;
+      soldier.position.set(x, 0, z);
+      world.scene.add(soldier);
+      occupied.push({ x, z, r: 0.8 });
+      placed += 1;
+    }
+  }
+}
+
 
 
 function makeGridTexture(size, cols, rows, texOpts = {}) {

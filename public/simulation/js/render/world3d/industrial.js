@@ -18,6 +18,10 @@ import {
 import { buildingAvoidanceRects as urbanQuakeBuildingAvoidanceRects } from "./urban-quake.js";
 import { createAgentMesh } from "./fleet-agents-mesh.js";
 import {
+  loadInjuredSoldierPrototype,
+  createInjuredSoldierInstance,
+} from "./injured-soldier.js";
+import {
   lerpAngleDeg,
   tacticalFpvAltitudeUrbanUnits,
   tacticalFpvEyeWorldPosition,
@@ -112,6 +116,14 @@ let indRimLight = null;
 /** Wrapper groups per agent — scaled to facility grid (urban meshes assume ~1-unit cells). */
 const industrialAgentHolders = new Map();
 
+/**
+ * Wrapper groups per victim, same scale convention as agents. Each entry is
+ * `{ group, flare, meshes }` so the update loop can recolour the soldier
+ * emissive based on victim status, exactly like urban-quake / wildfire.
+ * @type {Map<string, { group: THREE.Group, flare: THREE.PointLight, meshes: THREE.Mesh[] }>}
+ */
+const industrialVictimMeshes = new Map();
+
 let industrialGridCols = 1;
 let industrialGridRows = 1;
 let industrialXMin = 0;
@@ -170,6 +182,51 @@ function buildIndustrialAgentMeshes(scenario) {
     indScene.add(holder);
     industrialAgentHolders.set(a.id, holder);
   }
+}
+
+/**
+ * Drop one injured-soldier per scenario victim onto the industrial slab.
+ * Loaded async so the facility renders immediately; the figures swap in as
+ * soon as the OBJ resolves. The soldier model is authored in metres; the
+ * industrial facility is much larger, so we scale by `industrialCellSpan`
+ * (metres per grid cell) to match the agent footprint convention.
+ *
+ * Only mutates state if the bootId is still current — protects against a
+ * preset switch racing ahead of the OBJ fetch.
+ */
+function buildIndustrialVictimMeshes(scenario, bootId) {
+  industrialVictimMeshes.clear();
+  if (!indScene || !scenario?.victims?.length) return;
+
+  // ~0.7 of agent footprint reads as "a single person near the agents"
+  // without dominating the scene.
+  const figureLen = Math.max(12, industrialCellSpan * 0.36);
+
+  loadInjuredSoldierPrototype()
+    .then((prototype) => {
+      if (bootId !== indBootGeneration || !indScene) return;
+      for (const v of scenario.victims) {
+        const soldier = createInjuredSoldierInstance(prototype, figureLen);
+        soldier.rotation.y = (v.id.charCodeAt(1) || 0) * 0.7;
+        const holder = new THREE.Group();
+        holder.name = `industrial_victim_${v.id}`;
+        holder.add(soldier);
+        const flare = new THREE.PointLight(0xff8866, 1.4, Math.max(40, industrialCellSpan * 4));
+        flare.position.y = figureLen * 0.4;
+        holder.add(flare);
+        const { x, z } = industrialGridToWorldXZ(v.location[0], v.location[1]);
+        holder.position.set(x, industrialGroundY, z);
+        const meshes = [];
+        soldier.traverse((obj) => {
+          if (obj.isMesh) meshes.push(obj);
+        });
+        indScene.add(holder);
+        industrialVictimMeshes.set(v.id, { group: holder, flare, meshes });
+      }
+    })
+    .catch((err) => {
+      console.warn("[industrial victims] injured-soldier load failed:", err);
+    });
 }
 
 function detachIndustrialHeightCalibrationUi() {
@@ -858,6 +915,7 @@ async function bootIndustrialMission(bootId, scenario, povCols) {
 
   setIndustrialGridMappingFromFacility(root, scenario, cementY);
   buildIndustrialAgentMeshes(scenario);
+  buildIndustrialVictimMeshes(scenario, bootId);
 
   const tBoot = performance.now() / 1000;
   for (const entry of entries) {
@@ -1121,6 +1179,29 @@ export function update3D(t, sim) {
       : 0;
   const mspt = msPerTick || 500;
 
+  if (state?.victims) {
+    for (const v of state.victims) {
+      const entry = industrialVictimMeshes.get(v.id);
+      if (!entry) continue;
+      const isAlive = v.status === "trapped" || v.status === "unknown";
+      const color = v.status === "rescued" ? 0x39ff14 : v.status === "dead" ? 0x444444 : 0xff8866;
+      if (entry.flare) {
+        entry.flare.color.setHex(color);
+        entry.flare.intensity = isAlive
+          ? 0.9 + 0.6 * (Math.sin(t * 4 + v.id.charCodeAt(1) * 0.3) * 0.5 + 0.5)
+          : 0.25;
+      }
+      const emit = isAlive ? 0.35 : v.status === "rescued" ? 0.6 : 0.05;
+      for (const mesh of entry.meshes) {
+        const mat = mesh.material;
+        if (mat && mat.emissive) {
+          mat.emissive.setHex(color);
+          mat.emissiveIntensity = emit;
+        }
+      }
+    }
+  }
+
   if (state?.agents) {
     for (const a of state.agents) {
       const holder = industrialAgentHolders.get(a.id);
@@ -1261,6 +1342,7 @@ export function teardown3D() {
   teardownAgentSelector();
 
   industrialAgentHolders.clear();
+  industrialVictimMeshes.clear();
 
   indCementGround = null;
   indRimLight = null;

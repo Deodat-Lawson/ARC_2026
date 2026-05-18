@@ -1,16 +1,19 @@
 "use client";
 
-import { useAnimations, useGLTF } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useFrame, useLoader } from "@react-three/fiber";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import {
   Box3,
+  Color,
   Group,
+  Loader,
+  Material,
   Mesh,
-  MeshStandardMaterial,
+  MeshPhongMaterial,
   Vector3,
 } from "three";
-import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import {
   getLoopTime,
   LOOP_SECONDS,
@@ -18,35 +21,72 @@ import {
   Survivor,
 } from "./missionTimeline";
 
-// CC0 / freely-redistributable humanoid GLB from the three.js examples
-// (originally a Mixamo rig). Source pulled into public/models/ at build-time
-// so the marketing site doesn't need a runtime fetch from threejs.org.
-const MODEL_URL = "/models/survivor.glb";
-useGLTF.preload(MODEL_URL);
+/** Same folder as OBJ — must match `/public/models/` at runtime */
+const MODELS_PATH = "/models/";
+const MODEL_OBJ = "injured-soldier.obj";
+const MODEL_MTL = "injured-soldier.mtl";
 
-const FIGURE_HEIGHT = 1.75; // adult-ish, in world units (≈ metres)
-// How much of the figure pokes above local y=0. The rest is sunk so the
-// silhouette reads as trapped beneath rubble rather than standing on it.
-const VISIBLE_HEIGHT = 0.65;
+const MODEL_ASSET_URL = `${MODELS_PATH}${MODEL_OBJ}`;
 
 /**
- * Visualizes the two trapped survivors in the world. Each survivor:
- *
- *   • a rigged humanoid GLB, sunk into the ground so only the upper body
- *     pokes through — reads as a partially-buried civilian
- *   • a vertical thermal plume (emissive cylinder) that activates once
- *     identified — reads as a heat-signature blip from above
- *   • a ground pulse ring that expands + fades during identification and
- *     stays warm once the assigned dog rescues them
- *
- * State is driven entirely by the mission clock — fades in at each
- * survivor's `identifyAtT`, brightens at `rescuedAtT`.
+ * Loads injured-soldier.mtl then injured-soldier.obj as one Suspense asset
+ * for `useLoader` (three's OBJ export ships split MTL with broken paths).
+ */
+class InjuredSoldierPackLoader extends Loader<Group> {
+  override load(
+    _url: string,
+    onLoad: (data: Group) => void,
+    onProgress?: (event: ProgressEvent<EventTarget>) => void,
+    onError?: (error: unknown) => void,
+  ): void {
+    const mtlLoader = new MTLLoader(this.manager);
+    mtlLoader.setPath(MODELS_PATH);
+    mtlLoader.setResourcePath(MODELS_PATH);
+
+    const onProg = onProgress ?? (() => undefined);
+    const onErr =
+      onError ??
+      ((e: unknown) => {
+        console.error(e);
+      });
+
+    mtlLoader.load(
+      MODEL_MTL,
+      (creator) => {
+        creator.preload();
+        const objLoader = new OBJLoader(this.manager);
+        objLoader.setMaterials(creator);
+        objLoader.setPath(MODELS_PATH);
+        objLoader.load(MODEL_OBJ, onLoad, onProg, onErr);
+      },
+      onProg,
+      onErr,
+    );
+  }
+}
+
+useLoader.preload(InjuredSoldierPackLoader, MODEL_ASSET_URL);
+
+// The injured-soldier OBJ is a posed (prone) figure. Its source bbox is
+// roughly X=428, Y=92, Z=240 — Y is the smallest axis (body thickness when
+// lying down), not the height. Scaling by Y alone would stretch the body to
+// ~8m wide. We scale by the LONGEST dimension so the whole figure fits into
+// FIGURE_EXTENT regardless of which axis the source uses for length.
+const FIGURE_EXTENT = 1.9; // length of the prone body in world units (≈ metres)
+
+/**
+ * Visualizes the two trapped survivors at `SURVIVORS[]` placement: an
+ * injured-soldier OBJ (posed prone — already lying down in the source),
+ * plus a thermal plume and pulse ring driven by identification / rescue
+ * times.
  */
 export function Survivors() {
+  const prototype = useLoader(InjuredSoldierPackLoader, MODEL_ASSET_URL);
+
   return (
     <group>
       {SURVIVORS.map((s) => (
-        <SurvivorMarker key={s.id} data={s} />
+        <SurvivorMarker key={s.id} data={s} prototype={prototype} />
       ))}
     </group>
   );
@@ -58,59 +98,41 @@ function idToHash(id: string): number {
   return Math.abs(h);
 }
 
-function SurvivorMarker({ data }: { data: Survivor }) {
+/** Tint to a fatigued olive-drab and pre-warm an emissive for the heat pulse. */
+function prepareMaterials(root: Group, materialsRef: Material[]): void {
+  materialsRef.length = 0;
+  root.traverse((obj) => {
+    const mesh = obj as Mesh;
+    if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+    const m = mesh.material as MeshPhongMaterial;
+    // Olive-drab fatigues — readable against the dark warm fog, not so bright
+    // it competes with the drones.
+    m.color = new Color("#4a4233");
+    m.emissive = new Color("#2a1408");
+    m.emissiveIntensity = 0.35;
+    materialsRef.push(m);
+  });
+}
+
+function SurvivorMarker({
+  data,
+  prototype,
+}: {
+  data: Survivor;
+  prototype: Group;
+}) {
   const heatPlume = useRef<Mesh>(null);
   const pulseRing = useRef<Mesh>(null);
   const innerRef = useRef<Group>(null);
-  const materialsRef = useRef<MeshStandardMaterial[]>([]);
 
-  const gltf = useGLTF(MODEL_URL);
+  /** Materials mutated in useFrame — one list per survivor instance */
+  const materialsRef = useRef<Material[]>([]);
 
-  // SkeletonUtils.clone — not scene.clone(true) — because the model is a
-  // SkinnedMesh. Plain Object3D cloning leaves each instance referencing the
-  // *original* skeleton, so playing the idle clip on one survivor animates
-  // both. SkeletonUtils rebinds bones per clone.
   const cloned = useMemo(() => {
-    const c = cloneSkeleton(gltf.scene) as Group;
-    const mats: MeshStandardMaterial[] = [];
-    c.traverse((o) => {
-      const m = o as Mesh;
-      if (!m.isMesh) return;
-      // Override every material with a uniform dim "in-shadow under rubble"
-      // tone so the soldier textures don't leak through — we want a
-      // generic-civilian silhouette, not a soldier.
-      const mat = new MeshStandardMaterial({
-        color: "#2a1f18",
-        emissive: "#ff5a30",
-        emissiveIntensity: 0,
-        roughness: 0.95,
-        metalness: 0,
-      });
-      m.material = mat;
-      m.castShadow = false;
-      m.receiveShadow = false;
-      mats.push(mat);
-    });
-    materialsRef.current = mats;
-    return c;
-  }, [gltf.scene]);
-
-  const { actions } = useAnimations(gltf.animations, cloned);
-
-  // Hold a single, arms-down frame so the figure isn't stuck in T-pose with
-  // arms jutting horizontally out of the rubble. We don't want them
-  // *animated* — just posed.
-  useEffect(() => {
-    if (!actions) return;
-    const names = Object.keys(actions);
-    const pick = names.find((n) => /idle/i.test(n)) ?? names[0];
-    const action = pick ? actions[pick] : null;
-    if (!action) return;
-    action.reset();
-    action.play();
-    action.paused = true;
-    action.time = 0;
-  }, [actions]);
+    const root = prototype.clone(true) as Group;
+    prepareMaterials(root, materialsRef.current);
+    return root;
+  }, [prototype]);
 
   useLayoutEffect(() => {
     if (!innerRef.current) return;
@@ -118,34 +140,33 @@ function SurvivorMarker({ data }: { data: Survivor }) {
     if (!isFinite(bbox.min.y) || !isFinite(bbox.max.y)) return;
     const size = new Vector3();
     bbox.getSize(size);
-    if (size.y <= 0) return;
-    const s = FIGURE_HEIGHT / size.y;
+    const longest = Math.max(size.x, size.y, size.z);
+    if (longest <= 0) return;
+    // Scale uniformly so the source bbox's longest axis (the body length on
+    // a prone figure) becomes FIGURE_EXTENT. Centre over the survivor's
+    // ground position and rest the bottom of the bbox on local y=0 so the
+    // figure sits on the ground rather than floating or sinking.
+    const s = FIGURE_EXTENT / longest;
     const center = new Vector3();
     bbox.getCenter(center);
-    // Place the model so its feet sit at local y = VISIBLE_HEIGHT - FIGURE_HEIGHT
-    // (well below 0) and its head ends up at local y = VISIBLE_HEIGHT.
-    const feetLocalY = VISIBLE_HEIGHT - FIGURE_HEIGHT;
     innerRef.current.scale.setScalar(s);
     innerRef.current.position.set(
       -center.x * s,
-      feetLocalY - bbox.min.y * s,
+      -bbox.min.y * s,
       -center.z * s,
     );
   }, [cloned]);
 
   useFrame(() => {
     const t = getLoopTime();
-    // Identification opacity envelope
-    let heat = 0; // 0..1
-    let confirm = 0; // 0..1
+    let heat = 0;
+    let confirm = 0;
     if (t >= data.identifyAtT) {
-      // Smooth fade-in over 0.6s
       heat = Math.min(1, (t - data.identifyAtT) / 0.6);
     }
     if (t >= data.rescuedAtT) {
       confirm = Math.min(1, (t - data.rescuedAtT) / 0.5);
     }
-    // Fade out everything during REPORT → NAVIGATE loop wrap
     if (t > LOOP_SECONDS - 0.6) {
       const fade = (LOOP_SECONDS - t) / 0.6;
       heat *= fade;
@@ -160,8 +181,8 @@ function SurvivorMarker({ data }: { data: Survivor }) {
         opacity?: number;
       };
       const pulse = 0.7 + Math.sin(t * 6) * 0.3;
-      mat.emissiveIntensity = intensity * 3 * pulse;
       mat.opacity = Math.min(1, intensity * 0.55);
+      mat.emissiveIntensity = intensity * 3 * pulse;
     }
 
     if (pulseRing.current) {
@@ -172,37 +193,38 @@ function SurvivorMarker({ data }: { data: Survivor }) {
       mat.opacity = heat * (1 - cycle) * 0.6 + confirm * 0.5;
     }
 
-    // Body itself emits a faint warmth once confirmed
     for (const m of materialsRef.current) {
-      m.emissiveIntensity = confirm * 0.6;
+      // Baseline emissive (0.35) keeps the body legible against the warm
+      // fog; the rescue confirmation adds an extra warm glow on top.
+      (m as MeshPhongMaterial).emissiveIntensity = 0.35 + confirm * 0.6;
     }
   });
 
-  // Deterministic yaw per id so the two survivors don't pose identically
-  // but stay stable across re-renders.
   const yaw = (idToHash(data.id) % 360) * (Math.PI / 180);
 
+  // Marker anchors at ground (y=0). `data.position.y` is used by other
+  // mission code (dog/drone overwatch references) but here the figure must
+  // physically rest on the ground regardless.
   return (
-    <group position={data.position}>
-      {/* Rigged civilian silhouette — most of the body is buried */}
+    <group position={[data.position[0], 0, data.position[2]]}>
       <group rotation={[0, yaw, 0]}>
         <group ref={innerRef}>
           <primitive object={cloned} />
         </group>
       </group>
 
-      {/* Vertical thermal plume — emissive cylinder visible from above */}
       <mesh ref={heatPlume} position={[0, 1.2, 0]}>
         <cylinderGeometry args={[0.08, 0.18, 2.4, 12, 1, true]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           color="#ff7040"
+          emissive="#ff7040"
+          emissiveIntensity={0}
           transparent
           opacity={0}
           depthWrite={false}
         />
       </mesh>
 
-      {/* Ground pulse ring */}
       <mesh ref={pulseRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <ringGeometry args={[0.5, 0.62, 36]} />
         <meshBasicMaterial color="#ffa040" transparent opacity={0} depthWrite={false} />

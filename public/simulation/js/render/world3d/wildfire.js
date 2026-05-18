@@ -21,6 +21,10 @@ import {
   lerpAngleDeg,
 } from "./fleet-fpv-kit.js";
 import { createAgentMesh } from "./fleet-agents-mesh.js";
+import {
+  loadInjuredSoldierPrototype,
+  createInjuredSoldierInstance,
+} from "./injured-soldier.js";
 import { emitToast } from "../../ui/toast.js";
 import {
   grassWindTimeUniform,
@@ -54,6 +58,9 @@ let wfPitchScale = 8;
 
 /** @type {Map<string, THREE.Group>} */
 const wfAgentMeshes = new Map();
+
+/** @type {Map<string, { group: THREE.Group, flare: THREE.PointLight, meshes: THREE.Mesh[] }>} */
+const wfVictimMeshes = new Map();
 
 function povColumnEl() {
   return document.querySelector(".map-pov-col");
@@ -119,6 +126,46 @@ function bootstrapWildfireAgents(scenario, meadowFn, pitchScale) {
     wfScene.add(grp);
     wfAgentMeshes.set(ag.id, grp);
   }
+}
+
+/**
+ * Place an injured-soldier figure per victim in the meadow. The wildfire
+ * preset has no buildings, so casualties are scattered in the grass — these
+ * are the people the drones / UGVs are tasked to find.
+ *
+ * Loaded async; the meadow renders immediately, victims swap in once the
+ * OBJ resolves.
+ */
+function bootstrapWildfireVictims(scenario, meadowFn, pitchScale, bootId) {
+  wfVictimMeshes.clear();
+  if (!scenario?.victims?.length) return;
+
+  loadInjuredSoldierPrototype()
+    .then((prototype) => {
+      if (bootId !== wfBootGeneration || !wfScene) return;
+      // Soldier is sized in metres; meadow units are also metres (pitchScale
+      // is metres per cell), so a 1.9m figure reads at correct scale.
+      for (const v of scenario.victims || []) {
+        const soldier = createInjuredSoldierInstance(prototype, 1.9);
+        soldier.rotation.y = (v.id.charCodeAt(1) || 0) * 0.7;
+        const grp = new THREE.Group();
+        grp.add(soldier);
+        const flare = new THREE.PointLight(0xff8866, 1.1, pitchScale * 4);
+        flare.position.y = 0.6;
+        grp.add(flare);
+        const p = meadowFn(v.location[0], v.location[1]);
+        grp.position.set(p.x, 0, p.z);
+        const meshes = [];
+        soldier.traverse((obj) => {
+          if (obj.isMesh) meshes.push(obj);
+        });
+        wfScene.add(grp);
+        wfVictimMeshes.set(v.id, { group: grp, flare, meshes });
+      }
+    })
+    .catch((err) => {
+      console.warn("[wildfire victims] injured-soldier load failed:", err);
+    });
 }
 
 /** @type {THREE.WebGLRenderer | null} */
@@ -310,6 +357,7 @@ export function init3D(scenario, presetKey, povCols) {
   }
 
   bootstrapWildfireAgents(scenario, wfMeadowGridToXZ, wfPitchScale);
+  bootstrapWildfireVictims(scenario, wfMeadowGridToXZ, wfPitchScale, bootId);
   bootstrapWildfirePovs(scenario, povCols, horizon);
 }
 
@@ -374,6 +422,36 @@ function updateWildfireAgentMeshes(sim, frac, meadowFn, pitchScale, t) {
   }
 }
 
+/**
+ * Pulse victim flares + recolour the soldier emissive so operators can
+ * spot the casualties from the air and see their state change live as the
+ * UGV reaches them (red while trapped, green once rescued, dim grey on
+ * timeout). Mirrors the urban-quake behaviour for visual continuity.
+ */
+function updateWildfireVictimMeshes(state, t) {
+  if (!state?.victims) return;
+  for (const v of state.victims) {
+    const m = wfVictimMeshes.get(v.id);
+    if (!m) continue;
+    const isAlive = v.status === "trapped" || v.status === "unknown";
+    const color = v.status === "rescued" ? 0x39ff14 : v.status === "dead" ? 0x444444 : 0xff8866;
+    if (m.flare) {
+      m.flare.color.setHex(color);
+      m.flare.intensity = isAlive
+        ? 0.7 + 0.6 * (Math.sin(t * 4 + v.id.charCodeAt(1) * 0.3) * 0.5 + 0.5)
+        : 0.2;
+    }
+    const emit = isAlive ? 0.35 : v.status === "rescued" ? 0.6 : 0.05;
+    for (const mesh of m.meshes) {
+      const mat = mesh.material;
+      if (mat && mat.emissive) {
+        mat.emissive.setHex(color);
+        mat.emissiveIntensity = emit;
+      }
+    }
+  }
+}
+
 export function update3D(t, sim) {
   if (!wfScene || !sim?.state || povs.length === 0) return;
 
@@ -387,6 +465,7 @@ export function update3D(t, sim) {
   const meadowFn = wfMeadowGridToXZ;
 
   updateWildfireAgentMeshes(sim, frac, meadowFn, wfPitchScale, t);
+  updateWildfireVictimMeshes(state, t);
 
   const pitchScale = wfPitchScale;
 
@@ -479,6 +558,7 @@ export function teardown3D() {
   wfEzTrees = [];
   wfForestRoot = null;
   wfAgentMeshes.clear();
+  wfVictimMeshes.clear();
 
   if (wfScene) {
     wfScene.getObjectByName("wildfire_ez_forest")?.userData?.cancelWildfireEzTreeMount?.();
