@@ -276,7 +276,8 @@ function sceneVars(plan) {
   const top = candidates[0] || null;
   const firstRescue = firstActionMatching(plan, (a) => a.task === "ground_rescue");
   const firstScout = firstActionMatching(plan, (a) => a.task === "aerial_confirmation");
-  const firstRelay = firstActionMatching(plan, (a) => a.task === "deploy_relay");
+  const firstRelay = firstActionMatching(plan, (a) => a.task === "deploy_relay" || a.task === "deploy_balloon");
+  const sacrifice = firstActionMatching(plan, (a) => a.task === "sacrificial_relay");
   const activeBlock = state?.map?.blocked_cells?.find((b) => b.status === "blocked") || null;
   const totalVictims = state?.victims?.length || 0;
   const rescued = state?.rescued ?? 0;
@@ -287,9 +288,16 @@ function sceneVars(plan) {
     topScore: top?.score != null ? top.score.toFixed(2) : "—",
     bestAgent: top?.best_agent || firstRescue?.agent || "ground team",
     comm: top?.communication_status || "unknown",
+    mortalityFactors: top?.mortality_factors || "mortality factors unavailable",
+    mortalityRisk: top?.mortality_risk_label || "unknown",
     rescueAgent: firstRescue?.agent || top?.best_agent || "ground team",
     scoutAgent: firstScout?.agent || "Drone-1",
     relayNeed: firstRelay ? "required" : "not required",
+    sacrificeAgent: sacrifice?.agent || "none",
+    sacrificeTarget: sacrifice?.target || "none",
+    sacrificeSentence: sacrifice
+      ? `Decision hub authorized drone sacrifice: ${sacrifice.agent} will burn down as an industrial relay. `
+      : "",
     blockId: activeBlock?.id || "no blockade",
     blockadeSentence: "",
     relaySentence: "",
@@ -952,6 +960,8 @@ export function appendBriefingRow(el, step, text) {
 
 export function buildThinkingNarrative(plan) {
   if (!plan || !simBridge.state) return "Standing by — no planner output yet.";
+  const state = simBridge.state;
+  const candidates = rankVictims(state);
   const scene = activeSceneMock();
   const dh = scene.decisionHub;
   if (dh) {
@@ -967,6 +977,13 @@ export function buildThinkingNarrative(plan) {
         target: action.target,
       }));
     }
+    if (candidates[0]) {
+      parts.push(`Mortality model: ${candidates[0].mortality_risk_label} risk from ${candidates[0].mortality_factors}.`);
+    }
+    const sacrifice = firstActionMatching(plan, (a) => a.task === "sacrificial_relay");
+    if (sacrifice) {
+      parts.push(`Decision hub authorized drone sacrifice: ${sacrifice.agent} will be depleted for ${sacrifice.target}.`);
+    }
     for (const line of plan.human_confirmation_required || []) {
       if (line && !/^no\s/i.test(line)) {
         parts.push(renderSceneTemplate(dh.gate, plan, { gate: line }));
@@ -976,7 +993,6 @@ export function buildThinkingNarrative(plan) {
     if (!actions.length && dh.idle) parts.push(renderSceneTemplate(dh.idle, plan));
     return parts.filter(Boolean).join(" ");
   }
-  const state = simBridge.state;
   const parts = [];
   const po = plan.priority_order || [];
   if (po.length) {
@@ -1047,13 +1063,18 @@ export function buildMockCommanderBrief(plan) {
   const candidates = rankVictims(state);
   if (!candidates.length) return renderSceneTemplate(cb.allClear, plan);
 
-  const firstRelay = firstActionMatching(plan, (a) => a.task === "deploy_relay");
+  const firstRelay = firstActionMatching(plan, (a) => a.task === "deploy_relay" || a.task === "deploy_balloon");
+  const sacrifice = firstActionMatching(plan, (a) => a.task === "sacrificial_relay");
   const activeBlock = state.map?.blocked_cells?.find((b) => b.status === "blocked");
   const relaySentence = renderSceneTemplate(firstRelay ? cb.relay : cb.noRelay, plan);
   const blockadeSentence = renderSceneTemplate(activeBlock ? cb.blockade : cb.noBlockade, plan, {
     blockId: activeBlock?.id || "no blockade",
   });
-  return renderSceneTemplate(cb.active, plan, { relaySentence, blockadeSentence });
+  const mortalitySentence = `${candidates[0].mortality_risk_label} mortality model: ${candidates[0].mortality_factors}. `;
+  const sacrificeSentence = sacrifice
+    ? `Decision hub authorized drone sacrifice: ${sacrifice.agent} will deplete as a relay for ${sacrifice.target}. `
+    : "";
+  return renderSceneTemplate(cb.active, plan, { relaySentence, blockadeSentence, mortalitySentence, sacrificeSentence });
 }
 
 /** UI-only placeholders while waiting for real Gemma output (not MOCK decision text). */
@@ -1213,9 +1234,16 @@ export function buildFleetDialogueSlides(plan) {
         survivalPct: top.survival_pct,
         survivalSteps: top.survival_steps,
         comm: top.communication_status,
+        mortalityRisk: top.mortality_risk_label,
+        mortalityFactors: top.mortality_factors,
         bestAgent: top.best_agent,
       })
     );
+    orchLines.push(`Mortality model: ${top.mortality_risk_label} risk from ${top.mortality_factors}.`);
+  }
+  const sacrificeAction = firstActionMatching(plan, (a) => a.task === "sacrificial_relay");
+  if (sacrificeAction) {
+    orchLines.push(`Decision hub authorized drone sacrifice: ${sacrificeAction.agent} will deplete for ${sacrificeAction.target}.`);
   }
   orchLines.push(
     interpolate(orch.policy, { padT, taskCount: plan.mission_plan?.length ?? 0 })
@@ -1249,6 +1277,8 @@ export function buildFleetDialogueSlides(plan) {
     if (action.safety_note) {
       cotLines.push(interpolate(ag.riskNote, { padT, note: action.safety_note }));
     }
+    const victimFactors = candidates.find((c) => c.id === action.target)?.mortality_factors;
+    if (victimFactors) cotLines.push(`Mortality factors: ${victimFactors}.`);
     cotLines.push(
       interpolate(ag.meshAck, { padT, peer: peer?.id || ag.peerFallback })
     );

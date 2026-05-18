@@ -37,6 +37,13 @@ export function moveAgentToward(agent, target, state, getBuildingRects) {
   agent.location = next;
 }
 
+function syncPackedBalloons(state) {
+  for (const balloon of state.agents.filter((a) => a.type === "balloon" && a.status === "packed")) {
+    const carrier = state.agents.find((a) => a.id === balloon.carrier_id);
+    if (carrier) balloon.location = [...carrier.location];
+  }
+}
+
 /**
  * @param {object} state
  * @param {object[]} actions
@@ -73,9 +80,11 @@ export function executeActions(state, actions, deps) {
     moveAgentToward(agent, targetCell, state, getBuildingRects);
   }
 
+  syncPackedBalloons(state);
+
   for (const action of actions) {
     const agent = state.agents.find((item) => item.id === action.agent);
-    if (!agent) continue;
+    if (!agent || agent.status === "sacrificed" || agent.status === "packed") continue;
 
     if (action.task === "clear_blockade") {
       const blockade = state.map.blocked_cells.find((item) => item.id === action.target);
@@ -120,6 +129,34 @@ export function executeActions(state, actions, deps) {
       ];
       const rk = `${action.agent}|${action.task}|${action.target}`;
       dispatchMove(agent, relayPos, rk);
+    } else if (action.task === "deploy_balloon") {
+      const balloon = state.agents.find((item) => item.id === action.target);
+      if (!balloon || balloon.status !== "packed") continue;
+      const relayPos = action._relayPos ?? [
+        Math.round(state.map.size[0] * 0.47),
+        Math.round(state.map.size[1] * 0.37),
+      ];
+      const rk = `${action.agent}|${action.task}|${action.target}`;
+      dispatchMove(agent, relayPos, rk);
+      balloon.location = [...agent.location];
+      if (nearCell(agent.location, relayPos, 1.5)) {
+        balloon.status = "deployed";
+        balloon.deployed = true;
+        balloon.carrier_id = null;
+        balloon.location = [...relayPos];
+      }
+    } else if (action.task === "sacrificial_relay" || action.target?.startsWith("Sacrifice-")) {
+      const relayPos = action._relayPos ?? [
+        Math.round(state.map.size[0] * 0.47),
+        Math.round(state.map.size[1] * 0.37),
+      ];
+      const rk = `${action.agent}|${action.task}|${action.target}`;
+      dispatchMove(agent, relayPos, rk);
+      if (nearCell(agent.location, relayPos, 1.5)) {
+        agent.status = "sacrificed";
+        agent.role = "sacrificed_relay";
+        agent.battery = 0;
+      }
     } else if (action.target?.startsWith("K")) {
       const blockade = state.map.blocked_cells.find((item) => item.id === action.target);
       if (!blockade) continue;
@@ -127,6 +164,10 @@ export function executeActions(state, actions, deps) {
       dispatchMove(agent, blockade.location, rk);
     }
 
-    agent.battery = Math.max(0, agent.battery - (agent.type === "drone" ? 0.1 : 0.05));
+    if (agent.status !== "sacrificed") {
+      agent.battery = Math.max(0, agent.battery - (agent.type === "drone" ? 0.1 : 0.05));
+    }
   }
+
+  syncPackedBalloons(state);
 }

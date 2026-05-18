@@ -11,6 +11,7 @@ import { drawIndustrialPlanUnderlay } from "./industrial-plan.js";
  * @property {Map} trails
  * @property {number} lastTickAt
  * @property {boolean} tacticalBaseMapReady
+ * @property {Array<{a:{x:number,y:number},b:{x:number,y:number}}>} [fallbackRoadSegments]
  * @property {string} scenePreset
  * @property {number} msPerTick
  */
@@ -84,6 +85,7 @@ function drawGrid(cols, rows, cell) {
   const fillBg = terrainUnderCanvas ? c2.overlay : "#04060a";
   E.ctx.fillStyle = fillBg;
   E.ctx.fillRect(0, 0, E.canvas.width, E.canvas.height);
+  if (!terrainUnderCanvas) drawFallbackRoadSegments(cell);
   E.ctx.strokeStyle = c2.gridStroke || "rgba(255, 255, 255, 0.04)";
   E.ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
@@ -98,9 +100,40 @@ function drawGrid(cols, rows, cell) {
     E.ctx.lineTo(E.canvas.width, i * cell);
     E.ctx.stroke();
   }
-  E.ctx.fillStyle = E.tacticalBaseMapReady ? c2.arterial : "rgba(60, 80, 110, 0.32)";
-  for (let y = 2; y < rows; y += 5) E.ctx.fillRect(0, y * cell + cell * 0.28, E.canvas.width, cell * 0.44);
-  for (let x = 2; x < cols; x += 6) E.ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, E.canvas.height);
+  if (terrainUnderCanvas) {
+    E.ctx.fillStyle = c2.arterial;
+    for (let y = 2; y < rows; y += 5) E.ctx.fillRect(0, y * cell + cell * 0.28, E.canvas.width, cell * 0.44);
+    for (let x = 2; x < cols; x += 6) E.ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, E.canvas.height);
+  } else if (!E.fallbackRoadSegments?.length) {
+    E.ctx.fillStyle = "rgba(60, 80, 110, 0.32)";
+    for (let y = 2; y < rows; y += 5) E.ctx.fillRect(0, y * cell + cell * 0.28, E.canvas.width, cell * 0.44);
+    for (let x = 2; x < cols; x += 6) E.ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, E.canvas.height);
+  }
+}
+
+function drawFallbackRoadSegments(cell) {
+  const segments = E.fallbackRoadSegments || [];
+  if (!segments.length) return;
+  E.ctx.save();
+  E.ctx.lineCap = "round";
+  E.ctx.lineJoin = "round";
+  E.ctx.strokeStyle = "rgba(150, 178, 210, 0.34)";
+  E.ctx.lineWidth = Math.max(1.1, cell * 0.13);
+  for (const seg of segments) {
+    E.ctx.beginPath();
+    E.ctx.moveTo(seg.a.x * cell, seg.a.y * cell);
+    E.ctx.lineTo(seg.b.x * cell, seg.b.y * cell);
+    E.ctx.stroke();
+  }
+  E.ctx.strokeStyle = "rgba(210, 230, 248, 0.18)";
+  E.ctx.lineWidth = Math.max(0.45, cell * 0.045);
+  for (const seg of segments) {
+    E.ctx.beginPath();
+    E.ctx.moveTo(seg.a.x * cell, seg.a.y * cell);
+    E.ctx.lineTo(seg.b.x * cell, seg.b.y * cell);
+    E.ctx.stroke();
+  }
+  E.ctx.restore();
 }
 
 export function drawCommunication(cell, t) {

@@ -6,6 +6,11 @@ import {
   manhattan,
   roundScore,
 } from "./math.js";
+import { currentScenePreset } from "../config/presets.js";
+
+function isUnavailableAgent(agent) {
+  return agent?.status === "sacrificed" || agent?.status === "packed" || agent?.battery <= 0;
+}
 
 export function lifeSignalConfidence(victim) {
   return victim.thermal_signal;
@@ -66,18 +71,36 @@ export function communicationStatus(state, location) {
   return "offline";
 }
 
+export function mortalityFactorSummary(victim) {
+  const p = victim?.survival_profile || {};
+  const age = p.age_group || "adult";
+  const injury = p.injury_zone || "unknown injury";
+  const env = `${p.temperature_c ?? "?"}C/${p.humidity_pct ?? "?"}% RH/${p.rainfall_mm_h ?? "?"}mm rain`;
+  const enclosure = p.enclosure || "unknown enclosure";
+  const group = `${p.group_size || 1} trapped`;
+  return `${age}, ${injury}, ${env}, ${enclosure}, ${group}`;
+}
+
+export function mortalityRiskLabel(victim) {
+  const d = victim?.damage_per_step || 0;
+  if (d >= 110) return "critical";
+  if (d >= 75) return "high";
+  if (d >= 45) return "elevated";
+  return "guarded";
+}
+
 export function makeBrief(candidates, needsRelay, blockade) {
   if (!candidates.length) {
     return "All known victim sites are resolved. Maintain perimeter scanning and prepare extraction reports.";
   }
   const top = candidates[0];
   const relayText = needsRelay
-    ? " Because communication is weak, Drone-2 should establish Relay-R1 before close approach."
+    ? " Because communication is weak, the fleet should establish relay coverage before close approach."
     : "";
   const blockadeText = blockade
     ? ` UGV-2 should continue clearing ${blockade.id} to open the ground corridor.`
     : " Ground corridors are currently open enough for the next move.";
-  return `${top.id} is the current priority because it combines a short survival window, strong life-signal confidence, and acceptable access cost. Drone-1 should confirm the site from above while UGV-1 verifies the safest reachable target.${relayText}${blockadeText}`;
+  return `${top.id} is the current priority because it combines a short survival window, ${top.mortality_risk_label} mortality risk, strong life-signal confidence, and acceptable access cost. Drone-1 should confirm the site from above while UGV-1 verifies the safest reachable target.${relayText}${blockadeText}`;
 }
 
 export function chooseBestAgent(state, victim) {
@@ -87,18 +110,20 @@ export function chooseBestAgent(state, victim) {
     return immune ? raw * 0.3 : raw;
   };
   let options = state.agents
-    .filter((agent) => agent.role !== "relay" && agent.role !== "clear_blockade")
+    .filter((agent) => !isUnavailableAgent(agent) && agent.role !== "relay" && agent.role !== "clear_blockade")
     .map((agent) => ({
       agent,
       pathRisk: score(agent),
       blocked: agent.type !== "drone" && agent.type !== "balloon" && isBlockedNear(state, victim.location),
     }));
   if (!options.length && state.agents.length) {
-    options = state.agents.map((agent) => ({
-      agent,
-      pathRisk: score(agent),
-      blocked: agent.type !== "drone" && agent.type !== "balloon" && isBlockedNear(state, victim.location),
-    }));
+    options = state.agents
+      .filter((agent) => !isUnavailableAgent(agent))
+      .map((agent) => ({
+        agent,
+        pathRisk: score(agent),
+        blocked: agent.type !== "drone" && agent.type !== "balloon" && isBlockedNear(state, victim.location),
+      }));
   }
   if (!options.length) {
     return { agent: { id: "—", battery: 0, type: "drone" }, pathRisk: 1, blocked: false };
@@ -134,6 +159,8 @@ export function rankVictims(state) {
         survival_pct: victim.survival_pct,
         survival_steps: roundScore(estimatedSurvivalSteps(victim)),
         life_signal_confidence: roundScore(lifeSignalConfidence(victim)),
+        mortality_factors: mortalityFactorSummary(victim),
+        mortality_risk_label: mortalityRiskLabel(victim),
         best_agent: bestAgent.agent.id,
         communication_status: communicationStatus(state, victim.location),
         status: victim.status,
@@ -146,18 +173,57 @@ export function generatePlan(state) {
   const candidates = rankVictims(state);
   const allBlockades = state.map.blocked_cells.filter((b) => b.status === "blocked");
 
-  const scouts = state.agents.filter((a) => a.role === "scout");
-  const relays = state.agents.filter((a) => a.role === "relay");
-  const rescues = state.agents.filter((a) => a.role === "rescue" || a.type === "ground_rescue");
-  const clearers = state.agents.filter((a) => a.role === "clear_blockade" || a.type === "ground_clear");
-
   const offlineVics = candidates.filter((c) => c.communication_status !== "available");
   const needsRelay = offlineVics.length > 0 && (offlineVics[0]?.score ?? 0) > 0.3;
 
   const missionPlan = [];
   const assignedVictimIds = new Set();
+  const reservedAgentIds = new Set();
+  const activeAgents = state.agents.filter((a) => !isUnavailableAgent(a));
+  const packedBalloons = state.agents.filter((a) => a.type === "balloon" && a.status === "packed" && a.carrier_id);
+  const activeRelays = activeAgents.filter((a) => a.role === "relay" && (a.type !== "balloon" || a.deployed !== false));
+  const sacrificeDrone =
+    currentScenePreset === "industrial" &&
+    candidates[0] &&
+    ((candidates[0].communication_status !== "available" && activeRelays.length === 0) || allBlockades.length > 0)
+      ? activeAgents.find((a) => a.type === "drone")
+      : null;
+
+  const scouts = activeAgents.filter((a) => a.role === "scout" && a.id !== sacrificeDrone?.id);
+  const relays = activeRelays.filter((a) => a.id !== sacrificeDrone?.id);
+  const rescues = activeAgents.filter((a) => a.role === "rescue" || a.type === "ground_rescue");
+  const clearers = activeAgents.filter((a) => a.role === "clear_blockade" || a.type === "ground_clear");
+
+  if (needsRelay) {
+    packedBalloons.forEach((balloon, i) => {
+      const carrier = activeAgents.find((a) => a.id === balloon.carrier_id);
+      if (!carrier) return;
+      const anchor = computeRelayAnchor(state, i, offlineVics);
+      missionPlan.push({
+        agent: carrier.id,
+        task: "deploy_balloon",
+        target: balloon.id,
+        _relayPos: anchor,
+        safety_note: `${balloon.id} is packed on ${carrier.id}; deploy it as a long-duration relay before close approach.`,
+      });
+      reservedAgentIds.add(carrier.id);
+    });
+  }
+
+  if (sacrificeDrone) {
+    const anchor = computeRelayAnchor(state, 0, offlineVics.length ? offlineVics : candidates);
+    missionPlan.push({
+      agent: sacrificeDrone.id,
+      task: "sacrificial_relay",
+      target: `Sacrifice-${candidates[0].id}`,
+      _relayPos: anchor,
+      safety_note: "Decision hub authorized drone sacrifice: drain the UAV as a one-way relay to improve industrial rescue coverage.",
+    });
+    reservedAgentIds.add(sacrificeDrone.id);
+  }
 
   scouts.forEach((scout, i) => {
+    if (reservedAgentIds.has(scout.id)) return;
     const target = candidates[i] || candidates[candidates.length - 1];
     if (!target) return;
     missionPlan.push({
@@ -169,6 +235,7 @@ export function generatePlan(state) {
   });
 
   relays.forEach((relay, i) => {
+    if (reservedAgentIds.has(relay.id)) return;
     if (!needsRelay) {
       const target = candidates[scouts.length + i] || candidates[candidates.length - 1];
       if (target) {
@@ -192,6 +259,7 @@ export function generatePlan(state) {
   });
 
   rescues.forEach((rescue) => {
+    if (reservedAgentIds.has(rescue.id)) return;
     const committed = rescue._rescueTarget;
     const committedStill =
       committed &&
@@ -216,6 +284,7 @@ export function generatePlan(state) {
   });
 
   clearers.forEach((clearer, i) => {
+    if (reservedAgentIds.has(clearer.id)) return;
     const blockade = allBlockades[i];
     if (blockade) {
       missionPlan.push({
@@ -246,6 +315,8 @@ export function generatePlan(state) {
   });
 
   const top = candidates[0] ?? null;
+  const balloonDeploys = missionPlan.filter((a) => a.task === "deploy_balloon").length;
+  const sacrifice = missionPlan.find((a) => a.task === "sacrificial_relay");
   return {
     commander_briefing: makeBrief(candidates, needsRelay && relays.length > 0, allBlockades[0] ?? null),
     priority_order: candidates.map((c) => c.id),
@@ -255,6 +326,8 @@ export function generatePlan(state) {
       needsRelay
         ? `Confirm relay deployment to cover ${offlineVics.length} offline victim(s).`
         : "Relay not required for current targets.",
+      balloonDeploys ? `Confirm UGV balloon deployment for ${balloonDeploys} packed platform(s).` : "",
+      sacrifice ? `Authorize sacrifice of ${sacrifice.agent} for industrial relay coverage.` : "",
     ],
   };
 }

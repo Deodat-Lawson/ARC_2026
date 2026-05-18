@@ -303,7 +303,7 @@ export function renderPanels(plan) {
       <strong>${candidate.id}</strong>
       <div>
         <div class="bar" style="--value: ${candidate.score * 100}%"><i></i></div>
-        <span>${candidate.survival_pct}% · ${candidate.survival_steps}t · ${candidate.communication_status}</span>
+        <span>${candidate.survival_pct}% · ${candidate.survival_steps}t · ${candidate.communication_status} · ${candidate.mortality_risk_label}</span>
       </div>
       <b class="tag">${candidate.score.toFixed(2)}</b>
     </div>
@@ -318,7 +318,7 @@ export function renderPanels(plan) {
       <strong>${agent.id}</strong>
       <div>
         <div class="bar" style="--value: ${agent.battery}%"><i></i></div>
-        <span>${agent.role} · ${agent.location.map((item) => Math.round(item)).join(", ")}</span>
+        <span>${agent.role}${agent.status ? `/${agent.status}` : ""} · ${agent.location.map((item) => Math.round(item)).join(", ")}</span>
       </div>
       <b class="tag">${Math.round(agent.battery)}%</b>
     </div>

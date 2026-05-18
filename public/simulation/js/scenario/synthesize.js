@@ -17,6 +17,44 @@ function mulberry32(seed) {
   };
 }
 
+function pickWeighted(rng, entries) {
+  let total = 0;
+  for (const [, weight] of entries) total += weight;
+  let r = rng() * total;
+  for (const [value, weight] of entries) {
+    r -= weight;
+    if (r <= 0) return value;
+  }
+  return entries[entries.length - 1][0];
+}
+
+function buildSurvivalProfile(rng, cfgPreset) {
+  const preset = cfgPreset.preset || "urban_quake";
+  const heatBias = preset === "wildfire" ? 8 : preset === "industrial" ? 4 : 0;
+  const rainBias = preset === "wildfire" ? 0 : 2;
+  return {
+    age_group: pickWeighted(rng, [["adult", 0.58], ["elderly", 0.25], ["child", 0.17]]),
+    injury_zone: pickWeighted(rng, [["minor", 0.26], ["limb", 0.32], ["torso", 0.26], ["head", 0.16]]),
+    temperature_c: Math.round(18 + heatBias + rng() * 14),
+    humidity_pct: Math.round(45 + rng() * 40),
+    rainfall_mm_h: roundScore(Math.max(0, rainBias + (rng() - 0.35) * 8)),
+    enclosure: pickWeighted(rng, [["partial", 0.46], ["confined", 0.34], ["open", 0.20]]),
+    group_size: 1 + Math.floor(rng() * 4),
+  };
+}
+
+function mortalityMultiplier(profile) {
+  if (!profile) return 1;
+  const age = { child: 1.18, adult: 1, elderly: 1.32 }[profile.age_group] ?? 1;
+  const injury = { minor: 0.82, limb: 1, torso: 1.32, head: 1.5 }[profile.injury_zone] ?? 1;
+  const enclosure = { open: 0.88, partial: 1, confined: 1.28 }[profile.enclosure] ?? 1;
+  const heat = profile.temperature_c >= 32 ? 1.18 : profile.temperature_c <= 8 ? 1.12 : 1;
+  const humidity = profile.humidity_pct >= 78 ? 1.08 : 1;
+  const rain = profile.rainfall_mm_h >= 6 ? 1.12 : profile.rainfall_mm_h >= 2 ? 1.05 : 1;
+  const social = profile.group_size > 1 ? Math.max(0.88, 1 - (profile.group_size - 1) * 0.04) : 1;
+  return age * injury * enclosure * heat * humidity * rain * social;
+}
+
 export function pointInPolygon(x, y, ring) {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
@@ -234,7 +272,10 @@ export function synthesizeScenario(base, cfg, geo = {}) {
     const loc = pickVictimCell();
     const sev = cfg.severity * (0.6 + rng() * 0.8);
     const hp_max = VICTIM_HP_MIN + Math.floor(rng() * VICTIM_HP_RANGE);
-    const damage_per_step = Math.round(VICTIM_DMG_MIN + sev * VICTIM_DMG_RANGE);
+    const survival_profile = buildSurvivalProfile(rng, cfgPreset);
+    const damage_per_step = Math.round(
+      (VICTIM_DMG_MIN + sev * VICTIM_DMG_RANGE) * mortalityMultiplier(survival_profile),
+    );
     victims.push({
       id: `V${i + 1}`,
       location: loc,
@@ -242,6 +283,7 @@ export function synthesizeScenario(base, cfg, geo = {}) {
       hp_max,
       survival_pct: 100,
       damage_per_step,
+      survival_profile,
       thermal_signal: roundScore(0.25 + rng() * 0.7),
       status: rng() < 0.85 ? "trapped" : "unknown"
     });
@@ -320,12 +362,33 @@ export function synthesizeScenario(base, cfg, geo = {}) {
       payload: "rubble_clear_tool"
     });
   }
+  if (cfg.balloons > 0 && !agents.some((a) => String(a.type || "").startsWith("ground_") || a.type === "ugv")) {
+    agents.push({
+      id: "UGV-Carrier",
+      type: "ground_clear",
+      role: "clear_blockade",
+      location: place(),
+      battery: cfg.battery,
+      speed: 1,
+      perception_range: 3,
+      clear_rate: 12,
+      sensors: ["camera"],
+      payload: "balloon_carrier"
+    });
+  }
+  const carrierPool = agents.filter((a) =>
+    a.type === "ground_clear" || a.type === "ground_rescue" || a.type === "ground_armored" || a.type === "ugv"
+  );
   for (let i = 0; i < cfg.balloons; i += 1) {
+    const carrier = carrierPool[i % Math.max(1, carrierPool.length)];
     agents.push({
       id: `BAL-${agents.filter((a) => a.type === "balloon").length + 1}`,
       type: "balloon",
       role: "relay",
-      location: place(),
+      status: "packed",
+      deployed: false,
+      carrier_id: carrier?.id || null,
+      location: carrier ? [...carrier.location] : place(),
       battery: cfg.battery,
       speed: 0.5,
       perception_range: 12,

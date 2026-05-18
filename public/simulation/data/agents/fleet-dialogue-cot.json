@@ -153,8 +153,8 @@
       "dialogue": {
         "orchestrator": {
           "heartbeatFused": "${padT}: Gemma 4 fused GLB facility occlusion, low-clearance obstacles, route cells, and casualty urgency.",
-          "leadVictim": "Lead ${id}: survival ${survivalPct}% (${survivalSteps}t), comm ${comm}; reachable contact candidate ${bestAgent}.",
-          "policy": "Policy: bind ${taskCount} tasks after checking facility passability and hazardous equipment zones."
+          "leadVictim": "Lead ${id}: survival ${survivalPct}% (${survivalSteps}t), comm ${comm}; mortality ${mortalityRisk}; reachable contact candidate ${bestAgent}.",
+          "policy": "Policy: bind ${taskCount} tasks after checking facility passability, hazardous equipment zones, and sacrifice authority."
         },
         "agentSlide": {
           "riskNote": "Industrial risk note: ${note}",
@@ -167,8 +167,8 @@
         }
       },
       "decisionHub": {
-        "summary": "Gemma 4 Decision Hub: GLB occlusion, vehicle envelope, and facility route cells fused for ${sceneLabel}.",
-        "priority": "Priority: ${topId} leads at ${topScore}; reachable-contact logic assigns ${bestAgent}.",
+        "summary": "Gemma 4 Decision Hub: GLB occlusion, vehicle envelope, mortality factors, and facility route cells fused for ${sceneLabel}.",
+        "priority": "Priority: ${topId} leads at ${topScore}; mortality ${mortalityRisk} (${mortalityFactors}); reachable-contact logic assigns ${bestAgent}.",
         "route": "Route feasibility: ${blockedCount} service blockage(s), low-clearance obstacle filter active, contact-cell validation enabled.",
         "task": "${agent}: ${taskHuman} ${target}; use solid-footprint avoidance, not overhead platform avoidance.",
         "gate": "Commander gate: ${gate}",
@@ -176,7 +176,7 @@
         "idle": "No active rescue edge; hold UGVs in service lanes and continue facility scan."
       },
       "commanderBrief": {
-        "active": "Gemma 4 fused facility occlusion, low-clearance obstacle geometry, and reachable contact points. ${topId} is the lead objective; ${rescueAgent} should use the passable service lane while ${scoutAgent} verifies platform occlusion. ${relaySentence}${blockadeSentence}",
+        "active": "Gemma 4 fused facility occlusion, low-clearance obstacle geometry, mortality factors, and reachable contact points. ${topId} is the lead objective; ${mortalitySentence}${rescueAgent} should use the passable service lane while ${scoutAgent} verifies platform occlusion. ${relaySentence}${blockadeSentence}${sacrificeSentence}",
         "allClear": "All known industrial contacts are resolved. Keep UGVs in service lanes and monitor hazardous equipment zones.",
         "relay": "Relay coverage is required across the facility shadow. ",
         "noRelay": "Relay coverage is sufficient inside the facility. ",

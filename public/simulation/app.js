@@ -374,13 +374,22 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function tacticalBasemapVisibleFor2d() {
+  if (!tacticalBaseMapReady || currentScenePreset === "industrial" || currentScenePreset === "wildfire") return false;
+  const el = document.getElementById("tacticalBasemap");
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  const style = getComputedStyle(el);
+  return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0 && rect.width > 2 && rect.height > 2;
+}
+
 function renderOnce() {
   syncBridge();
   renderPanels(plan);
-  const basemapFor2d =
-    tacticalBaseMapReady &&
-    currentScenePreset !== "industrial" &&
-    currentScenePreset !== "wildfire";
+  const basemapFor2d = tacticalBasemapVisibleFor2d();
+  const fallbackRoadSegments = roadExportBase && state?.map?.size
+    ? scaleRoadSegmentsFromExport(roadExportBase, state.map.size[0], state.map.size[1])
+    : [];
   drawMap2D({
     ctx,
     canvas,
@@ -389,6 +398,7 @@ function renderOnce() {
     trails,
     lastTickAt,
     tacticalBaseMapReady: basemapFor2d,
+    fallbackRoadSegments,
     scenePreset: currentScenePreset,
     msPerTick: MS_PER_TICK,
   });
@@ -495,10 +505,10 @@ function startRafLoop() {
   if (rafId !== null) return;
   const tick = (now) => {
     const t = (now - T0) / 1000;
-    const basemapFor2d =
-    tacticalBaseMapReady &&
-    currentScenePreset !== "industrial" &&
-    currentScenePreset !== "wildfire";
+    const basemapFor2d = tacticalBasemapVisibleFor2d();
+    const fallbackRoadSegments = roadExportBase && state?.map?.size
+      ? scaleRoadSegmentsFromExport(roadExportBase, state.map.size[0], state.map.size[1])
+      : [];
     drawMap2D({
       ctx,
       canvas,
@@ -507,6 +517,7 @@ function startRafLoop() {
       trails,
       lastTickAt,
       tacticalBaseMapReady: basemapFor2d,
+      fallbackRoadSegments,
       scenePreset: currentScenePreset,
       msPerTick: MS_PER_TICK,
     });
