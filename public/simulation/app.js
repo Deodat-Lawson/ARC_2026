@@ -29,6 +29,7 @@ import { occupancyGridRouteStep } from "./js/sim/path-planners.js";
 import { updateVictims, updateBlockades } from "./js/sim/tick.js";
 import { roundCoord } from "./js/sim/math.js";
 import { pointNearBuilding } from "./js/sim/collision.js";
+import { avoidBuildingStep } from "./js/sim/motion-avoid.js";
 import { simBridge } from "./js/sim/bridge.js";
 import { MS_PER_TICK } from "./js/sim/timing.js";
 import {
@@ -321,6 +322,18 @@ function moveAgentOnRoad(agent, targetCell, targetKey) {
     blockedPts,
   );
   roadRouteCache.set(agent.id, routeState);
+
+  // Tactical-road segments (OSM exports) are independent of the 3D synthetic
+  // road grid, so the procedural building infill can drop a 1×1 building right
+  // on top of a road point. Without this guard the routed `nextPt` puts the car
+  // visibly inside a building — same behavior under mock and live-Gemma since
+  // path execution is mode-independent. Push back to the closest clear spot.
+  const rects = buildingAvoidanceRects(state);
+  if (rects.length && pointNearBuilding(nextPt[0], nextPt[1], rects, 0.42)) {
+    const safe = avoidBuildingStep(current, nextPt, target, speed, state, buildingAvoidanceRects);
+    agent.location = [roundCoord(safe[0]), roundCoord(safe[1])];
+    return;
+  }
   agent.location = [roundCoord(nextPt[0]), roundCoord(nextPt[1])];
 }
 
