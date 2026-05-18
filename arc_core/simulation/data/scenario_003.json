@@ -1,6 +1,6 @@
 {
   "scenario_id": "coastal_flood_001",
-  "description": "台风引发洪水，沿海低洼区，道路被淹，通信塔损毁",
+  "description": "Typhoon flooding, coastal lowlands, roads submerged, comm towers damaged.",
   "map": {
     "size": [
       30,

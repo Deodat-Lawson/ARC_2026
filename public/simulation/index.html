@@ -39,10 +39,18 @@
             <span class="pulse" aria-hidden="true"></span>
             <span id="msnPhase">CLOSED LOOP · GEMMA-4</span>
           </span>
-          <span id="gemmaAiStatus" class="gemma-ai-status pending" title="Gemma 4 / LM Studio connection" aria-live="polite">
+          <span id="gemmaAiStatus" class="gemma-ai-status pending" title="Gemma 4 LiteRT connection" aria-live="polite">
             <span class="gemma-ai-status-dot" aria-hidden="true"></span>
             <span class="gemma-ai-status-label">… Gemma 4</span>
           </span>
+          <div id="aiMetricsPanel" class="ai-metrics-panel" aria-live="polite">
+            <span class="ai-metric" id="aiMetricMode">MODE · —</span>
+            <span class="ai-metric" id="aiMetricBackend">BACKEND · —</span>
+            <span class="ai-metric" id="aiMetricLatency">LATENCY · —</span>
+            <span class="ai-metric" id="aiMetricTokens">TOKENS · —</span>
+            <span class="ai-metric" id="aiMetricAgent">AGENT · —</span>
+            <span class="ai-metric" id="aiMetricRound">ROUND · 0</span>
+          </div>
         </div>
 
         <div class="cc-top-c">
@@ -483,8 +491,8 @@
           <span>Cluster nominal</span>
           <span class="cc-divider tall"></span>
           <span class="status-meta"><i>MESH</i> 4 nodes</span>
-          <span class="status-meta"><i>UPLINK</i> 24 ms</span>
-          <span class="status-meta"><i>PLAN</i> Gemma-4 · 0.7Hz</span>
+          <span class="status-meta"><i>UPLINK</i> <span id="statusUplink">—</span></span>
+          <span class="status-meta"><i>PLAN</i> <span id="statusPlan">—</span></span>
         </div>
         <div class="cc-status-c">
           <span class="status-meta"><i>BANDWIDTH</i> <span id="bwBar" class="bw"><i></i><i></i><i></i><i></i><i></i></span></span>
