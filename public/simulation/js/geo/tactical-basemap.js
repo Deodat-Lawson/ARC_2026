@@ -165,7 +165,18 @@ export function makeTacticalBasemapStyle(presetKey) {
   };
 }
 
+/** MapLibre slice is only aligned with the urban theatre; hide for forest/industrial 2D overlays. */
+export function syncTacticalBasemapDomVisibility(presetKey) {
+  const pk = presetKey || currentScenePreset || "urban_quake";
+  const el = document.getElementById("tacticalBasemap");
+  if (!el) return;
+  const showUrban = pk === "urban_quake";
+  el.style.display = showUrban ? "block" : "none";
+  if (showUrban) syncTacticalBasemapSize();
+}
+
 export function applyTacticalBasemapStylePreset(presetKey) {
+  syncTacticalBasemapDomVisibility(presetKey);
   const b = getPresetBasemap(presetKey);
   if (!tacticalBaseMap || !tacticalBaseMapReady) return;
   try {
@@ -274,6 +285,13 @@ function simplifyRing(ring, maxVerts) {
 
 /** @param {() => void} [onAfter] — e.g. refresh UGV routing from live segments */
 export function rebuildTacticalRoadNetwork(onAfter) {
+  if (currentScenePreset === "wildfire") {
+    tacticalRoadSegments = [];
+    tacticalRoadNetworkReady = false;
+    window.__arcSimulationRoadSegments = tacticalRoadSegments;
+    if (onAfter) onAfter();
+    return;
+  }
   if (!tacticalBaseMap || !tacticalBaseMapReady) return;
   let features = [];
   try {
@@ -302,6 +320,12 @@ export function rebuildTacticalRoadNetwork(onAfter) {
 
 /** @param {() => void} [onReady] */
 export function rebuildTacticalBuildingFootprints(onReady) {
+  if (currentScenePreset === "wildfire") {
+    tacticalBuildingFootprints = [];
+    tacticalBuildingsReady = false;
+    if (onReady) onReady();
+    return;
+  }
   if (!tacticalBaseMap || !tacticalBaseMapReady) return;
   let features = [];
   try {
@@ -366,6 +390,7 @@ function installTacticalPmtilesProtocol() {
 export function initTacticalBasemap(options = {}) {
   const ml = globalThis.maplibregl;
   const Pm = globalThis.pmtiles;
+  syncTacticalBasemapDomVisibility(currentScenePreset);
   if (tacticalBaseMap || !ml || !Pm) return;
   const mount = document.getElementById("tacticalBasemap");
   if (!mount) return;

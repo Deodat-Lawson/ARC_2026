@@ -1893,9 +1893,6 @@ pre::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99
   z-index: 2;
 }
 
-.map-pov-col.wildfire-splat-active .pov-reticle,
-.map-pov-col.wildfire-splat-active .pov-telemetry,
-.map-pov-col.wildfire-splat-active .pov-corner,
 .map-pov-col.industrial-glb-active .pov-reticle,
 .map-pov-col.industrial-glb-active .pov-telemetry,
 .map-pov-col.industrial-glb-active .pov-corner {
@@ -1903,12 +1900,10 @@ pre::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99
   pointer-events: none !important;
 }
 
-.map-pov-col.wildfire-splat-active .agent-selector-hint,
 .map-pov-col.industrial-glb-active .agent-selector-hint {
   display: none;
 }
 
-.map-pov-col.wildfire-splat-active .pov-frame::after,
 .map-pov-col.industrial-glb-active .pov-frame::after {
   display: none;
 }

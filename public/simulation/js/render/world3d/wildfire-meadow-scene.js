@@ -82,11 +82,14 @@ export const FOREST_PRESETS = ["Oak Small", "Aspen Small", "Ash Small", "Pine Sm
 export const WILDFIRE_BURN_ORIGIN_METERS_X = MEADOW_SIDE_METERS * 0.124;
 export const WILDFIRE_BURN_ORIGIN_METERS_Z = MEADOW_SIDE_METERS * -0.146;
 
-/** Radius for dense crown + ember/smoke footprint (bounded vs meadow extent). */
-export const WILDFIRE_BURN_PATCH_RADIUS_METERS = Math.min(48, MEADOW_HALF_METERS * 0.5);
+/** Radius for dense crown + ember/smoke footprint (metres — keep small vs meadow so UAV/UGV retain corridors). */
+export const WILDFIRE_BURN_PATCH_RADIUS_METERS = Math.min(14, MEADOW_HALF_METERS * 0.12);
+
+/** Planner buffer (metres) added to burn disc when mapping hazards to tactical grid rects. */
+export const WILDFIRE_BURN_NAV_CLEARANCE_METERS = 8;
 
 /** Portion [0–1] of EZ-trees clustered around burn zones (remainder stays uniform meadow). */
-export const WILDFIRE_BURN_CLUSTER_TREE_BIAS = 0.46;
+export const WILDFIRE_BURN_CLUSTER_TREE_BIAS = 0.4;
 
 /**
  * Multiple burn patches (world XZ, metres). `intensity` ~ relative severity (0.15–1+); drives VFX + light.
@@ -101,20 +104,181 @@ export const WILDFIRE_BURN_ZONES = [
     label: "crown-head",
   },
   {
-    ox: MEADOW_SIDE_METERS * -0.068,
-    oz: MEADOW_SIDE_METERS * 0.118,
-    radiusMeters: Math.min(30, MEADOW_HALF_METERS * 0.34),
-    intensity: 0.35,
+    ox: MEADOW_SIDE_METERS * -0.05,
+    oz: MEADOW_SIDE_METERS * 0.086,
+    radiusMeters: 6.5,
+    intensity: 0.32,
     label: "ember-spot",
   },
   {
-    ox: MEADOW_SIDE_METERS * 0.172,
-    oz: MEADOW_SIDE_METERS * 0.042,
-    radiusMeters: Math.min(36, MEADOW_HALF_METERS * 0.4),
-    intensity: 0.52,
+    ox: MEADOW_SIDE_METERS * 0.102,
+    oz: MEADOW_SIDE_METERS * -0.062,
+    radiusMeters: 8.5,
+    intensity: 0.48,
     label: "line-rear",
   },
+  /** Dispersed spotting — compact radii leave corridors between patches. */
+  {
+    ox: MEADOW_SIDE_METERS * -0.34,
+    oz: MEADOW_SIDE_METERS * 0.21,
+    radiusMeters: 5,
+    intensity: 0.22,
+    label: "spot-nw",
+  },
+  {
+    ox: MEADOW_SIDE_METERS * 0.29,
+    oz: MEADOW_SIDE_METERS * 0.17,
+    radiusMeters: 4.5,
+    intensity: 0.24,
+    label: "spot-ne",
+  },
+  {
+    ox: MEADOW_SIDE_METERS * -0.21,
+    oz: MEADOW_SIDE_METERS * -0.33,
+    radiusMeters: 5.2,
+    intensity: 0.26,
+    label: "spot-sw",
+  },
+  {
+    ox: MEADOW_SIDE_METERS * 0.36,
+    oz: MEADOW_SIDE_METERS * 0.05,
+    radiusMeters: 4,
+    intensity: 0.18,
+    label: "spot-e",
+  },
+  {
+    ox: MEADOW_SIDE_METERS * -0.06,
+    oz: MEADOW_SIDE_METERS * -0.31,
+    radiusMeters: 4.6,
+    intensity: 0.2,
+    label: "spot-s",
+  },
+  {
+    ox: MEADOW_SIDE_METERS * 0.13,
+    oz: MEADOW_SIDE_METERS * 0.34,
+    radiusMeters: 4.8,
+    intensity: 0.21,
+    label: "spot-nnear",
+  },
+  {
+    ox: MEADOW_SIDE_METERS * -0.39,
+    oz: MEADOW_SIDE_METERS * -0.07,
+    radiusMeters: 4.2,
+    intensity: 0.16,
+    label: "spot-w",
+  },
 ];
+
+function clampBurnAxis(v, hi) {
+  return Math.max(0, Math.min(hi, v));
+}
+
+/**
+ * Fire hazard footprints for `pointNearBuilding` / `avoidBuildingStep` (grid coords, same as victim cells).
+ * Each burn patch is inflated by {@link WILDFIRE_BURN_NAV_CLEARANCE_METERS} for routing margin.
+ *
+ * Meadow XZ spans one cell-aligned map: metre offset maps from scene centre ±{@link MEADOW_SIDE_METERS}/2.
+ * @returns {{ x: number, z: number, w: number, d: number }[]}
+ */
+export function wildfireBurnAvoidanceRects(scenario) {
+  const sz = scenario?.map?.size;
+  if (!Array.isArray(sz) || sz.length < 2 || sz[0] < 2 || sz[1] < 2) return [];
+  let cols = Math.floor(sz[0]);
+  let rows = Math.floor(sz[1]);
+  if (!(cols >= 2 && rows >= 2)) return [];
+
+  const sx = cols - 1;
+  const sy = rows - 1;
+
+  /** Centre-origin metres → fractional grid along [0, sx]. */
+  const toGridXZ = (xm, zm) => ({
+    x: (xm / MEADOW_SIDE_METERS + 0.5) * sx,
+    z: (zm / MEADOW_SIDE_METERS + 0.5) * sy,
+  });
+
+  const margin = WILDFIRE_BURN_NAV_CLEARANCE_METERS;
+  /** @type {{ x: number, z: number, w: number, d: number }[]} */
+  const out = [];
+
+  const zones = WILDFIRE_BURN_ZONES;
+  for (let zi = 0; zi < zones.length; zi++) {
+    const z = zones[zi];
+    const rEff = Math.max(0.5, z.radiusMeters + margin);
+    const cg = toGridXZ(z.ox, z.oz);
+    const halfGx = (rEff / MEADOW_SIDE_METERS) * sx;
+    const halfGz = (rEff / MEADOW_SIDE_METERS) * sy;
+    const x0 = clampBurnAxis(cg.x - halfGx, sx);
+    const z0 = clampBurnAxis(cg.z - halfGz, sy);
+    const x1 = clampBurnAxis(cg.x + halfGx, sx);
+    const z1 = clampBurnAxis(cg.z + halfGz, sy);
+    const w = Math.max(1e-3, x1 - x0);
+    const d = Math.max(1e-3, z1 - z0);
+    out.push({ x: x0, z: z0, w, d });
+  }
+  return out;
+}
+
+/**
+ * Fire risk discs for tactical sim / map2d: matches 3D {@link WILDFIRE_BURN_ZONES}
+ * projected onto square grid `G×G`, same mapping as {@link wildfireBurnAvoidanceRects}.
+ *
+ * `center` and `radius` are **fractional** grid units (consistent with legacy `drawRiskZones`).
+ * @returns {{ id: string, center: [number, number], radius: number, type: string, risk: number, meadowLabel?: string }[]}
+ */
+export function meadowFireRiskZonesForGrid(gridDim) {
+  const G = Math.max(2, gridDim | 0);
+  const span = Math.max(1, G - 1);
+  const zs = WILDFIRE_BURN_ZONES;
+  /** @type {{ id: string, center: [number, number], radius: number, type: string, risk: number, meadowLabel?: string }[]} */
+  const out = [];
+  for (let i = 0; i < zs.length; i++) {
+    const z = zs[i];
+    const rEff = Math.max(0.4, z.radiusMeters + WILDFIRE_BURN_NAV_CLEARANCE_METERS);
+    const cx = (z.ox / MEADOW_SIDE_METERS + 0.5) * span;
+    const cy = (z.oz / MEADOW_SIDE_METERS + 0.5) * span;
+    const radius = (rEff / MEADOW_SIDE_METERS) * span;
+    const inten = typeof z.intensity === "number" ? z.intensity : 1;
+    const risk = Math.min(0.95, Math.max(0.12, 0.14 + Math.min(inten, 1.35) * 0.62));
+    out.push({
+      id: `WF-${i + 1}-${z.label ?? "burn"}`,
+      center: [cx, cy],
+      radius,
+      type: "fire",
+      risk,
+      meadowLabel: typeof z.label === "string" ? z.label : undefined,
+    });
+  }
+  return out;
+}
+
+/** Average metre span of one tactical grid step (meadow slab maps `cols×rows` → `MEADOW_SIDE_METERS²`). */
+export function meadowAverageMetresPerCell(cols, rows) {
+  const c = Math.max(2, Math.floor(cols) || 2);
+  const r = Math.max(2, Math.floor(rows) || 2);
+  const sx = c - 1;
+  const sy = r - 1;
+  return (MEADOW_SIDE_METERS / sx + MEADOW_SIDE_METERS / sy) * 0.5;
+}
+
+/**
+ * Tactical cell indices (`ix`,`iy`) with urban-style centre semantics → meadow world XZ in metres,
+ * inverse of burn-rect projection in {@link wildfireBurnAvoidanceRects}.
+ */
+export function meadowGridCellCenterToWorldMeters(ixc, iyc, cols, rows) {
+  const c = Math.max(2, Math.floor(cols) || 2);
+  const r = Math.max(2, Math.floor(rows) || 2);
+  const sx = c - 1;
+  const sy = r - 1;
+  return {
+    x: MEADOW_SIDE_METERS * (((ixc + 0.5) / sx) - 0.5),
+    z: MEADOW_SIDE_METERS * (((iyc + 0.5) / sy) - 0.5),
+  };
+}
+
+/** @returns {(ixc: number, iyc: number) => { x: number; z: number }}} */
+export function makeMeadowGridToWorldXZ(cols, rows) {
+  return (ixc, iyc) => meadowGridCellCenterToWorldMeters(ixc, iyc, cols, rows);
+}
 
 function applyForestLodCaps(o) {
   const ch = o.branch.children;

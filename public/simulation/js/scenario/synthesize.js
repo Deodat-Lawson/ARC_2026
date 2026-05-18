@@ -5,6 +5,7 @@ import {
   VICTIM_DMG_RANGE,
   roundScore,
 } from "../config/constants.js";
+import { meadowFireRiskZonesForGrid } from "../render/world3d/wildfire-meadow-scene.js";
 
 function mulberry32(seed) {
   let a = seed | 0;
@@ -134,11 +135,24 @@ export function synthesizeScenario(base, cfg, geo = {}) {
 
   const riskZones = [];
   const radiusBase = 3 + Math.round(cfg.intensity * 2.5);
-  for (let i = 0; i < cfg.fires; i += 1) {
-    const c = pickCell(5);
-    const radius = radiusBase + Math.floor(rng() * 2);
-    riskZones.push({ id: `Z${riskZones.length + 1}`, center: c, radius, type: "fire", risk: 0.4 + cfg.intensity * 0.5 });
-    mark(c[0], c[1], radius);
+  /** @type {{ preset?: string } & Record<string, unknown>} */
+  const cfgPreset = cfg;
+  if (cfgPreset.preset === "wildfire") {
+    const wfZones = meadowFireRiskZonesForGrid(G);
+    for (let zi = 0; zi < wfZones.length; zi++) {
+      const z = wfZones[zi];
+      riskZones.push(z);
+      const [cx, cy] = z.center;
+      const rr = Math.max(1, Math.ceil(Number(z.radius) || 1));
+      mark(Math.round(cx), Math.round(cy), rr);
+    }
+  } else {
+    for (let i = 0; i < cfg.fires; i += 1) {
+      const c = pickCell(5);
+      const radius = radiusBase + Math.floor(rng() * 2);
+      riskZones.push({ id: `Z${riskZones.length + 1}`, center: c, radius, type: "fire", risk: 0.4 + cfg.intensity * 0.5 });
+      mark(c[0], c[1], radius);
+    }
   }
   for (let i = 0; i < cfg.collapses; i += 1) {
     const c = pickCell(5);
