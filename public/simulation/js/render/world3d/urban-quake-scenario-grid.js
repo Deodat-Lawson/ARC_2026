@@ -188,10 +188,67 @@ export function buildingRenderFootprint(x, y, w, d /* , height */) {
   return [x, y, w, d];
 }
 
-/** Returns the fixed building layout. Scenarios can override via `map.buildings`,
- *  but with no procedural infill — what you define is what renders, every time. */
+/** Returns the hand-placed layout plus a procedural infill pass that drops
+ *  1x1 fillers in empty cells (avoiding roads, base, agents, victims, blockades,
+ *  risk zones, and water/grass terrain). Deterministic via hash01 so the
+ *  avoidance rects and the rendered geometry agree. */
 export function scenarioBuildingEntries(scenario) {
-  return get3DBuildings(scenario).map((b) => ({ ...b, synthetic: false }));
+  const defaults = get3DBuildings(scenario).map((b) => ({ ...b, synthetic: false }));
+  const infill = proceduralBuildingInfill(scenario, defaults);
+  return [...defaults, ...infill];
+}
+
+export function proceduralBuildingInfill(scenario, existingBuildings) {
+  const [cols, rows] = scenario.map.size || [30, 30];
+  const occupied = new Set();
+  const mark = (x, y) => occupied.add(`${x},${y}`);
+
+  for (const b of existingBuildings) {
+    const [x, y, w, d] = b.footprint;
+    for (let ix = x; ix < x + w; ix += 1) {
+      for (let iy = y; iy < y + d; iy += 1) mark(ix, iy);
+    }
+  }
+  for (const cell of computeRoadCells(scenario)) occupied.add(cell);
+  if (scenario.map.base) {
+    const [bx, by] = scenario.map.base;
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) mark(bx + dx, by + dy);
+    }
+  }
+  for (const a of scenario.agents || []) mark(a.location[0], a.location[1]);
+  for (const v of scenario.victims || []) mark(v.location[0], v.location[1]);
+  for (const bk of scenario.map.blocked_cells || []) mark(bk.location[0], bk.location[1]);
+  for (const rz of scenario.map.risk_zones || []) {
+    const [zx, zy] = rz.center;
+    const r = Math.max(1, Math.ceil(rz.radius || 1));
+    for (let dx = -r; dx <= r; dx += 1) {
+      for (let dy = -r; dy <= r; dy += 1) {
+        if (dx * dx + dy * dy <= r * r) mark(zx + dx, zy + dy);
+      }
+    }
+  }
+  for (const t of get3DTerrain(scenario)) {
+    if (t.kind !== "water" && t.kind !== "grass") continue;
+    const [x, y, w, h] = t.footprint;
+    for (let ix = x; ix < x + w; ix += 1) {
+      for (let iy = y; iy < y + h; iy += 1) mark(ix, iy);
+    }
+  }
+
+  const kinds = ["lowrise", "warehouse", "apartment", "civic"];
+  const extras = [];
+  let counter = 1000;
+  for (let y = 1; y < rows - 1; y += 1) {
+    for (let x = 1; x < cols - 1; x += 1) {
+      if (occupied.has(`${x},${y}`)) continue;
+      if (hash01(x, y, 333) < 0.55) continue;
+      const kind = kinds[Math.floor(hash01(x, y, 334) * kinds.length) % kinds.length];
+      extras.push({ id: `BX${counter++}`, footprint: [x, y, 1, 1], kind, synthetic: true });
+      mark(x, y);
+    }
+  }
+  return extras;
 }
 
 export function buildingAvoidanceRects(scenario) {
