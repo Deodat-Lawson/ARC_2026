@@ -129,7 +129,7 @@ export const FLEET_DIALOGUE_COT_BUILTIN = {
       },
       commanderBrief: {
         active: "Gemma 4 fused signal confidence, collapse exposure, and corridor access. ${topId} is the lead objective; ${rescueAgent} should execute the safest ground approach while ${scoutAgent} verifies structural shadows. ${relaySentence}${blockadeSentence}",
-        allClear: "All known urban-quake victims are resolved. Keep drones scanning secondary voids and hold ground teams outside unstable collapse cells.",
+        allClear: "All known urban quake / hurricane victims are resolved. Keep drones scanning secondary voids and hold ground teams outside unstable collapse cells.",
         relay: "Relay coverage is required before close approach. ",
         noRelay: "Relay coverage is adequate for the next move. ",
         blockade: "${blockId} still limits the corridor; clear it only if it blocks the active extraction. ",
@@ -259,7 +259,7 @@ function actionHuman(task) {
 
 function sceneLabelForPreset() {
   const labels = {
-    urban_quake: "urban quake",
+    urban_quake: "urban quake / hurricane",
     wildfire: "wildfire WUI",
     industrial: "industrial collapse",
   };
