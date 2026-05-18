@@ -27,7 +27,7 @@ export function DemoPlayerClient() {
       <aside id="side-panel">
         <div id="thinking-panel">
           <div className="panel-title">🧠 Decision Hub</div>
-          <div id="thinking-text">等待仿真数据…</div>
+          <div id="thinking-text">Awaiting simulation data…</div>
         </div>
         <div id="agent-legend">
           <div className="panel-title">Fleet</div>
@@ -36,25 +36,25 @@ export function DemoPlayerClient() {
               className="legend-dot"
               style={{ background: "#00bfff", boxShadow: "0 0 6px #00bfff" }}
             />
-            <span style={{ color: "#00bfff" }}>UAV — 空中侦察</span>
+            <span style={{ color: "#00bfff" }}>UAV — aerial recon</span>
           </div>
           <div className="legend-row">
             <div
               className="legend-dot"
               style={{ background: "#39ff14", boxShadow: "0 0 6px #39ff14" }}
             />
-            <span style={{ color: "#39ff14" }}>UGV — 地面救援</span>
+            <span style={{ color: "#39ff14" }}>UGV — ground rescue</span>
           </div>
           <div className="legend-row">
             <div
               className="legend-dot"
               style={{ background: "#c8b4ff", boxShadow: "0 0 6px #c8b4ff" }}
             />
-            <span style={{ color: "#c8b4ff" }}>Balloon — 通信中继</span>
+            <span style={{ color: "#c8b4ff" }}>Balloon — comm relay</span>
           </div>
           <div className="legend-row">
             <div className="legend-dot" style={{ background: "#ff6666" }} />
-            <span style={{ color: "#ff6666" }}>幸存者</span>
+            <span style={{ color: "#ff6666" }}>Survivors</span>
           </div>
         </div>
         <div id="event-log" />
@@ -62,11 +62,11 @@ export function DemoPlayerClient() {
 
       <footer id="dashboard">
         <div className="dash-cell">
-          <div className="dash-title">生存概率</div>
+          <div className="dash-title">Survival probability</div>
           <canvas id="chart-canvas" height={90} />
         </div>
         <div className="dash-cell">
-          <div className="dash-title">指挥简报</div>
+          <div className="dash-title">Commander brief</div>
           <div id="briefing-text" />
         </div>
         <div className="dash-cell" id="stats-box">
@@ -92,23 +92,23 @@ export function DemoPlayerClient() {
       </footer>
 
       <nav id="controls">
-        <button id="btn-first" type="button" title="跳至开头">
+        <button id="btn-first" type="button" title="Jump to start">
           |◁
         </button>
-        <button id="btn-back" type="button" title="后退一步">
+        <button id="btn-back" type="button" title="Step back">
           ◁
         </button>
-        <button id="btn-play" type="button" title="播放/暂停">
+        <button id="btn-play" type="button" title="Play / pause">
           ▶
         </button>
-        <button id="btn-fwd" type="button" title="前进一步">
+        <button id="btn-fwd" type="button" title="Step forward">
           ▷
         </button>
-        <button id="btn-last" type="button" title="跳至结尾">
+        <button id="btn-last" type="button" title="Jump to end">
           ▷|
         </button>
         <input id="scrubber" type="range" min={0} defaultValue={0} step={1} />
-        <span id="ctrl-label">速度</span>
+        <span id="ctrl-label">Speed</span>
         <button className="speed-btn" type="button" data-speed="0.5">
           0.5×
         </button>

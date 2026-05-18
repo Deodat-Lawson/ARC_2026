@@ -217,7 +217,7 @@ let lastCotFeedWallMs = 0;
 const cotFeedTranscriptChunks = [];
 
 /* ------------------------------------------------------------------------- */
-/* Live Gemma 4 · LM Studio / LiteRT (via /api/gemma-chat)                   */
+/* Live Gemma 4 · LiteRT only (via /api/gemma-chat)                          */
 /* ------------------------------------------------------------------------- */
 const AI_ENDPOINT = "/api/gemma-chat";
 const LIVE_AI_STORAGE_KEY = "arc_sim_ai_mode";
@@ -262,11 +262,21 @@ function applyLiveAiModeFromUser(enableGemma) {
   syncAiModeSegmentedUi();
   resetLiveAiState();
   if (!liveAiModeEnabled) {
+    aiMetrics.mode = "MOCK";
+    aiMetrics.backend = "template";
+    aiMetrics.latencyMs = 0;
+    aiMetrics.tokens = "n/a";
     setAiStatusBadge(false);
+    syncMissionPhaseLabel();
+    renderAiMetrics();
   } else {
     liveAiConnected = null;
+    aiMetrics.mode = "LITERT";
+    aiMetrics.backend = "litert";
     setAiStatusBadge(null);
-    void probeLmStudio();
+    syncMissionPhaseLabel();
+    renderAiMetrics();
+    void probeLiteRT();
   }
   if (state && plan) {
     renderOnce();
@@ -297,8 +307,73 @@ const liveAiCache = {
 
 let liveAiRequestId = 0;
 let liveAiInFlight = false;
-/** @type {boolean|null} null = probing, true = LM Studio reachable */
+/** @type {boolean|null} null = probing, true = LiteRT reachable */
 let liveAiConnected = null;
+
+const aiMetrics = {
+  mode: "MOCK",
+  backend: "—",
+  latencyMs: 0,
+  tokens: "n/a",
+  lastAgent: "—",
+  round: 0,
+};
+
+function renderAiMetrics() {
+  const set = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  set("aiMetricMode", `MODE · ${aiMetrics.mode}`);
+  set("aiMetricBackend", `BACKEND · ${aiMetrics.backend}`);
+  set(
+    "aiMetricLatency",
+    liveAiModeEnabled && aiMetrics.mode === "MOCK"
+      ? "LATENCY · 0 ms"
+      : `LATENCY · ${aiMetrics.latencyMs > 0 ? `${aiMetrics.latencyMs} ms` : "—"}`
+  );
+  set("aiMetricTokens", `TOKENS · ${aiMetrics.tokens}`);
+  set("aiMetricAgent", `AGENT · ${aiMetrics.lastAgent}`);
+  set("aiMetricRound", `ROUND · ${aiMetrics.round}`);
+  updateStatusFooter();
+}
+
+function updateStatusFooter() {
+  const uplink = document.getElementById("statusUplink");
+  const plan = document.getElementById("statusPlan");
+  if (!uplink || !plan) return;
+  if (!liveAiModeEnabled) {
+    uplink.textContent = "— (simulated)";
+    plan.textContent = "rule-based";
+    return;
+  }
+  if (liveAiConnected !== true) {
+    uplink.textContent = "pending";
+    plan.textContent = "Gemma-4 · awaiting LiteRT";
+    return;
+  }
+  uplink.textContent =
+    aiMetrics.latencyMs > 0 ? `${aiMetrics.latencyMs} ms` : "—";
+  const hz =
+    aiMetrics.latencyMs > 0
+      ? `${(1000 / aiMetrics.latencyMs).toFixed(2)}Hz`
+      : "—";
+  plan.textContent = `Gemma-4 · ${hz}`;
+}
+
+function syncMissionPhaseLabel() {
+  const phaseEl = document.getElementById("msnPhase");
+  if (!phaseEl) return;
+  if (!liveAiModeEnabled) {
+    phaseEl.textContent = "SIMULATION · RULE-BASED";
+    return;
+  }
+  if (liveAiConnected === true) {
+    phaseEl.textContent = "CLOSED LOOP · GEMMA-4 (LiteRT)";
+    return;
+  }
+  phaseEl.textContent = "CLOSED LOOP · GEMMA-4 (connecting)";
+}
 /** Latest plan to run after the current Gemma round finishes (simulation keeps stepping). */
 let liveAiPendingPlan = null;
 let liveAiRoundStartedAt = 0;
@@ -344,6 +419,18 @@ function setAiStatusBadge(live) {
   if (live === true) label.textContent = "● LIVE Gemma 4";
   else if (live === false) label.textContent = "○ MOCK mode";
   else label.textContent = "… Gemma 4";
+  if (!liveAiModeEnabled) {
+    aiMetrics.mode = "MOCK";
+    aiMetrics.backend = "template";
+  } else if (live === true) {
+    aiMetrics.mode = "LITERT";
+    aiMetrics.backend = "litert";
+  } else if (live === false) {
+    aiMetrics.mode = "LITERT";
+    aiMetrics.backend = "offline";
+  }
+  syncMissionPhaseLabel();
+  renderAiMetrics();
 }
 
 function capturePoV() {
@@ -389,17 +476,40 @@ function pushAgentHistory(agent, role, content) {
 }
 
 async function callGemmaChat(agent, message, { history = [], image_base64, stream = false } = {}) {
+  const t0 = performance.now();
+  aiMetrics.lastAgent = agent;
   const res = await fetch(AI_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ agent, message, history, image_base64, stream }),
   });
+  const latencyHeader = res.headers.get("X-Arc-Latency-Ms");
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    aiMetrics.latencyMs = Math.round(performance.now() - t0);
+    aiMetrics.backend = err.meta?.backend || "litert";
+    renderAiMetrics();
     return { fallback: true, content: "", error: err.error || res.statusText };
   }
-  if (stream) return { fallback: false, stream: res.body };
+  if (stream) {
+    const latency_ms = latencyHeader
+      ? Number(latencyHeader)
+      : Math.round(performance.now() - t0);
+    aiMetrics.latencyMs = latency_ms;
+    aiMetrics.mode = "LITERT";
+    aiMetrics.backend = "litert";
+    aiMetrics.tokens = "n/a (stream)";
+    renderAiMetrics();
+    return { fallback: false, stream: res.body };
+  }
   const data = await res.json();
+  const meta = data.meta || {};
+  aiMetrics.latencyMs = meta.latency_ms ?? Math.round(performance.now() - t0);
+  aiMetrics.backend = meta.backend || "litert";
+  aiMetrics.mode = meta.mode || "LITERT";
+  aiMetrics.tokens =
+    meta.tokens != null && meta.tokens !== "" ? String(meta.tokens) : "n/a (edge)";
+  renderAiMetrics();
   return data;
 }
 
@@ -630,13 +740,15 @@ async function fetchRelayGamma(droneMsg, betaMsg, contextMsg, requestId) {
   return text;
 }
 
-async function probeLmStudio() {
+async function probeLiteRT() {
   setAiStatusBadge(null);
   try {
     const res = await fetch(AI_ENDPOINT, { method: "GET", cache: "no-store" });
     const data = await res.json().catch(() => ({}));
     const ok = res.ok && data.ok === true;
     setAiStatusBadge(ok);
+    if (ok && data.model) aiMetrics.backend = data.backend || "litert";
+    renderAiMetrics();
     return ok;
   } catch {
     setAiStatusBadge(false);
@@ -644,14 +756,20 @@ async function probeLmStudio() {
   }
 }
 
+/** @deprecated use probeLiteRT */
+const probeLmStudio = probeLiteRT;
+
 async function triggerLiveAiRound(plan) {
   if (!liveAiModeEnabled || !state || !plan) return;
   if (liveAiConnected === false) return;
 
   if (liveAiConnected === null) {
-    const up = await probeLmStudio();
+    const up = await probeLiteRT();
     if (!up) return;
   }
+
+  aiMetrics.round += 1;
+  renderAiMetrics();
 
   const requestId = ++liveAiRequestId;
   liveAiInFlight = true;
@@ -1304,8 +1422,11 @@ Promise.all([
     init3D(initialScenario);
     reset();
     setupCommandCenter();
-    if (liveAiModeEnabled) void probeLmStudio();
-    else setAiStatusBadge(false);
+    if (liveAiModeEnabled) void probeLiteRT();
+    else {
+      setAiStatusBadge(false);
+      renderAiMetrics();
+    }
   })
   .catch((err) => {
     console.error(`[simulation] Failed to load /simulation/data/scenarios/${scenarioFile}:`, err);
@@ -4732,8 +4853,7 @@ function updateMissionLabels(cfg) {
   const preset = PRESET_DEFAULTS[cfg.preset] || PRESET_DEFAULTS.urban_quake;
   const idEl = $("msnId");
   if (idEl) idEl.textContent = `${cfg.missionId} · ${preset.label.split("· ")[1] || "MISSION"}`;
-  const phaseEl = $("msnPhase");
-  if (phaseEl) phaseEl.textContent = preset.phase;
+  syncMissionPhaseLabel();
   const gridBadge = $("gridBadge");
   if (gridBadge) gridBadge.textContent = `${cfg.grid} × ${cfg.grid}`;
 }

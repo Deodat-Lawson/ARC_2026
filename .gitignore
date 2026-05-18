@@ -94,6 +94,7 @@ public/hdri/_raw/
 .agent/
 *.md
 !whitepaper.md
+!Writeup.md
 *.txt
 
 # Archives and private/internal notes

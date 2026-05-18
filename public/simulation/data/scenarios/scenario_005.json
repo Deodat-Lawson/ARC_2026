@@ -1,6 +1,6 @@
 {
   "scenario_id": "mountain_landslide_001",
-  "description": "山体滑坡，山区村落被埋，地形复杂，地面通行困难",
+  "description": "Landslide, mountain villages buried, complex terrain, poor ground access.",
   "map": {
     "size": [
       30,

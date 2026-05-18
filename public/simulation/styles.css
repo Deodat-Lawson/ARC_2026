@@ -239,6 +239,27 @@ a { color: inherit; text-decoration: none; }
   animation: pulse-dot 1.2s ease-in-out infinite;
 }
 
+.ai-metrics-panel {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-left: 8px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(93, 255, 180, 0.2);
+  background: rgba(4, 12, 10, 0.85);
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  color: rgba(160, 220, 200, 0.9);
+  max-width: min(520px, 42vw);
+}
+
+.ai-metric {
+  white-space: nowrap;
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
