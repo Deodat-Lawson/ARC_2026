@@ -1,6 +1,6 @@
 {
   "scenario_id": "wildfire_001",
-  "description": "山火蔓延，林区人员被困，能见度低，通信受干扰",
+  "description": "Wildfire spread, forest personnel trapped, low visibility, comm interference.",
   "map": {
     "size": [
       30,
