@@ -11,6 +11,7 @@
     "compress:gltf": "gltf-transform draco public/models/_raw/environment.glb public/models/environment.glb && gltf-transform uastc public/models/environment.glb public/models/environment.glb"
   },
   "dependencies": {
+    "@dgreenheck/ez-tree": "^1.1.0",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
     "@react-three/postprocessing": "^3.0.0",

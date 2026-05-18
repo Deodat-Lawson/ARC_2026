@@ -139,6 +139,8 @@ export const PRESET_VISUAL = {
       ],
       toneExposure: 1.22,
       rendererClear: 0x020308,
+      /** IBL strength — lower reads closer to urban FPV (directional + fill). */
+      environmentIntensity: 0.58,
     },
   },
 };

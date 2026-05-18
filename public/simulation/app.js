@@ -21,7 +21,7 @@ import {
   rebuildTacticalRoadNetwork,
   rebuildTacticalBuildingFootprints,
 } from "./js/geo/tactical-basemap.js";
-import { drawMap2D } from "./js/render/map2d.js";
+import { drawMap2D } from "./js/render/map2d/index.js";
 import { generatePlan } from "./js/sim/plan.js";
 import { executeActions, moveAgentToward } from "./js/sim/actions.js";
 import { updateVictims, updateBlockades } from "./js/sim/tick.js";
@@ -34,7 +34,7 @@ import {
   teardown3D,
   buildingAvoidanceRects,
   bindWorld3dUi,
-} from "./js/render/world3d.js";
+} from "./js/render/world3d/index.js";
 import {
   applyFleetDialogueCotDom,
   liveAiModeEnabled,
@@ -258,6 +258,7 @@ function clone(value) {
 function renderOnce() {
   syncBridge();
   renderPanels(plan);
+  const basemapFor2d = tacticalBaseMapReady && currentScenePreset !== "industrial";
   drawMap2D({
     ctx,
     canvas,
@@ -265,7 +266,7 @@ function renderOnce() {
     state,
     trails,
     lastTickAt,
-    tacticalBaseMapReady,
+    tacticalBaseMapReady: basemapFor2d,
     scenePreset: currentScenePreset,
     msPerTick: MS_PER_TICK,
   });
@@ -366,6 +367,7 @@ function startRafLoop() {
   if (rafId !== null) return;
   const tick = (now) => {
     const t = (now - T0) / 1000;
+    const basemapFor2d = tacticalBaseMapReady && currentScenePreset !== "industrial";
     drawMap2D({
       ctx,
       canvas,
@@ -373,7 +375,7 @@ function startRafLoop() {
       state,
       trails,
       lastTickAt,
-      tacticalBaseMapReady,
+      tacticalBaseMapReady: basemapFor2d,
       scenePreset: currentScenePreset,
       msPerTick: MS_PER_TICK,
     });

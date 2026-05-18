@@ -9,12 +9,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="/simulation/styles.css?v=pov-focus">
+    <link rel="stylesheet" href="/simulation/styles.css?v=industrial-map-isolate">
     <script type="importmap">
       {
         "imports": {
           "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/",
+          "@dgreenheck/ez-tree": "/simulation/vendor/ez-tree.es.js"
         }
       }
     </script>
@@ -545,6 +546,6 @@
 
     <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
     <script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
-    <script type="module" src="/simulation/app.js"></script>
+    <script type="module" src="/simulation/app.js?v=industrial-preview-only-calib"></script>
   </body>
 </html>

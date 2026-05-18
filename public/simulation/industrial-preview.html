@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Industrial GLB · standalone preview</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #020308;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .hint {
+        position: fixed;
+        left: 10px;
+        bottom: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        font: 12px/1.4 system-ui, sans-serif;
+        color: #2a3140;
+        background: rgba(255, 255, 255, 0.82);
+        pointer-events: none;
+        max-width: min(460px, 92vw);
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/",
+          "@dgreenheck/ez-tree": "./vendor/ez-tree.es.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <canvas id="industrialCanvas" aria-label="Industrial GLB preview"></canvas>
+    <div class="hint">
+      独立预览 · 拖拽旋转 · 滚轮缩放 · 右键平移 · 与任务推演无关。<br />
+      <strong>高度标定</strong>：悬停读取 Y；<kbd>Shift</kbd>+点击复制。HUD 显示相对水泥地的 ΔY。<br />
+      <strong>水泥地</strong>：<code>industrial.js</code> → <code>INDUSTRIAL_CEMENT_GROUND_WORLD_Y</code>
+      （程序化骨料纹理，色值基准约 <code>#79746D</code>，与标定面对齐）。<br />
+      Next：<code>http://localhost:3000/simulation/industrial-preview.html</code><br />
+      任意静态服务器：打开本页即可（GLB 路径相对本脚本解析，Live Server 仓库根或
+      <code>public/simulation</code> 均可）。
+    </div>
+    <script type="module" src="./js/industrial-preview.js"></script>
+  </body>
+</html>

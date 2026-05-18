@@ -83,6 +83,8 @@ media_*.webp
 click_feedback_*.png
 
 # Asset working files (raw uncompressed sources stay local)
+# Exceeds GitHub single-file limit (~100MB); keep locally for dev only
+public/simulation/data/colliders/Forest Wildfire Scenario_texture_mesh.glb
 public/models/_raw/
 public/hdri/_raw/
 *.blend

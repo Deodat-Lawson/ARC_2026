@@ -1044,11 +1044,28 @@ input[type="range"]::-moz-range-thumb {
     #0a1018;
 }
 
+/* Industrial uses GLB orthographic plan on canvas — Firenze vector basemap is urban_quake-only. */
+.cc.sim-preset-industrial .canvas-frame #tacticalBasemap {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .canvas-frame #tacticalBasemap .maplibregl-canvas {
   filter: invert(1) hue-rotate(178deg) saturate(0.85) contrast(1.14) brightness(0.88);
 }
 
 .canvas-frame #tacticalBasemap .maplibregl-control-container {
+  display: none;
+}
+
+/* Industrial: no CRT scanlines (urban_quake chrome). */
+.cc.sim-preset-industrial .canvas-scanlines {
+  display: none;
+}
+
+.cc.sim-preset-industrial #geoGridBadge {
   display: none;
 }
 
@@ -1868,6 +1885,52 @@ pre::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99
   border: 1px solid var(--line);
   overflow: hidden;
   border-radius: var(--radius-sm);
+}
+
+.map-pov-col.wildfire-splat-active .pov-canvas,
+.map-pov-col.industrial-glb-active .pov-canvas {
+  position: relative;
+  z-index: 2;
+}
+
+.map-pov-col.wildfire-splat-active .pov-reticle,
+.map-pov-col.wildfire-splat-active .pov-telemetry,
+.map-pov-col.wildfire-splat-active .pov-corner,
+.map-pov-col.industrial-glb-active .pov-reticle,
+.map-pov-col.industrial-glb-active .pov-telemetry,
+.map-pov-col.industrial-glb-active .pov-corner {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.map-pov-col.wildfire-splat-active .agent-selector-hint,
+.map-pov-col.industrial-glb-active .agent-selector-hint {
+  display: none;
+}
+
+.map-pov-col.wildfire-splat-active .pov-frame::after,
+.map-pov-col.industrial-glb-active .pov-frame::after {
+  display: none;
+}
+
+.wildfire-pov-note {
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 210, 180, 0.92);
+  border: 1px solid rgba(255, 120, 72, 0.35);
+  border-radius: var(--radius-sm);
+  background: rgba(48, 22, 10, 0.72);
+}
+
+.industrial-pov-note {
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(200, 220, 255, 0.92);
+  border: 1px solid rgba(120, 170, 230, 0.38);
+  border-radius: var(--radius-sm);
+  background: rgba(12, 18, 32, 0.78);
 }
 
 #povCanvas, .pov-canvas {

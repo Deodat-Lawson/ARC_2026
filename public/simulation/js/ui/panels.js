@@ -2,7 +2,7 @@ import { $, PRESET_DEFAULTS, PRESET_VISUAL } from "../config/presets.js";
 import { rankVictims } from "../sim/plan.js";
 import { clamp } from "../sim/math.js";
 import { simBridge } from "../sim/bridge.js";
-import { povs, ui3d } from "../render/world3d.js";
+import { povs, ui3d } from "../render/world3d/index.js";
 import {
   fleetDialogueCot,
   FLEET_DIALOGUE_COT_BUILTIN,
