@@ -86,7 +86,7 @@ export function MissionSection() {
             <div className="relative flex h-full w-full flex-col font-mono text-[10px] text-arc-fg/80">
               {/* Header */}
               <div className="flex items-center justify-between border-b border-white/5 px-4 py-2 uppercase tracking-[0.2em]">
-                <span className="text-arc-muted">arc · mission brief</span>
+                <span className="text-arc-muted">arc · ref. city brief</span>
                 <span className="flex items-center gap-2 text-arc-accent">
                   <span
                     aria-hidden
@@ -109,14 +109,14 @@ export function MissionSection() {
                   </div>
                 </div>
 
-                {/* Stats */}
+                {/* Stats — reference city model (Cost / Central-control) */}
                 <div className="grid grid-cols-3 gap-2">
                   <StatCell label="Golden window" value="72" unit="hrs" />
-                  <StatCell label="Response" value="30" unit="sec" />
-                  <StatCell label="Cluster" value="6" unit="nodes" />
-                  <StatCell label="Coverage" value="2.4" unit="km²" />
-                  <StatCell label="Survival Δ" value="+38" unit="%" accent />
-                  <StatCell label="Power share" value="LIVE" unit="" />
+                  <StatCell label="Deploy" value="<3" unit="min" />
+                  <StatCell label="Fleet" value="172" unit="assets" />
+                  <StatCell label="Coverage" value="200" unit="km²" />
+                  <StatCell label="Net lives" value="~1.9k" unit="/event" accent />
+                  <StatCell label="Warehouses" value="4" unit="clusters" />
                 </div>
 
                 {/* Timeline */}
@@ -173,6 +173,21 @@ export function MissionSection() {
               </div>
             </div>
           </div>
+          <p className="mt-3 font-mono text-[9px] uppercase leading-relaxed tracking-[0.14em] text-arc-muted">
+            Reference city · 1M pop · M7.0 — aligned with{" "}
+            <a href="/Cost" className="text-arc-accent/80 hover:text-arc-accent">
+              Cost
+            </a>{" "}
+            &{" "}
+            <a href="/Central-control" className="text-arc-accent/80 hover:text-arc-accent">
+              Central Control
+            </a>
+            . Module panels below use a 6-node mission slice (
+            <a href="/simulation" className="text-arc-accent/80 hover:text-arc-accent">
+              live sim
+            </a>
+            ).
+          </p>
         </div>
       </div>
     </section>

@@ -19,9 +19,9 @@ const STEPS = [
   },
   {
     label: "Rescue",
-    title: "Guide rescue teams to the highest-value targets",
+    title: "Provide optimal rescue routes to rescue teams",
     body:
-      "ARC prioritizes high-survival-probability targets, restores temporary communications, and hands coordinates, routes, and risk levels to human rescue teams.",
+      "ARC automatically plans routes to all rescue points, restores temporary communications, and provides rescue teams with coordination, route, and risk level information to optimize rescue effectiveness.",
     meta: "72 h · priority rescue window",
   },
 ] as const;
@@ -78,7 +78,10 @@ export function RescueFlowSection() {
         <div className="mt-5 rounded-md border border-arc-accent/25 bg-arc-accent/5 px-5 py-4 font-mono text-[10px] uppercase tracking-[0.18em] text-arc-muted">
           <span className="text-arc-accent">Result model</span>
           <span className="mx-2 text-white/20">/</span>
-          200 km² full-city scan · 1,500-2,500 rescued in 72h · ~1,900 net additional lives
+          200 km² full-city scan · 1,500-2,500 rescued in 72h · ~1,900 net additional lives ·{" "}
+          <a href="/Cost" className="text-arc-accent/80 hover:text-arc-accent">
+            cost model
+          </a>
         </div>
       </div>
     </section>

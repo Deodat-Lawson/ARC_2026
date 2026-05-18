@@ -27,7 +27,7 @@ export function SystemDemo() {
         body="The instant power and comms drop, low-level seismic and acoustic thresholds wake every node in the cluster. ARC self-checks, lifts off, and starts building a live digital twin of the disaster zone — no operator command required."
         bullets={[
           "Passive wake on sensor-threshold or emergency-frequency signals",
-          "30-second cold-start to airborne and self-organised",
+          "30-second cold-start per wave; full-city deploy under 3 minutes",
           "First panoramic situational map streamed within 90 seconds",
         ]}
         visualization={<M1Awakening />}
@@ -51,7 +51,7 @@ export function SystemDemo() {
         index="03"
         title="Hear a heartbeat through rubble."
         kicker="Module 03 · Multi-sensor perception"
-        body="Thermal, visual, and sub-acoustic sensors fuse into a single survival-probability estimate. ARC weighs weather, internal temperature, and signal strength to predict each victim's survival window — and feeds it straight back into the planner."
+        body="Thermal, visual, olfactory, sub-acoustic sensors and UWB radar waves fuse into a single survival-probability estimate. ARC weighs continuously weather, temperature and humidity, non-natural signal strength and ventilation to predict each victim's survival window — and feeds it straight back into the planner."
         bullets={[
           "Sub-audible vibration detection through structural debris",
           "Survival-probability estimate updated each pass",
@@ -83,6 +83,7 @@ export function SystemDemo() {
           "Self-healing ad-hoc mesh between airborne nodes",
           "Structured Gemma 4 situation reports back to command",
           "Emergency signal broadcast for trapped civilians",
+          "Temporary local area network provides support to lost disaster victims",
         ]}
         visualization={<M5Mesh />}
       />
@@ -130,7 +131,7 @@ function SectionDivider({ label }: { label: string }) {
           {label}
         </span>
         <span className="font-mono text-xs uppercase tracking-[0.32em] text-arc-muted">
-          5 modules · 1 cluster
+          5 modules · 6-node mission slice
         </span>
       </div>
     </div>
