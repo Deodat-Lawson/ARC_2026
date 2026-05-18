@@ -2,7 +2,7 @@ import { rankVictims } from "../sim/plan.js";
 import { currentScenePreset } from "../config/presets.js";
 import { povs } from "../render/world3d/index.js";
 import { simBridge } from "../sim/bridge.js";
-import { emitToast } from "../ui/toast.js";
+import { emitToast, logEvent } from "../ui/toast.js";
 import { PRESET_DEFAULTS, readConfig } from "../config/presets.js";
 import {
   MS_PER_TICK,
@@ -841,6 +841,7 @@ async function triggerLiveAiRound(plan) {
     const slides = buildLiveFleetSlides(orchestrator, drone, beta, gamma, plan);
     applyLiveFleetSlides(plan, slides);
     setAiStatusBadge(true);
+    logEvent("relay_deployed", `Gemma 4 fleet round · T${String(simBridge.state?.timestep ?? 0).padStart(3, "0")}`);
   } catch (err) {
     console.warn("[simulation] Live Gemma round failed:", err);
     setAiStatusBadge(false);

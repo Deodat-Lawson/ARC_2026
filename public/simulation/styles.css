@@ -599,17 +599,19 @@ a.ico.back:hover svg { transform: translateX(-2px); }
 .cc-rail-l::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 
 .cc-rail-r {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  overflow-y: hidden;
 }
 
 .cc-rail-r > .rail-section {
-  flex-shrink: 0;
+  min-height: 0;
+}
+
+.cc-rail-r > .rail-section.rail-ai-command {
+  overflow: hidden;
 }
 
 .cc-rail-r > .rail-section.grow {
@@ -864,8 +866,9 @@ input[type="range"]::-moz-range-thumb {
 .rail-section.rail-ai-command {
   flex: 1 1 auto;
   gap: 8px;
-  min-height: 260px;
+  min-height: 0;
   max-height: none;
+  overflow: hidden;
   border-bottom-color: rgba(93, 255, 180, 0.2);
   background:
     linear-gradient(180deg, rgba(93, 255, 180, 0.035), rgba(93, 255, 180, 0)),
@@ -887,13 +890,18 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .command-stack-brief {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 42%;
+  overflow: hidden;
 }
 
 .command-stack-decision {
   flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .command-stack-title {
@@ -920,7 +928,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .rail-ai-command .brief-body {
-  min-height: 118px;
+  min-height: 0;
   max-height: 172px;
   padding: 0;
   overflow-y: auto;
@@ -935,29 +943,35 @@ input[type="range"]::-moz-range-thumb {
 
 .rail-ai-command .thinking-feed {
   flex: 1;
-  min-height: 110px;
+  min-height: 0;
   max-height: none;
 }
 
 .rail-fleet {
-  flex: 0 0 335px;
-  max-height: 335px;
+  flex: 0 0 auto;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(11, 15, 22, 0.96), rgba(7, 10, 16, 0.98));
 }
 
 .rail-fleet .agent-list {
+  flex: 1;
+  min-height: 0;
   max-height: 273px;
 }
 
 .rail-section.rail-events {
-  flex: 0 0 184px;
-  min-height: 176px;
-  max-height: 192px;
+  min-height: 200px;
+  max-height: 240px;
   padding-top: 10px;
   padding-bottom: 10px;
 }
 
 .rail-events .event-log {
-  max-height: 142px;
+  flex: 1 1 auto;
+  min-height: 140px;
+  max-height: none;
 }
 
 /* Decision Hub (demo_player-style feed + typewriter rows) */
@@ -1424,6 +1438,16 @@ canvas#simCanvas {
 }
 .event-log::-webkit-scrollbar { width: 4px; }
 .event-log::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+
+.event-log-empty {
+  margin: 0;
+  padding: 10px 8px;
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--muted);
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+}
 
 .event-row {
   padding: 5px 9px;
