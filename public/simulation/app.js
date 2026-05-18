@@ -15,6 +15,7 @@ import {
   registerTacticalGridDims,
   syncTacticalBasemapSize,
   applyTacticalBasemapStylePreset,
+  syncTacticalBasemapDomVisibility,
   initTacticalBasemap,
   wireTacticalBasemapResize,
   scaleRoadSegmentsFromExport,
@@ -258,7 +259,10 @@ function clone(value) {
 function renderOnce() {
   syncBridge();
   renderPanels(plan);
-  const basemapFor2d = tacticalBaseMapReady && currentScenePreset !== "industrial";
+  const basemapFor2d =
+    tacticalBaseMapReady &&
+    currentScenePreset !== "industrial" &&
+    currentScenePreset !== "wildfire";
   drawMap2D({
     ctx,
     canvas,
@@ -367,7 +371,10 @@ function startRafLoop() {
   if (rafId !== null) return;
   const tick = (now) => {
     const t = (now - T0) / 1000;
-    const basemapFor2d = tacticalBaseMapReady && currentScenePreset !== "industrial";
+    const basemapFor2d =
+    tacticalBaseMapReady &&
+    currentScenePreset !== "industrial" &&
+    currentScenePreset !== "wildfire";
     drawMap2D({
       ctx,
       canvas,
@@ -429,6 +436,7 @@ Promise.all([
     roadExportBase = roadsData;
     defaultScenario = scenario;
     setCurrentScenePreset(readConfig().preset);
+    syncTacticalBasemapDomVisibility(currentScenePreset);
     initialScenario = synthesizeScenario(scenario, readConfig(), geoSynthesisContext());
     init3D(initialScenario, currentScenePreset, povCols);
     reset();

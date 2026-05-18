@@ -2,10 +2,21 @@
 
 import { pointNearBuilding } from "./collision.js";
 import { nearCell, roundCoord } from "./math.js";
+import { currentScenePreset } from "../config/presets.js";
 
 export function isGroundAgentType(type) {
   const t = String(type || "").toLowerCase();
   return t === "ground_rescue" || t === "ground_clear" || t === "ground_armored" || t === "ugv";
+}
+
+/** In wildfire, air assets also dodge burn footprint rects on the tac grid (see wildfireBurnAvoidanceRects). */
+function avoidsBurnAndBuildingRects(agent) {
+  if (isGroundAgentType(agent.type)) return true;
+  if (currentScenePreset === "wildfire") {
+    const t = String(agent.type || "").toLowerCase();
+    if (t === "drone" || t === "balloon") return true;
+  }
+  return false;
 }
 
 export function avoidBuildingStep(from, proposed, target, speed, state, getBuildingRects) {
@@ -53,7 +64,7 @@ export function moveAgentToward(agent, target, state, getBuildingRects) {
   const speed = agent.speed || 1;
   const scale = Math.min(speed, dist) / dist;
   let next = [roundCoord(x + dx * scale), roundCoord(y + dy * scale)];
-  if (isGroundAgentType(agent.type)) {
+  if (avoidsBurnAndBuildingRects(agent)) {
     next = avoidBuildingStep(agent.location, next, target, speed, state, getBuildingRects);
   }
   agent.location = next;

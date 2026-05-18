@@ -18,10 +18,20 @@ import { drawIndustrialPlanUnderlay } from "./industrial-plan.js";
 /** Mutable draw pass context — cleared after each frame. */
 let E = null;
 
-/** Tactical grid canvas: basemap tint, hazards, agents, trails. */
-export function drawMap2D(env) {
+/** Run draw helpers with temporary global `E` (shared by urban / meadow map). */
+export function invokeWithMap2DEnv(env, fn) {
+  const prev = E;
   E = env;
   try {
+    fn();
+  } finally {
+    E = prev;
+  }
+}
+
+/** Tactical grid canvas: basemap tint, hazards, agents, trails. Urban / industrial only. */
+export function drawMap2D(env) {
+  invokeWithMap2DEnv(env, () => {
     if (!E.state) return;
     const t = E.t;
     const [cols, rows] = E.state.map.size;
@@ -46,9 +56,7 @@ export function drawMap2D(env) {
     drawVictims(cell, t);
     drawBase(cell);
     drawAgents(cell, t);
-  } finally {
-    E = null;
-  }
+  });
 }
 
 function drawGrid(cols, rows, cell) {
@@ -72,10 +80,11 @@ function drawGrid(cols, rows, cell) {
   }
 
   const c2 = (PRESET_VISUAL[E.scenePreset] || PRESET_VISUAL.urban_quake).canvas2d;
-  const fillStyle = E.tacticalBaseMapReady ? c2.overlay : "#04060a";
-  E.ctx.fillStyle = fillStyle;
+  const terrainUnderCanvas = E.tacticalBaseMapReady;
+  const fillBg = terrainUnderCanvas ? c2.overlay : "#04060a";
+  E.ctx.fillStyle = fillBg;
   E.ctx.fillRect(0, 0, E.canvas.width, E.canvas.height);
-  E.ctx.strokeStyle = E.tacticalBaseMapReady ? c2.gridStroke : "rgba(255, 255, 255, 0.04)";
+  E.ctx.strokeStyle = c2.gridStroke || "rgba(255, 255, 255, 0.04)";
   E.ctx.lineWidth = 0.5;
   for (let i = 0; i <= cols; i += 1) {
     E.ctx.beginPath();
@@ -94,7 +103,7 @@ function drawGrid(cols, rows, cell) {
   for (let x = 2; x < cols; x += 6) E.ctx.fillRect(x * cell + cell * 0.28, 0, cell * 0.44, E.canvas.height);
 }
 
-function drawCommunication(cell, t) {
+export function drawCommunication(cell, t) {
   for (const zone of E.state.map.communication_dead_zones) {
     const px = zone.center[0] * cell;
     const py = zone.center[1] * cell;
@@ -309,7 +318,7 @@ function zoneSeedHash(id) {
   return h >>> 0;
 }
 
-function drawRiskZones(cell, t) {
+export function drawRiskZones(cell, t) {
   // Pre-pass: large translucent ash haze for every zone, painted first so other
   // overlays sit on top. Gives the whole quadrant a "dust in the air" wash.
   for (const zone of E.state.map.risk_zones) {
@@ -489,18 +498,19 @@ function drawRiskZones(cell, t) {
       E.ctx.restore();
     }
 
-    // Label
+    // Label — wildfire presets carry `meadowLabel` from 3D burn patch IDs
     E.ctx.fillStyle = isFire ? "rgba(255, 200, 130, 0.95)" : "rgba(220, 200, 175, 0.92)";
-    E.ctx.font = "bold 10px 'JetBrains Mono', 'Courier New', monospace";
-    const label = zone.type.toUpperCase();
+    E.ctx.font = "bold 9px 'JetBrains Mono', 'Courier New', monospace";
+    const tag =
+      typeof zone.meadowLabel === "string" ? zone.meadowLabel.toUpperCase().slice(0, 11) : zone.type.toUpperCase();
     E.ctx.shadowColor = "rgba(0,0,0,0.85)";
     E.ctx.shadowBlur = 4;
-    E.ctx.fillText(label, px - label.length * 3, py + 3);
+    E.ctx.fillText(tag, px - tag.length * 2.65, py + 3);
     E.ctx.shadowBlur = 0;
   }
 }
 
-function drawBlockades(cell) {
+export function drawBlockades(cell) {
   for (const blockade of E.state.map.blocked_cells) {
     const [x, y] = blockade.location;
     if (blockade.status === "cleared") {
@@ -522,7 +532,7 @@ function drawBlockades(cell) {
   }
 }
 
-function drawVictims(cell, t) {
+export function drawVictims(cell, t) {
   for (const victim of E.state.victims) {
     const [x, y] = victim.location;
     const px = (x + 0.5) * cell;
@@ -575,7 +585,7 @@ function drawVictims(cell, t) {
   }
 }
 
-function drawBase(cell) {
+export function drawBase(cell) {
   const [x, y] = E.state.map.base;
   E.ctx.save();
   E.ctx.strokeStyle = "#ffd95d";
@@ -590,7 +600,7 @@ function drawBase(cell) {
   E.ctx.restore();
 }
 
-function drawAgents(cell, t) {
+export function drawAgents(cell, t) {
   const frac = Math.min(1, Math.max(0, (performance.now() - E.lastTickAt) / E.msPerTick));
   for (const agent of E.state.agents) {
     const prev = agent.prevLocation || agent.location;

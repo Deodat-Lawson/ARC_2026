@@ -51,8 +51,9 @@ export const PRESET_VISUAL = {
     },
   },
   wildfire: {
-    geoShort: "WUI · FIRE",
-    geoTitle: "Wildland–urban interface · warm smoke palette · same georeferenced grid (Firenze extract)",
+    geoShort: "WUI · GRID",
+    geoTitle:
+      "Wildland meadow tactical grid · abstract lattice (no city basemap, no civic building footprints)",
     basemap: {
       mask: "#1a0f08",
       earth: "#2a1810",
@@ -65,6 +66,8 @@ export const PRESET_VISUAL = {
       roadLabels: { color: "#f5dcc8", halo: "#1a0c06", opacity: 0.72 },
     },
     canvas2d: {
+      /** Opaque woodland floor when vector basemap is hidden. */
+      solidTerrainFill: "#140804",
       overlay: "rgba(26, 12, 6, 0.2)",
       gridStroke: "rgba(255, 140, 72, 0.08)",
       arterial: "rgba(120, 70, 40, 0.16)",
