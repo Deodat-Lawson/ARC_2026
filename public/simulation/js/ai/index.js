@@ -1,5 +1,5 @@
 import { rankVictims } from "../sim/plan.js";
-import { povs } from "../render/world3d.js";
+import { povs } from "../render/world3d/index.js";
 import { simBridge } from "../sim/bridge.js";
 import { emitToast } from "../ui/toast.js";
 import {

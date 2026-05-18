@@ -1,5 +1,7 @@
 /**
- * One-shot extractor: builds world3d.js, ai.js, ui/command-center.js from app.js
+ * Legacy one-shot extractor: assumed a monolithic app.js with inlined world3d + AI.
+ * Current tree uses modular `js/render/world3d/tactical-pov-shell.js` + `urban-quake.js` and `js/ai/index.js`.
+ *
  * Run: node public/simulation/extract-modules.mjs
  */
 import fs from "fs";
@@ -12,9 +14,19 @@ const appPath = path.join(root, "app.js");
 
 const lines = fs.readFileSync(appPath, "utf8").split(/\r?\n/);
 
+/** Monolithic app.js was ~4k+ lines; short file means extraction slices are invalid. */
+const LEGACY_MONOLITH_MIN_LINES = 3500;
+if (lines.length < LEGACY_MONOLITH_MIN_LINES) {
+  console.warn(
+    `extract-modules.mjs: skipped (${lines.length} lines < ${LEGACY_MONOLITH_MIN_LINES}). ` +
+      "Maintain world3d modules and ai/index.js directly; tactical shell lives in tactical-pov-shell.js.",
+  );
+  process.exit(0);
+}
+
 const joinRange = (a, b) => lines.slice(a, b + 1).join("\n");
 
-/* -------- world3d -------- */
+/* -------- world3d (urban-quake implementation module) -------- */
 const wHeader = `import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
@@ -24,22 +36,18 @@ import {
   activePreset,
   currentScenePreset,
   setCurrentScenePreset,
-} from "../config/presets.js";
-import { pointNearBuilding } from "../sim/collision.js";
-import { lerp } from "../sim/math.js";
-import { simBridge } from "../sim/bridge.js";
-
-/** FP agent strip DOM — filled by app via bindWorld3dUi(). */
-export const ui3d = {
-  agentSelectorHost: null,
-  agentCardEls: null,
-  povSubEl: null,
-  DEFAULT_POV_AGENTS: ["Drone-1"],
-};
-
-export function bindWorld3dUi(partial) {
-  Object.assign(ui3d, partial);
-}
+} from "../../config/presets.js";
+import { pointNearBuilding } from "../../sim/collision.js";
+import { lerp } from "../../sim/math.js";
+import {
+  ui3d,
+  bindWorld3dUi,
+  povs,
+  buildAgentSelector,
+  teardownAgentSelector,
+  currentTargetFor,
+  currentTargetIdFor,
+} from "./tactical-pov-shell.js";
 
 export const world = {
   scene: null,
@@ -57,8 +65,6 @@ export const world = {
   fireGlows: [],
   initialized: false,
 };
-
-export const povs = [];
 
 `;
 
@@ -96,14 +102,14 @@ wBody = wBody.replace(
   "if (ui3d.povSubEl && simBridge.state) {\n    const ag = simBridge.state.agents.find",
 );
 
-fs.mkdirSync(path.join(root, "js", "render"), { recursive: true });
-fs.writeFileSync(path.join(root, "js", "render", "world3d.js"), wHeader + wBody + "\n");
-console.log("wrote world3d.js");
+fs.mkdirSync(path.join(root, "js", "render", "world3d"), { recursive: true });
+fs.writeFileSync(path.join(root, "js", "render", "world3d", "urban-quake.js"), wHeader + wBody + "\n");
+console.log("wrote world3d/urban-quake.js");
 
 /* -------- ai (two chunks) -------- */
 const aiHeader = `import { rankVictims } from "../sim/plan.js";
 import { $ } from "../config/presets.js";
-import { povs } from "../render/world3d.js";
+import { povs } from "../render/world3d/index.js";
 import { simBridge } from "../sim/bridge.js";
 
 `;

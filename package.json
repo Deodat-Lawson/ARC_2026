@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/sync-simulation-vendor.mjs",
+    "prebuild": "node scripts/sync-simulation-vendor.mjs",
+    "postinstall": "node scripts/sync-simulation-vendor.mjs",
     "dev": "next dev --turbo",
     "litert:server": "python scripts/litert_openai_server.py",
     "build": "next build",
@@ -11,6 +14,7 @@
     "compress:gltf": "gltf-transform draco public/models/_raw/environment.glb public/models/environment.glb && gltf-transform uastc public/models/environment.glb public/models/environment.glb"
   },
   "dependencies": {
+    "@dgreenheck/ez-tree": "^1.1.0",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
     "@react-three/postprocessing": "^3.0.0",

@@ -70,6 +70,11 @@ coverage.xml
 *.cover
 *.pywave
 
+# Simulation vendor copies (generated from node_modules by scripts/sync-simulation-vendor.mjs)
+public/simulation/vendor/three/
+public/simulation/vendor/maplibre-gl/
+public/simulation/vendor/.vendor-stamp.json
+
 # Local simulation outputs and scratch assets
 scratch/
 snapshot_*.json
@@ -83,6 +88,8 @@ media_*.webp
 click_feedback_*.png
 
 # Asset working files (raw uncompressed sources stay local)
+# Exceeds GitHub single-file limit (~100MB); keep locally for dev only
+public/simulation/data/colliders/Forest Wildfire Scenario_texture_mesh.glb
 public/models/_raw/
 public/hdri/_raw/
 *.blend
