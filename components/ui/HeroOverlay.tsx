@@ -83,8 +83,14 @@ export function HeroOverlay() {
           Scroll
         </div>
         <div className="hidden text-right text-xs uppercase tracking-[0.2em] text-arc-muted md:block">
-          <div>Cluster status</div>
-          <div className="mt-1 text-arc-accent">Nominal · 6 nodes online</div>
+          <div>Reference deploy</div>
+          <div className="mt-1 text-arc-accent">4 warehouses · 172 assets ready</div>
+          <div className="mt-0.5 text-[10px] normal-case tracking-normal text-arc-muted/80">
+            6-node slice in{" "}
+            <a href="/simulation" className="text-arc-accent/75 hover:text-arc-accent">
+              live sim
+            </a>
+          </div>
         </div>
       </footer>
     </div>

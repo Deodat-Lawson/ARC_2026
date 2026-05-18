@@ -81,7 +81,7 @@ export function M4Energy() {
   return (
     <div className="relative flex h-full w-full flex-col font-mono text-[10px] text-arc-fg/80">
       <div className="flex items-center justify-between border-b border-white/5 px-4 py-2 uppercase tracking-[0.2em]">
-        <span className="text-arc-muted">cluster · power</span>
+        <span className="text-arc-muted">cluster · power · 6-node slice</span>
         <span className="flex items-center gap-4">
           <span>
             AIR <span className="text-arc-accent">{airborne}/4</span>

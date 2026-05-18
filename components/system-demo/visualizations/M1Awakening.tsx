@@ -95,7 +95,7 @@ export function M1Awakening() {
           show={phase === "wake" || phase === "airborne"}
           color="text-arc-fg"
         >
-          ⟳ T+8.4s · cluster self-check passed · 6 nodes nominal
+          ⟳ T+8.4s · 6-node mission slice · self-check passed
         </LogLine>
         <LogLine show={phase === "airborne"} color="text-arc-accent">
           ✓ T+27.0s · airborne · digital twin: building
