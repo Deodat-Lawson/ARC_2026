@@ -1400,6 +1400,9 @@ function addStreetFurniture(scenario) {
     for (const x of vLines) {
       if (x === 0 || x === cols - 1 || y === 0 || y === rows - 1) continue;
       if (baseX != null && Math.abs(x - baseX) <= 1 && Math.abs(y - baseY) <= 1) continue;
+      // Thin out lamps so they don't crowd every intersection — about 65% of
+      // intersections get a lamp post.
+      if (hash01(x, y, 71) < 0.35) continue;
       const damage = cellDamageLevel(x, y, riskZones);
       /** One lamp per intersection (was two diagonals) — halves the per-frame draw count. */
       const lampPick = hash01(x, y, 70);
@@ -1409,8 +1412,10 @@ function addStreetFurniture(scenario) {
       const damageZ = damage > 0.45 ? (hash01(x, y, 51 + ox + oz * 2) - 0.5) * 0.6 : 0;
       const damageX = damage > 0.45 ? (hash01(x, y, 52 + ox + oz * 2) - 0.5) * 0.3 : 0;
       lamps.push({
-        px: x + 0.5 + ox * 0.55,
-        pz: y + 0.5 + oz * 0.55,
+        // Bumped from 0.55 → 0.78 so the lamp sits deeper into the non-road
+        // quadrant, away from where vehicles pass through the intersection.
+        px: x + 0.5 + ox * 0.78,
+        pz: y + 0.5 + oz * 0.78,
         // ox=1 lamps are mirrored along X: rotate 180° around Y so the shared +X-arm layout faces inward.
         yaw: ox === 1 ? Math.PI : 0,
         damageX, damageZ, isLit,
@@ -1499,6 +1504,23 @@ function addStreetFurniture(scenario) {
     }
   };
 
+  // Returns the world-space offset that pushes a tree to the far side of its cell
+  // (away from any adjacent road cell). Avoids fallen canopies landing on roads
+  // where vehicles would visually clip through them. Returns {x,z,adj} where
+  // `adj` is true when at least one neighbour is a road cell.
+  const offsetAwayFromRoads = (tx, tz) => {
+    const cx = Math.floor(tx);
+    const cz = Math.floor(tz);
+    let pushX = 0;
+    let pushZ = 0;
+    let adj = false;
+    if (roadCellSet.has(`${cx - 1},${cz}`)) { pushX += 1; adj = true; }
+    if (roadCellSet.has(`${cx + 1},${cz}`)) { pushX -= 1; adj = true; }
+    if (roadCellSet.has(`${cx},${cz - 1}`)) { pushZ += 1; adj = true; }
+    if (roadCellSet.has(`${cx},${cz + 1}`)) { pushZ -= 1; adj = true; }
+    return { pushX, pushZ, adj };
+  };
+
   const placeTree = (tx, tz, saltBase) => {
     const damage = cellDamageLevel(Math.floor(tx), Math.floor(tz), riskZones);
     // Pick damage state: snapped > fallen > leaning > upright.
@@ -1515,6 +1537,16 @@ function addStreetFurniture(scenario) {
     else if (stateRoll > fallenThresh) state = "fallen";
     else if (stateRoll > leaningThresh) state = "leaning";
     else state = "upright";
+
+    // Road-adjacency cleanup: push base toward the far side of the cell, downgrade
+    // fallen → snapped so the canopy can't extend across the road. Otherwise vehicles
+    // visually clip through fallen trunks at intersections.
+    const { pushX, pushZ, adj: roadAdj } = offsetAwayFromRoads(tx, tz);
+    if (roadAdj) {
+      tx += pushX * 0.3;
+      tz += pushZ * 0.3;
+      if (state === "fallen" || state === "leaning") state = "snapped";
+    }
 
     const presetName = treePresets[Math.floor(hash01(tx, tz, saltBase + 6) * treePresets.length) % treePresets.length];
     const opts = structuredClone(TreePreset[presetName] || TreePreset["Oak Small"]);

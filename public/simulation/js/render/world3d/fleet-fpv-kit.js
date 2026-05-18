@@ -54,6 +54,18 @@ export function tacticalFpvForwardVector(driver, prev, ix, iy, t, targetCell, gr
     return new THREE.Vector3(p1.x - p0.x, 0, p1.z - p0.z);
   }
 
+  const isAerial = driver.type === "drone" || driver.type === "balloon";
+  // Idle fallback: aerial agents slowly sweep for a "scouting" feel; ground vehicles
+  // hold a deterministic per-agent heading so the camera doesn't spin randomly.
+  const idleFwd = (out) => {
+    if (isAerial) {
+      out.set(Math.cos(t * 0.3 + phaseSeed), pitch, Math.sin(t * 0.3 + phaseSeed));
+    } else {
+      const hdg = phaseSeed * 7.13;
+      out.set(Math.cos(hdg), pitch, Math.sin(hdg));
+    }
+  };
+
   const fwd = new THREE.Vector3();
   if (Math.abs(dx) + Math.abs(dy) > 0.001) {
     const h = deltaXZ(dx, dy);
@@ -66,10 +78,10 @@ export function tacticalFpvForwardVector(driver, prev, ix, iy, t, targetCell, gr
       const h = deltaXZ(tx, ty);
       fwd.set(h.x, pitch, h.z);
     } else {
-      fwd.set(Math.cos(t * 0.3 + phaseSeed), pitch, Math.sin(t * 0.3 + phaseSeed));
+      idleFwd(fwd);
     }
   } else {
-    fwd.set(Math.cos(t * 0.3 + phaseSeed), pitch, Math.sin(t * 0.3 + phaseSeed));
+    idleFwd(fwd);
   }
   fwd.normalize();
   return fwd;

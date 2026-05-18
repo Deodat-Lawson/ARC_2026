@@ -42,7 +42,7 @@ export const TREE_DENSITY_TARGET = Math.max(1, Math.round(REFERENCE_TREE_INSTANC
  * EZ-Tree is fully procedural — each mesh costs ms on the main thread. Keep modest for playable load/FPS.
  * Raise toward `TREE_DENSITY_TARGET` only on profiling; use `TREE_DENSITY_TARGET` / `EFFECTIVE_TREE_COUNT` scaling for crown size.
  */
-export const EZ_TREE_INSTANCE_CAP = 900;
+export const EZ_TREE_INSTANCE_CAP = 600;
 
 export const EFFECTIVE_TREE_COUNT = Math.min(TREE_DENSITY_TARGET, EZ_TREE_INSTANCE_CAP);
 /** Exported count used when enumerating meshes to build. */
@@ -281,17 +281,20 @@ export function makeMeadowGridToWorldXZ(cols, rows) {
 }
 
 function applyForestLodCaps(o) {
+  // Heavy LOD: trees in a 200m meadow read as silhouettes more than as individual
+  // branches. Cutting branches/segments/sections halves per-tree geometry + the
+  // per-frame `.update()` cost on the EZ-Tree skin without visibly hurting fidelity.
   const ch = o.branch.children;
   for (const k of Object.keys(ch)) {
     const n = Number(k);
-    const maxN = n === 0 ? 11 : n === 1 ? 6 : 5;
+    const maxN = n === 0 ? 8 : n === 1 ? 4 : 3;
     ch[k] = Math.min(ch[k], maxN);
   }
-  o.leaves.count = Math.min(o.leaves.count ?? 20, 17);
+  o.leaves.count = Math.min(o.leaves.count ?? 20, 12);
   for (let lvl = 0; lvl <= 3; lvl++) {
     const key = String(lvl);
-    if (o.branch.segments[key] != null) o.branch.segments[key] = Math.min(o.branch.segments[key], 5);
-    if (o.branch.sections[key] != null) o.branch.sections[key] = Math.min(o.branch.sections[key], 10);
+    if (o.branch.segments[key] != null) o.branch.segments[key] = Math.min(o.branch.segments[key], 3);
+    if (o.branch.sections[key] != null) o.branch.sections[key] = Math.min(o.branch.sections[key], 6);
   }
 }
 
@@ -1192,7 +1195,7 @@ function attachWildfireBurnZonesFromConfig(meadowRoot) {
     meadowRoot.userData.tickWildfireBurn = () => {};
     return;
   }
-  /** @type {((elapsed:number)=>void)[]} */
+  /** @type {{ tick: (elapsed:number)=>void, hero: boolean }[]} */
   const ticks = [];
   for (let zi = 0; zi < zones.length; zi++) {
     const z = zones[zi];
@@ -1200,21 +1203,30 @@ function attachWildfireBurnZonesFromConfig(meadowRoot) {
     // Small distant spot fires don't deserve a hero-zone particle budget — they
     // dominate the per-frame point cloud cost. Hero zones (≥0.30 intensity)
     // stay full-fidelity.
-    const particleMul = iq >= 0.3 ? 1 : 0.35;
-    ticks.push(
-      attachWildfireBurnInferno(meadowRoot, z.ox, z.oz, z.radiusMeters, {
+    const hero = iq >= 0.3;
+    const particleMul = hero ? 1 : 0.35;
+    ticks.push({
+      tick: attachWildfireBurnInferno(meadowRoot, z.ox, z.oz, z.radiusMeters, {
         intensity: iq,
         zoneIndex: zi,
         particleMul,
       }),
-    );
+      hero,
+    });
   }
 
+  // Non-hero spot fires only get a particle/light update every other frame; the
+  // inferno tick computes its own `dt`, so motion stays correct at half rate.
+  let burnFrame = 0;
   meadowRoot.userData.tickWildfireBurn =
     ticks.length <= 1
-      ? ticks[0] ?? ((_elapsed) => {})
+      ? ticks[0]?.tick ?? ((_elapsed) => {})
       : (elapsed) => {
-          for (let ti = 0; ti < ticks.length; ti++) ticks[ti](elapsed);
+          const tickSpot = (burnFrame++ & 1) === 0;
+          for (let ti = 0; ti < ticks.length; ti++) {
+            const t = ticks[ti];
+            if (t.hero || tickSpot) t.tick(elapsed);
+          }
         };
 }
 

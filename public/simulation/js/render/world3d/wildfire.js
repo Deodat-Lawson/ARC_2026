@@ -214,7 +214,7 @@ function bootstrapWildfirePovs(scenario, povCols, horizonHex) {
         );
         continue;
       }
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.55));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.35));
     }
 
     renderer.setClearColor(horizonHex, 1);
@@ -226,7 +226,10 @@ function bootstrapWildfirePovs(scenario, povCols, horizonHex) {
     const h = Math.max(1, povFrame.clientHeight);
     renderer.setSize(w, h, false);
 
-    const camera = new THREE.PerspectiveCamera(72, w / h, 0.08, 80000);
+    // Meadow is 200m × 200m (≈283m diagonal); a 600m far plane keeps depth
+    // precision tight and lets GPU frustum culling drop distant burn particles
+    // earlier. (Previous 80000m far plane was wildly over-scaled.)
+    const camera = new THREE.PerspectiveCamera(72, w / h, 0.08, 600);
 
     const povSpot = new THREE.SpotLight(0xffe8cc, 1.95, wfPitchScale * 48, Math.PI / 4, 0.38, 1.06);
     povSpot.position.set(0, 0, 0);
