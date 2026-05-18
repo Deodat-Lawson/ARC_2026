@@ -373,44 +373,78 @@ function drawSurvivalChart() {
 
   if (survivalHistory.length >= 1) {
     const n = survivalHistory.length;
-    const xAt = (i) => 28 + (W - 36) * (n === 1 ? 0 : i / (n - 1));
+    const xLeft = 28;
+    const xRight = W - 8;
     const yAt = (pct) => 4 + plotH * (1 - pct);
     const baselineY = trendH - 12;
+    const xAtMulti = (i) => xLeft + (xRight - xLeft) * (i / (n - 1));
 
-    chartCtx.beginPath();
-    chartCtx.moveTo(xAt(0), baselineY);
-    for (let i = 0; i < n; i += 1) chartCtx.lineTo(xAt(i), yAt(survivalHistory[i].alive));
-    chartCtx.lineTo(xAt(n - 1), baselineY);
-    chartCtx.closePath();
-    chartCtx.fillStyle = "rgba(93,255,180,0.18)";
-    chartCtx.fill();
+    if (n === 1) {
+      const yA = yAt(survivalHistory[0].alive);
+      const yR = yAt(survivalHistory[0].rescued);
+      chartCtx.beginPath();
+      chartCtx.moveTo(xLeft, baselineY);
+      chartCtx.lineTo(xLeft, yA);
+      chartCtx.lineTo(xRight, yA);
+      chartCtx.lineTo(xRight, baselineY);
+      chartCtx.closePath();
+      chartCtx.fillStyle = "rgba(93,255,180,0.18)";
+      chartCtx.fill();
 
-    chartCtx.beginPath();
-    for (let i = 0; i < n; i += 1) {
-      const x = xAt(i);
-      const y = yAt(survivalHistory[i].alive);
-      if (i === 0) chartCtx.moveTo(x, y);
-      else chartCtx.lineTo(x, y);
+      chartCtx.beginPath();
+      chartCtx.moveTo(xLeft, yA);
+      chartCtx.lineTo(xRight, yA);
+      chartCtx.strokeStyle = "#5dffb4";
+      chartCtx.lineWidth = 1.5;
+      chartCtx.shadowBlur = 6;
+      chartCtx.shadowColor = "#5dffb4";
+      chartCtx.stroke();
+      chartCtx.shadowBlur = 0;
+
+      chartCtx.beginPath();
+      chartCtx.moveTo(xLeft, yR);
+      chartCtx.lineTo(xRight, yR);
+      chartCtx.strokeStyle = "#82c8ff";
+      chartCtx.lineWidth = 1.2;
+      chartCtx.setLineDash([4, 3]);
+      chartCtx.stroke();
+      chartCtx.setLineDash([]);
+    } else {
+      chartCtx.beginPath();
+      chartCtx.moveTo(xAtMulti(0), baselineY);
+      for (let i = 0; i < n; i += 1) chartCtx.lineTo(xAtMulti(i), yAt(survivalHistory[i].alive));
+      chartCtx.lineTo(xAtMulti(n - 1), baselineY);
+      chartCtx.closePath();
+      chartCtx.fillStyle = "rgba(93,255,180,0.18)";
+      chartCtx.fill();
+
+      chartCtx.beginPath();
+      for (let i = 0; i < n; i += 1) {
+        const x = xAtMulti(i);
+        const y = yAt(survivalHistory[i].alive);
+        if (i === 0) chartCtx.moveTo(x, y);
+        else chartCtx.lineTo(x, y);
+      }
+      chartCtx.strokeStyle = "#5dffb4";
+      chartCtx.lineWidth = 1.5;
+      chartCtx.shadowBlur = 6;
+      chartCtx.shadowColor = "#5dffb4";
+      chartCtx.stroke();
+      chartCtx.shadowBlur = 0;
+
+      chartCtx.beginPath();
+      for (let i = 0; i < n; i += 1) {
+        const x = xAtMulti(i);
+        const y = yAt(survivalHistory[i].rescued);
+        if (i === 0) chartCtx.moveTo(x, y);
+        else chartCtx.lineTo(x, y);
+      }
+      chartCtx.strokeStyle = "#82c8ff";
+      chartCtx.lineWidth = 1.2;
+      chartCtx.setLineDash([4, 3]);
+      chartCtx.stroke();
+      chartCtx.setLineDash([]);
     }
-    chartCtx.strokeStyle = "#5dffb4";
-    chartCtx.lineWidth = 1.5;
-    chartCtx.shadowBlur = 6;
-    chartCtx.shadowColor = "#5dffb4";
-    chartCtx.stroke();
-    chartCtx.shadowBlur = 0;
-
-    chartCtx.beginPath();
-    for (let i = 0; i < n; i += 1) {
-      const x = xAt(i);
-      const y = yAt(survivalHistory[i].rescued);
-      if (i === 0) chartCtx.moveTo(x, y);
-      else chartCtx.lineTo(x, y);
-    }
-    chartCtx.strokeStyle = "#82c8ff";
-    chartCtx.lineWidth = 1.2;
-    chartCtx.setLineDash([4, 3]);
-    chartCtx.stroke();
-    chartCtx.setLineDash([]);
   }
 
   chartCtx.strokeStyle = "rgba(130,200,255,0.14)";

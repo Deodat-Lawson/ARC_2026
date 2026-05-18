@@ -424,6 +424,7 @@ function reset() {
   applyBuildingsToState();
 
   survivalHistory.length = 0;
+  syncBridge();
   recordSurvivalSample();
   plan = generatePlan(state);
 
