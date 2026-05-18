@@ -1,12 +1,13 @@
 """
 GemmaPerceiver — Gemma 4 Multimodal Perception & Reasoning Engine
 
-Supports four inference backends (auto-selected in priority order):
+Supports inference backends (auto-selected in priority order):
   1. LiteRT  — google-ai-edge/LiteRT-LM v0.11.0, Gemma 4 on-device
                model: litert-community/gemma-4-E4B-it-litert-lm
-  2. Ollama  — local server, gemma3:4b (offline, no API key)
-  3. API     — Google AI Studio (Gemma / Gemini, fast, needs key)
-  4. Mock    — deterministic fallback (dev / unit tests)
+  2. API     — Google AI Studio (Gemma 4 cloud, needs GEMMA_API_KEY)
+  3. Mock    — deterministic fallback (dev / unit tests)
+
+Ollama is dev-only; use mode="litert" for hackathon demos.
 
 Function Calling (LiteRT + API):
   LiteRT-LM accepts plain Python functions as tools — annotated callables
@@ -45,10 +46,13 @@ DEFAULT_LITERT_MODEL_PATH = os.environ.get(
 )
 
 ARC_SYSTEM_PROMPT = (
-    "你是 A.R.C.（自主救援集群）系统中的决策 AI，部署在灾区边缘设备上。"
-    "你在无网络环境下独立运行。回答简洁、有决断力，用中文解释推理过程。"
-    "决策时考虑：幸存者生存概率 > 集群电量 > 通信中继 > 路径效率。"
+    "You are the decision AI for A.R.C. (Autonomous Rescue Cluster), deployed on edge devices "
+    "in disaster zones. You operate offline when required. Be concise and decisive; explain "
+    "reasoning in English. Prioritize: survivor survival probability > fleet battery > "
+    "communication relay > path efficiency."
 )
+
+DEFAULT_GEMMA_API_MODEL = os.environ.get("GEMMA_API_MODEL", "gemma-4-26b-a4b-it")
 
 
 # ============================================================================
@@ -157,8 +161,8 @@ class GemmaPerceiver:
     """
     Per-agent Gemma 4 reasoning engine.
 
-    Auto-selects backend: LiteRT → Ollama → API → Mock.
-    Override with mode= parameter.
+    Auto-selects backend: LiteRT → API → Mock.
+    Override with mode= parameter (use mode="litert" for submission demos).
     """
 
     def __init__(
@@ -167,7 +171,7 @@ class GemmaPerceiver:
         mode: str = "auto",
         agent_id: str = "unknown",
         gemma_model: str = "E2B",
-        ollama_model: str = "gemma3:4b",
+        ollama_model: str = "gemma4:4b",
         litert_model_path: str = DEFAULT_LITERT_MODEL_PATH,
     ):
         self.agent_id = agent_id
@@ -194,7 +198,7 @@ class GemmaPerceiver:
             if self._try_init_litert():
                 return
 
-        if mode in ("auto", "ollama"):
+        if mode == "ollama":
             if self._try_init_ollama(ollama_model):
                 return
 
@@ -249,7 +253,7 @@ class GemmaPerceiver:
             os.makedirs(local_dir, exist_ok=True)
             logger.info(
                 f"[{self.agent_id}] Downloading litert-community/gemma-4-E4B-it-litert-lm "
-                f"→ {local_dir} (约 4GB，请稍候…)"
+                f"→ {local_dir} (~4GB, please wait…)"
             )
             hf_hub_download(
                 repo_id="litert-community/gemma-4-E4B-it-litert-lm",
@@ -293,7 +297,7 @@ class GemmaPerceiver:
             import google.generativeai as genai
             genai.configure(api_key=api_key)
             self._genai_model = genai.GenerativeModel(
-                model_name="gemma-3-27b-it",
+                model_name=DEFAULT_GEMMA_API_MODEL,
                 system_instruction=ARC_SYSTEM_PROMPT,
             )
             self._mode = "api"
@@ -332,23 +336,23 @@ class GemmaPerceiver:
         env = sensor_data_dict.get("environment") or {}
         vitals = sensor_data_dict.get("vital_signals", [])
         prompt = (
-            f"Agent {sensor_data_dict.get('agent_id', '?')} 传感器数据:\n"
-            f"位置: {sensor_data_dict.get('position', {})}\n"
-            f"环境: 温度 {env.get('temperature_c', '?')}°C, "
-            f"湿度 {env.get('humidity_pct', '?')}%\n"
-            f"生命信号数: {len(vitals)}\n"
-            f"请判断危险程度和下一步行动。"
+            f"Agent {sensor_data_dict.get('agent_id', '?')} sensor data:\n"
+            f"Position: {sensor_data_dict.get('position', {})}\n"
+            f"Environment: temp {env.get('temperature_c', '?')}°C, "
+            f"humidity {env.get('humidity_pct', '?')}%\n"
+            f"Vital signals: {len(vitals)}\n"
+            f"Assess hazard level and recommend next action."
         )
         return self.reason(prompt)
 
     def score_survivor(self, ctx: dict) -> PerceptionResult:
-        """Function Calling: 计算单个幸存者生存概率。"""
+        """Function Calling: score a single survivor."""
         prompt = (
-            f"请使用 calculate_survival_score 工具评估此幸存者:\n"
-            f"被困 {ctx.get('trapped_hours', 0)} 小时，"
-            f"生命信号强度 {ctx.get('vital_signal_strength', 0.5)}，"
-            f"温度 {ctx.get('temperature_celsius', 22)}°C，"
-            f"空间封闭程度: {ctx.get('space_confinement', 'partial')}。"
+            f"Use calculate_survival_score for this survivor:\n"
+            f"Trapped {ctx.get('trapped_hours', 0)} hours, "
+            f"vital signal {ctx.get('vital_signal_strength', 0.5)}, "
+            f"temperature {ctx.get('temperature_celsius', 22)}°C, "
+            f"confinement: {ctx.get('space_confinement', 'partial')}."
         )
         result = self.reason(prompt, use_tools=True)
         if result.survival_score is None:
@@ -359,21 +363,21 @@ class GemmaPerceiver:
         return result
 
     def dispatch_tasks(self, hub_id: str, agents: list, survivors: list) -> PerceptionResult:
-        """Function Calling: 让 Gemma 4 分配救援任务。"""
+        """Function Calling: assign rescue tasks via Gemma 4."""
         agents_str = ", ".join(
-            f"{a.get('id')}({a.get('type')},{int(a.get('battery',0)*100)}%电)"
+            f"{a.get('id')}({a.get('type')},{int(a.get('battery',0)*100)}% batt)"
             for a in agents
         )
         survivors_str = ", ".join(
-            f"{s.get('survivor_id')}(伤势{int(s.get('injury_severity',0)*100)}%)"
+            f"{s.get('survivor_id')}(injury {int(s.get('injury_severity',0)*100)}%)"
             for s in survivors
         )
         prompt = (
-            f"决策枢纽 {hub_id} 任务分配:\n"
-            f"可用无人器: {agents_str}\n"
-            f"待救幸存者: {survivors_str}\n"
-            f"请使用 dispatch_rescue_task 为每台无人器分配最优任务，"
-            f"确保危急幸存者优先响应，通信中继不中断。"
+            f"Decision hub {hub_id} task allocation:\n"
+            f"Available agents: {agents_str}\n"
+            f"Survivors: {survivors_str}\n"
+            f"Use dispatch_rescue_task for each agent. Prioritize critical survivors; "
+            f"keep communication relays online."
         )
         return self.reason(prompt, use_tools=True)
 
@@ -463,9 +467,9 @@ class GemmaPerceiver:
     def _mock_reason(self, context: str) -> PerceptionResult:
         """Deterministic mock — dev / offline testing."""
         text = (
-            f"[MOCK Gemma4/{self.gemma_model}] 分析: {context[:60]}…\n"
-            f"建议: 无人机优先侦察最近信号源，无人车待命，气球维持中继。"
-            f"预计生存窗口剩余 {max(1, 72 - self._call_count)} 小时。"
+            f"[MOCK Gemma4/{self.gemma_model}] Analysis: {context[:60]}…\n"
+            f"Recommend: UAV recon nearest signal, UGV on standby, balloons maintain relay. "
+            f"Estimated survival window {max(1, 72 - self._call_count)} hours."
         )
         return PerceptionResult(
             raw_text=text,

@@ -1,148 +1,228 @@
 # A.R.C. — Autonomous Rescue Cluster
 
-Post-disaster heterogeneous rescue fleet: **UGV + UAV + aerostat** coordinated by **Decision Hubs** (“octopus brain”) with **Gemma 4** reasoning — edge (**LiteRT**), local (**Ollama**), or cloud (**Google AI Studio**).
+**Gemma 4 on LiteRT · offline disaster response**
 
-Built for **Gemma 4 Good Hackathon** (impact: disaster resilience; tech: LiteRT on-device).
+Post-disaster heterogeneous rescue fleet (**UAV + UGV + aerostat**) coordinated by **Decision Hubs** with **Gemma 4** reasoning at the edge (**LiteRT E4B**) and optional cloud planning. Built for the **Gemma 4 Good Hackathon** (Impact: Global Resilience · Technology: LiteRT).
 
-The repository combines the **`Complete-Workflow-v1.0`** Python core (`arc_core`) with the **root Next.js 15 app** (marketing hero / Three.js, **`/lite`** 2D sim, and **`/demo-player`** MapLibre timeline playback), the **`ARC_2026-arc-lite-2d-demo`** subtree (scenario JSON, optional **`lite_sim`**, **`demo_player/`** static player copy, asset scripts), and a legacy **`demo_player/`** at repo root for static HTTP playback.
+| Live demo | Precomputed playback |
+|-----------|----------------------|
+| [Mission Command](/simulation) — real Gemma 4 inference | [/demo-player](/demo-player) — timeline JSON replay |
+| Requires local LiteRT weights + bridge | Works without GPU / model file |
 
-## Repository layout
+---
 
-| Path | Purpose |
-|------|---------|
-| `arc_core/` | Python package: agents, perception (Gemma), scheduler, communication, simulation pipelines, CLI runners, tests |
-| `app/`, `components/` (root) | Next.js 15: marketing (R3F hero) + **`/lite`** (`lib/lite-sim/`) + **`/demo-player`** (`lib/demo-player/`, MapLibre + PMTiles) |
-| `public/lite/` | **`scenario_canvas_lite.json`** for `/lite` |
-| `public/demo-player/` | **`timeline.json`** for `/demo-player` |
-| `arc_core/simulation/data/` | Canonical **`scenario_001.json`**, **`scenario_*.json`**, **`scenario_large.json`**, demo outputs (`earthquake_demo.json`, etc.) for Python / `timeline_generator` |
-| `ARC_2026-arc-lite-2d-demo/` | **`lite_sim/`**, archived **`demo_player/`**, **`scripts/`**, optional **`public/`** staging |
-| `demo_player/` (root) | Optional static playback: serve repo root over HTTP with `timeline.json` beside this folder |
-| `requirements.txt` | Python dependencies |
-| `pytest.ini` | Test discovery under `arc_core/tests` |
-
-Runnable Python code lives under **`arc_core`**. Scenario and timeline defaults are defined in `arc_core/paths.py`.
-
-## Requirements
-
-- **Python** 3.10+ (3.13 tested)
-- **Node.js** + **pnpm** (root Next.js app only)
-
-### Optional: Gemma on device (LiteRT)
-
-- Install `litert-lm` (see `requirements.txt`).
-- Download **`gemma-4-E4B-it.litertlm`** from Hugging Face: [`litert-community/gemma-4-E4B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm)
-- Set environment variable `LITERT_MODEL_PATH` to the `.litertlm` file path, or place it at **`models/gemma-4-E4B-it.litertlm`** under the repository root (default if the env var is unset).
-
-### Optional: faster cloud inference
-
-- Set `GEMMA_API_KEY` or `GOOGLE_API_KEY` (Google AI Studio) for API mode.
-
-### Optional: Ollama (local, no key)
-
-- Run `ollama pull gemma3:4b` and keep the Ollama daemon running; `GemmaPerceiver` can fall back to it when LiteRT/API are unavailable.
-
-## Install (Python)
+## Judge Quick Start (LiteRT only)
 
 ```bash
-cd /path/to/ARC_2026
+# 1) Download Gemma 4 E4B LiteRT weights → models/gemma-4-E4B-it.litertlm
+#    https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm
+
 pip install -r requirements.txt
+pnpm install
+
+# Terminal A — LiteRT OpenAI bridge (default :8787)
+python scripts/litert_openai_server.py
+# or: pnpm litert:server
+
+# Terminal B — copy env and start Next.js
+cp .env.example .env.local
+# Edit .env.local — keep only:
+#   LITERT_OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+
+pnpm dev
 ```
 
-## Run — Python demos
+Open **http://localhost:3000/simulation?ai=gemma**
 
-From the **repository root** (`ARC_2026/`):
+1. Click **GEMMA4** (not MOCK).  
+2. Wait for header **● LIVE Gemma 4**.  
+3. Confirm the **metrics panel** (MODE · BACKEND · LATENCY · …).  
+4. Press **RUN**.
+
+**Health check**
 
 ```bash
-# End-to-end skeleton demo (mock scenario → hubs → tasks → snapshot JSON)
+curl http://localhost:3000/api/gemma-chat
+# → {"ok":true,"backend":"litert","model":"gemma-4-E4B-it-litertlm",...}
+```
+
+---
+
+## What this repo contains
+
+```
+arc_core/          Python package — agents, GemmaPerceiver, simulation, tests
+app/               Next.js 15 App Router
+public/simulation/ Mission Command (static UI + /api/gemma-chat)
+scripts/           litert_openai_server.py — OpenAI-compatible LiteRT bridge
+models/            Place gemma-4-E4B-it.litertlm here (not in git)
+Writeup.md         Kaggle submission narrative
+```
+
+**Inference path (submission):** browser → `POST /api/gemma-chat` → `LITERT_OPENAI_BASE_URL` → `scripts/litert_openai_server.py` → **Gemma 4 E4B** (multimodal FPV supported). No LM Studio / Gemma 3 fallback.
+
+---
+
+## Web routes
+
+| URL | Description |
+|-----|-------------|
+| `/` | Marketing site (Three.js hero) |
+| `/simulation` | **Mission Command** — tactical map, FPV, Decision Hub, fleet dialogue |
+| `/simulation?ai=gemma` | Default live AI mode |
+| `/simulation?ai=mock` | Rule-based / template mode (labeled honestly in UI) |
+| `/lite` | 2D lite sim (`public/lite/scenario_canvas_lite.json`) |
+| `/demo-player` | MapLibre + canvas timeline playback |
+| `/whitepaper` | System design document |
+
+---
+
+## Mission Command (`/simulation`)
+
+- **GEMMA4 / MOCK** toggle — use **GEMMA4** for hackathon screenshots and video.  
+- **AI metrics panel** (screenshot-friendly): `MODE · BACKEND · LATENCY · TOKENS · AGENT · ROUND`.  
+- **Phase label** syncs with mode: `CLOSED LOOP · GEMMA-4 (LiteRT)` vs `SIMULATION · RULE-BASED`.  
+- **Footer uplink/plan** — measured latency or `(simulated)` in MOCK mode (no fake fixed ms).  
+- **Agents:** Drone_Alpha (vision), Track_Beta, Relay_Gamma, Orchestrator — via streaming/non-streaming chat.
+
+FPV frames are sent as JPEG base64 to LiteRT ([conversation schema](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/cpp/conversation.md)).
+
+---
+
+## Models (hackathon compliance)
+
+| Role | Model | Where |
+|------|--------|--------|
+| **Edge inference (required for live demo)** | [`litert-community/gemma-4-E4B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) | `models/gemma-4-E4B-it.litertlm` |
+| **Cloud planning (optional)** | `gemma-4-26b-a4b-it` | `GEMMA_API_MODEL` in `GemmaPerceiver` / timeline |
+
+Function-calling tools in `arc_core`: `calculate_survival_score`, `dispatch_rescue_task`.
+
+---
+
+## Environment variables
+
+Copy `.env.example` → `.env.local` for Next.js.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LITERT_OPENAI_BASE_URL` | **Yes** (live demo) | e.g. `http://127.0.0.1:8787/v1` |
+| `LITERT_MODEL_PATH` | No | Path to `.litertlm` (default: `models/gemma-4-E4B-it.litertlm`) |
+| `LITERT_BACKEND` | No | `cpu` or `gpu` (LLM) |
+| `LITERT_VISION_BACKEND` | No | `cpu` or `gpu` (vision tower) |
+| `LITERT_SERVER_PORT` | No | Bridge port (default `8787`) |
+| `GEMMA_API_KEY` | No | Google AI Studio — timeline / API mode |
+| `GEMMA_API_MODEL` | No | Default `gemma-4-26b-a4b-it` |
+| `GEMMA_MODE` | No | `litert` \| `api` \| `mock` \| `auto` for Python |
+
+---
+
+## Install & run (full)
+
+### Python
+
+```bash
+pip install -r requirements.txt
+
+# Skeleton demo
 python -m arc_core.runners
-```
 
-Outputs are written under `arc_core/simulation/data/` (e.g. `earthquake_demo.json`, `arc_output_snapshot.json`).
-
-```bash
-# Precompute timeline for the Next.js demo player (recommended)
+# Precompute timeline for demo-player
 python -m arc_core.simulation.timeline_generator --steps 200 --output public/demo-player/timeline.json
 
-# Interactive or preset scenario JSON
-python -m arc_core.simulation.scenario_builder --preset earthquake
-
-# Large multi-depot scenario
-python -m arc_core.simulation.build_large_scenario --seed 2026
-```
-
-```bash
 # Tests
 pytest
 ```
 
-### Demo player (MapLibre + tactical canvas)
+Timeline uses **`GemmaPerceiver`** when `GEMMA_API_KEY` is set or LiteRT weights exist; otherwise rule/mock trajectory.
 
-With **`pnpm dev`** at repo root, open **http://localhost:3000/demo-player** (loads **`/demo-player/timeline.json`** from **`public/demo-player/`**). Map tiles are loaded via same-origin **`/api/pmtiles-proxy`**, which fixes PMTiles byte-range behavior against the public **`pmtiles.io`** CDN (it often returns **`200`** + full **`Content-Length`** for **`Range`** requests, which the PMTiles JS client rejects). The first open may pull the full archive (~6.6 MB) once into server memory per Node process.
-
-**Static fallback:** generate `demo_player/timeline.json` and serve the repo root:
-
-```bash
-python -m http.server 8080
-# http://localhost:8080/demo_player/
-```
-
-## Run — Frontend (root marketing site)
+### Node.js
 
 ```bash
 pnpm install
+pnpm dev          # http://localhost:3000
+pnpm build        # production build
+pnpm litert:server # shortcut for LiteRT bridge
+```
+
+**Do not commit** `node_modules/`, `.next/`, or large model files.
+
+### Demo player (no LiteRT required)
+
+```bash
+# Ensure timeline exists (see Python section above)
 pnpm dev
+# → http://localhost:3000/demo-player
 ```
 
-Open http://localhost:3000 for the marketing site. **`/lite`** — 2D Lite sim (`public/lite/scenario_canvas_lite.json`). **`/demo-player`** — timeline playback (`public/demo-player/timeline.json`).
+Map tiles use `/api/pmtiles-proxy` for correct PMTiles byte-range behavior.
 
-## Run — 2D Lite simulation (Next.js)
+---
 
-The interactive map + FPV view lives on **`/lite`** in the root app (same dev server as above).
+## Python architecture (`arc_core`)
 
-The default scenario file is **`public/lite/scenario_canvas_lite.json`**. Larger **`scenario_001.json`** and friends for Python / timeline tooling live under **`arc_core/simulation/data/`** (and copies under **`public/simulation/`** for the Mission Command static page; select via `?scenario=…`).
-
-Do not commit **`node_modules/`** or **`.next/`**.
-
-### Mission Command + Gemma 4 on LiteRT (Google AI Edge / hackathon LiteRT track)
-
-The static page **`/simulation`** calls **`/api/gemma-chat`**. For **real Gemma 4 E4B on-device inference** (LiteRT-LM, not LM Studio), run the OpenAI-compatible bridge and point Next.js at it:
-
-1. Install Python deps: `pip install -r requirements.txt`
-2. Ensure the **`.litertlm`** weights exist (see **Optional: Gemma on device (LiteRT)** above) or let **`GemmaPerceiver`** download **`litert-community/gemma-4-E4B-it-litert-lm`** on first init.
-3. Start the bridge: **`pnpm litert:server`** or **`python scripts/litert_openai_server.py`** (default **http://127.0.0.1:8787**). Optional: set **`LITERT_VISION_BACKEND=gpu`** and **`LITERT_BACKEND=gpu`** for faster vision + LLM on discrete GPUs.
-4. Copy **`.env.example` → `.env.local`** and set **`LITERT_OPENAI_BASE_URL=http://127.0.0.1:8787/v1`** (this takes priority over **`LMSTUDIO_BASE_URL`**).
-5. Run **`pnpm dev`**, open **`/simulation`**. Health check: **GET `/api/gemma-chat`** (used by the UI badge).
-
-The bridge passes browser FPV frames to LiteRT as **`{"type":"image","blob":"<base64>"}`** (see [LiteRT conversation schema](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/cpp/conversation.md)). The same **`vision_backend`** wiring is enabled on **`GemmaPerceiver`**’s LiteRT engine for Python **`arc_core`** demos.
-
-### Optional: road-aware timeline (`lite_sim`)
-
-From repo root (needs both **`arc_core`** and **`lite_sim`** on `PYTHONPATH`):
+| Module | Purpose |
+|--------|---------|
+| `perception/gemma_perceiver.py` | Gemma 4 backends: LiteRT → API → Mock |
+| `agents/decision_hub.py` | Cluster “brain”, task allocation |
+| `simulation/timeline_generator.py` | Offline timeline JSON |
+| `scheduler/` | Survival scoring, task allocator |
 
 ```bash
-PYTHONPATH=".:ARC_2026-arc-lite-2d-demo" python -m lite_sim.timeline_generator --steps 200 --output public/demo-player/timeline.json
+python -c "from arc_core.perception.gemma_perceiver import GemmaPerceiver; print(GemmaPerceiver(agent_id='t').stats())"
+# Expect mode=litert when weights are present
 ```
 
-Or from inside **`ARC_2026-arc-lite-2d-demo`**:
+---
 
-```bash
-cd ARC_2026-arc-lite-2d-demo
-PYTHONPATH=".:.." python -m lite_sim.timeline_generator --steps 200 --output ../public/demo-player/timeline.json
-```
+## API: `/api/gemma-chat`
 
-## Frontend stack (from arc-lite)
+| Method | Description |
+|--------|-------------|
+| `GET` | LiteRT health via bridge `/health` |
+| `POST` | Chat proxy; body: `{ agent, message, history?, image_base64?, stream? }` |
 
-- Next.js 15 (App Router) + React 19 + TypeScript  
-- Tailwind CSS v4 (CSS-first config where used)  
-- React Three Fiber + Drei + postprocessing  
-- Theatre.js available for cinematic camera work in hero components  
+Non-stream response includes **`meta`**: `backend`, `latency_ms`, `model`, `tokens` (may be `null` on edge).
 
-Compressed GLB/Text assets live under `public/`; see `scripts/convert-assets.mjs` for the geometry pipeline.
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `LITERT_OPENAI_BASE_URL not configured` | Create `.env.local` from `.env.example` |
+| Header stays MOCK / offline | Start `python scripts/litert_openai_server.py`; check `curl localhost:8787/health` |
+| Empty or slow first reply | Model load on first request; CPU inference can take tens of seconds |
+| Metrics show `LATENCY · —` | Run one GEMMA4 round after LIVE badge appears |
+| `/demo-player` empty map | Run timeline_generator; check `public/demo-player/timeline.json` |
+
+Optional GPU: `LITERT_BACKEND=gpu LITERT_VISION_BACKEND=gpu python scripts/litert_openai_server.py`
+
+---
+
+## Submission docs
+
+| File | Purpose |
+|------|---------|
+| [**Writeup.md**](Writeup.md) | Kaggle writeup — problem, architecture, impact |
+| [**whitepaper.md**](whitepaper.md) | Extended system design |
+
+---
+
+## Safety
+
+A.R.C. is **decision support** for research and hackathon demonstration. It does not replace certified incident command or professional rescue teams.
+
+---
 
 ## Acknowledgements
 
-Architecture and tooling draw on open components including **LiteRT-LM** ([`google-ai-edge/LiteRT-LM`](https://github.com/google-ai-edge/LiteRT-LM)), **google-deepmind/gemma**, and multi-agent UAV–UGV planning literature cited in team materials.
+- [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) (Google AI Edge)  
+- [Gemma 4](https://deepmind.google/models/gemma/)  
+- Multi-agent UAV–UGV planning and disaster-resilience literature cited in team materials  
 
 ## License
 
-See repository `LICENSE` if present; otherwise follow team / hackathon submission terms.
+MIT — see [LICENSE](LICENSE).
+
+**Demo video & cover:** see the [Kaggle submission](https://www.kaggle.com/competitions/gemma-4-good-hackathon) (project writeup, gallery, and linked media).

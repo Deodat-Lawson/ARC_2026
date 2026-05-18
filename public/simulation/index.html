@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="/simulation/vendor/maplibre-gl/maplibre-gl.css">
-    <link rel="stylesheet" href="/simulation/styles.css?v=industrial-map-isolate">
+    <link rel="stylesheet" href="/simulation/styles.css?v=rail-layout-fix">
     <script type="importmap">
       {
         "imports": {
@@ -35,14 +35,22 @@
           </a>
           <span class="cc-divider"></span>
           <span class="msn-id" id="msnId">MSN-001 · URBAN-QUAKE</span>
-          <span class="msn-state">
+          <span class="msn-state" id="msnState">
             <span class="pulse" aria-hidden="true"></span>
             <span id="msnPhase">CLOSED LOOP · GEMMA-4</span>
           </span>
-          <span id="gemmaAiStatus" class="gemma-ai-status pending" title="Gemma 4 / LM Studio connection" aria-live="polite">
+          <span id="gemmaAiStatus" class="gemma-ai-status pending" title="Gemma 4 LiteRT connection" aria-live="polite">
             <span class="gemma-ai-status-dot" aria-hidden="true"></span>
             <span class="gemma-ai-status-label">… Gemma 4</span>
           </span>
+          <div id="aiMetricsPanel" class="ai-metrics-panel" aria-live="polite">
+            <span class="ai-metric" id="aiMetricMode">MODE · —</span>
+            <span class="ai-metric" id="aiMetricBackend">BACKEND · —</span>
+            <span class="ai-metric" id="aiMetricLatency">LATENCY · —</span>
+            <span class="ai-metric" id="aiMetricTokens">TOKENS · —</span>
+            <span class="ai-metric" id="aiMetricAgent">AGENT · —</span>
+            <span class="ai-metric" id="aiMetricRound">ROUND · 0</span>
+          </div>
         </div>
 
         <div class="cc-top-c">
@@ -64,6 +72,7 @@
           </div>
         </div>
 
+        <div class="cc-top-actions">
         <div class="cc-top-ai" role="group" aria-label="AI inference mode">
           <button type="button" id="aiModeMock" class="ai-mode-seg-btn">MOCK</button>
           <button type="button" id="aiModeGemma" class="ai-mode-seg-btn">GEMMA4</button>
@@ -98,6 +107,7 @@
           <a class="ico back" href="/" title="Back to homepage" aria-label="Back to homepage">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>
           </a>
+        </div>
         </div>
       </header>
 
@@ -345,25 +355,26 @@
             </div>
           </article>
 
-          <article class="vp vp-brief panel">
-            <header class="vp-head compact">
-              <div>
-                <span class="kicker">Gemma 4 · Mission Synthesis</span>
-                <h2>Commander Brief</h2>
-              </div>
-              <span class="panel-tag">AUTO</span>
-            </header>
-            <div id="briefText" class="brief-body" aria-live="polite"></div>
-          </article>
-
           <article class="vp vp-trend panel">
             <header class="vp-head compact">
               <div>
-                <span class="kicker">Fleet posture · rolling window</span>
-                <h2>Survival Curve</h2>
+                <span class="kicker">Fleet posture · survival &amp; risk</span>
+                <h2>Survival &amp; Risk</h2>
               </div>
+              <span class="count-pill" id="threatCount">0</span>
             </header>
-            <canvas id="survivalChart" width="380" height="160"></canvas>
+            <div class="survival-risk-grid">
+              <div class="survival-chart-frame">
+                <canvas id="survivalChart" width="380" height="160"></canvas>
+              </div>
+              <aside class="survival-risk-panel" aria-label="Survival priority ranking">
+                <div class="survival-risk-title">
+                  <span>Priority</span>
+                  <small>risk ranking</small>
+                </div>
+                <div id="priorityList" class="priority-list priority-list-compact"></div>
+              </aside>
+            </div>
           </article>
 
           <article class="vp vp-mission panel">
@@ -402,55 +413,31 @@
 
         <!-- ──── RIGHT RAIL · OPS BOARD ──── -->
         <aside class="cc-rail cc-rail-r" aria-label="Operations board">
-          <section class="rail-section rail-decision">
+          <section class="rail-section rail-ai-command">
             <header class="rail-section-head">
               <div>
-                <span class="kicker">Allocator · Chain-of-thought</span>
-                <h2>Decision Hub</h2>
+                <span class="kicker">Gemma 4 · Command stack</span>
+                <h2>AI Command Stack</h2>
               </div>
+              <span class="panel-tag">AUTO</span>
             </header>
-            <div id="thinkingText" class="thinking-feed" aria-live="polite"></div>
-          </section>
-
-          <section class="rail-section rail-legend">
-            <header class="rail-section-head compact-head">
-              <div>
-                <span class="kicker">Legend</span>
-                <h2>Fleet &amp; sites</h2>
+            <div class="command-stack-block command-stack-brief">
+              <div class="command-stack-title">
+                <span>Commander Brief</span>
+                <small>current intent</small>
               </div>
-            </header>
-            <div class="fleet-legend-mini" aria-label="Map legend">
-              <div class="fleet-legend-row">
-                <span class="fleet-dot" style="background:var(--info);box-shadow:0 0 6px rgba(130,200,255,.55)"></span>
-                <span>UAV — scout / relay</span>
+              <div id="briefText" class="brief-body" aria-live="polite"></div>
+            </div>
+            <div class="command-stack-block command-stack-decision">
+              <div class="command-stack-title">
+                <span>Decision Hub</span>
+                <small>allocation log</small>
               </div>
-              <div class="fleet-legend-row">
-                <span class="fleet-dot" style="background:var(--accent);box-shadow:0 0 6px var(--accent-glow)"></span>
-                <span>UGV — rescue &amp; clearance</span>
-              </div>
-              <div class="fleet-legend-row">
-                <span class="fleet-dot fleet-dot-square" style="background:#2a3e58"></span>
-                <span>Road corridor (tactical)</span>
-              </div>
-              <div class="fleet-legend-row">
-                <span class="fleet-dot" style="background:#ff8a8a;box-shadow:0 0 5px rgba(255,138,138,.45)"></span>
-                <span>Victim / survivor</span>
-              </div>
+              <div id="thinkingText" class="thinking-feed" aria-live="polite"></div>
             </div>
           </section>
 
-          <section class="rail-section">
-            <header class="rail-section-head">
-              <div>
-                <span class="kicker">M03 · Survival ranking</span>
-                <h2>Threat Board</h2>
-              </div>
-              <span class="count-pill" id="threatCount">0</span>
-            </header>
-            <div id="priorityList" class="priority-list"></div>
-          </section>
-
-          <section class="rail-section">
+          <section class="rail-section rail-fleet">
             <header class="rail-section-head">
               <div>
                 <span class="kicker">M02 · Distributed task allocation</span>
@@ -461,7 +448,7 @@
             <div id="agentList" class="agent-list"></div>
           </section>
 
-          <section class="rail-section grow">
+          <section class="rail-section rail-events">
             <header class="rail-section-head">
               <div>
                 <span class="kicker">M05 · Mesh · Relay</span>
@@ -483,8 +470,8 @@
           <span>Cluster nominal</span>
           <span class="cc-divider tall"></span>
           <span class="status-meta"><i>MESH</i> 4 nodes</span>
-          <span class="status-meta"><i>UPLINK</i> 24 ms</span>
-          <span class="status-meta"><i>PLAN</i> Gemma-4 · 0.7Hz</span>
+          <span class="status-meta"><i>UPLINK</i> <span id="statusUplink">—</span></span>
+          <span class="status-meta"><i>PLAN</i> <span id="statusPlan">—</span></span>
         </div>
         <div class="cc-status-c">
           <span class="status-meta"><i>BANDWIDTH</i> <span id="bwBar" class="bw"><i></i><i></i><i></i><i></i><i></i></span></span>

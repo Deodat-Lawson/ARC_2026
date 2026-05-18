@@ -1,15 +1,15 @@
 """
-Timeline Generator — A.R.C. 预计算引擎
+Timeline Generator — A.R.C. precompute engine
 
-将 scenario_001.json 驱动 arc_core 逐步推演，输出 timeline.json 供前端零延迟回放。
+Drives arc_core step-by-step from scenario_001.json; outputs timeline.json for zero-latency playback.
 
-用法:
+Usage:
     python -m arc_core.simulation.timeline_generator
     python -m arc_core.simulation.timeline_generator --steps 200 --output demo_player/timeline.json
 
-Gemma 4 API 接口:
-    默认使用 Mock 模式（USE_GEMMA_API=False）。
-    将环境变量 GEMMA_API_KEY 设置后，令 USE_GEMMA_API=True 可切换为真实推理。
+Gemma 4:
+    Default mock/rules. Set GEMMA_API_KEY or LITERT_MODEL_PATH (or place models/gemma-4-E4B-it.litertlm)
+    and GEMMA_MODE=auto|litert to use GemmaPerceiver (LiteRT E4B or cloud gemma-4-26b-a4b-it).
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from arc_core.paths import (
     DEFAULT_SCENARIO_PATH,
     DEFAULT_TIMELINE_PATH,
 )
+from arc_core.perception.gemma_perceiver import DEFAULT_LITERT_MODEL_PATH, GemmaPerceiver
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -41,31 +42,42 @@ TOTAL_STEPS   = 200
 CELL_SIZE_M   = 10.0
 
 # ---------------------------------------------------------------------------
-# Gemma 4 API 接口层（Mock / Real 可切换）
+# Gemma 4 via GemmaPerceiver (LiteRT / API / mock)
 # ---------------------------------------------------------------------------
-USE_GEMMA_API: bool = bool(os.getenv("GEMMA_API_KEY"))
+
+def _gemma_enabled() -> bool:
+    if os.getenv("GEMMA_FORCE_MOCK", "").lower() in ("1", "true", "yes"):
+        return False
+    if os.getenv("GEMMA_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+        return True
+    litert_path = os.getenv("LITERT_MODEL_PATH", DEFAULT_LITERT_MODEL_PATH)
+    return os.path.isfile(litert_path)
+
+
+USE_GEMMA_API: bool = _gemma_enabled()
+
+_timeline_perceiver: Optional[GemmaPerceiver] = None
+
+
+def _get_timeline_perceiver() -> GemmaPerceiver:
+    global _timeline_perceiver
+    if _timeline_perceiver is None:
+        mode = os.getenv("GEMMA_MODE", "auto")
+        _timeline_perceiver = GemmaPerceiver(mode=mode, agent_id="timeline-hub")
+        print(f"[timeline_generator] GemmaPerceiver mode={_timeline_perceiver.stats()['mode']}")
+    return _timeline_perceiver
+
 
 def _gemma_reasoning(prompt: str, mock_text: str) -> str:
-    """
-    统一推理接口。
-    - Mock 模式：直接返回 mock_text（纯规则生成的中文推理）
-    - Real 模式：调用 Google AI Studio Gemma 4 API
-
-    切换方式:
-        export GEMMA_API_KEY="your_key_here"
-        然后重新运行 timeline_generator.py
-    """
     if not USE_GEMMA_API:
         return mock_text
-
     try:
-        import google.generativeai as genai  # type: ignore
-        genai.configure(api_key=os.environ["GEMMA_API_KEY"])
-        model = genai.GenerativeModel("gemma-3-27b-it")
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        result = _get_timeline_perceiver().reason(prompt)
+        if result.mode_used == "mock" or not result.raw_text.strip():
+            return mock_text
+        return result.raw_text.strip()
     except Exception as exc:
-        print(f"[WARN] Gemma API failed ({exc}), falling back to mock.")
+        print(f"[WARN] GemmaPerceiver failed ({exc}), falling back to mock.")
         return mock_text
 
 
@@ -74,54 +86,28 @@ def _gemma_task_allocation(
     victims_info: List[dict],
     mock_assignments: Dict[str, str],
 ) -> Dict[str, str]:
-    """
-    Function-Calling 接口：任务分配。
-    Mock 模式直接返回规则分配结果；Real 模式调用 Gemma 4 function calling。
-    """
     if not USE_GEMMA_API:
         return mock_assignments
-
     try:
-        import google.generativeai as genai  # type: ignore
-        from google.generativeai.types import FunctionDeclaration, Tool  # type: ignore
-
-        assign_fn = FunctionDeclaration(
-            name="assign_task",
-            description="为无人器分配救援任务",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "agent_id":        {"type": "string", "description": "无人器ID"},
-                    "target_victim_id":{"type": "string", "description": "目标幸存者ID，无则填null"},
-                    "task_type": {
-                        "type": "string",
-                        "enum": ["search", "rescue", "relay", "clear", "recon", "idle"],
-                    },
-                },
-                "required": ["agent_id", "task_type"],
-            },
-        )
-        tool = Tool(function_declarations=[assign_fn])
-        genai.configure(api_key=os.environ["GEMMA_API_KEY"])
-        model = genai.GenerativeModel("gemma-3-27b-it", tools=[tool])
-
-        prompt = (
-            "你是自主救援集群决策中枢。根据以下无人器状态和幸存者信息，"
-            "为每台无人器分配最优任务。请对每台无人器调用一次 assign_task。\n"
-            f"无人器: {json.dumps(agents_info, ensure_ascii=False)}\n"
-            f"幸存者: {json.dumps(victims_info, ensure_ascii=False)}"
-        )
-        response = model.generate_content(prompt)
+        agents = [
+            {"id": a.get("agent_id", a.get("id")), "type": a.get("type", "uav"), "battery": a.get("battery", 0.8)}
+            for a in agents_info
+        ]
+        survivors = [
+            {"survivor_id": v.get("id", v.get("victim_id")), "injury_severity": v.get("injury", 0.5)}
+            for v in victims_info
+        ]
+        result = _get_timeline_perceiver().dispatch_tasks("timeline-hub", agents, survivors)
         assignments: Dict[str, str] = {}
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, "function_call"):
-                fc = part.function_call
-                assignments[fc.args["agent_id"]] = (
-                    f"{fc.args['task_type']}_survivor_{fc.args.get('target_victim_id','')}"
-                )
+        for dispatch in result.task_dispatches:
+            agent_id = dispatch.get("agent_id")
+            task = dispatch.get("task", "idle")
+            target = dispatch.get("target", "")
+            if agent_id:
+                assignments[agent_id] = f"{task}_survivor_{target}" if target else task
         return assignments or mock_assignments
     except Exception as exc:
-        print(f"[WARN] Gemma function calling failed ({exc}), falling back to mock.")
+        print(f"[WARN] Gemma task allocation failed ({exc}), falling back to mock.")
         return mock_assignments
 
 
@@ -509,7 +495,7 @@ def run(
     rescued_count   = 0
     sacrificed_count = 0
 
-    print(f"[timeline_generator] Running {steps} steps (Gemma API: {'ON' if USE_GEMMA_API else 'Mock'})...")
+    print(f"[timeline_generator] Running {steps} steps (Gemma 4: {'ON' if USE_GEMMA_API else 'mock/rules'})...")
 
     for step in range(steps):
         hub_events: List[dict] = []

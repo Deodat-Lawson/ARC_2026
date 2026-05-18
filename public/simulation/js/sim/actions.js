@@ -1,8 +1,9 @@
 /** Agent motion and mission_plan execution (grid step). */
 
-import { pointNearBuilding } from "./collision.js";
 import { nearCell, roundCoord } from "./math.js";
 import { currentScenePreset } from "../config/presets.js";
+import { avoidBuildingStep, markDroneOverflight } from "./motion-avoid.js";
+import { moveWildfireRoutedToward } from "./path-planners.js";
 
 export function isGroundAgentType(type) {
   const t = String(type || "").toLowerCase();
@@ -19,41 +20,6 @@ function avoidsBurnAndBuildingRects(agent) {
   return false;
 }
 
-export function avoidBuildingStep(from, proposed, target, speed, state, getBuildingRects) {
-  if (!state?.map) return proposed;
-  const rects = getBuildingRects(state);
-  if (!pointNearBuilding(proposed[0], proposed[1], rects, 0.36)) return proposed;
-  const [x, y] = from;
-  const candidates = [
-    [x + speed, y],
-    [x - speed, y],
-    [x, y + speed],
-    [x, y - speed],
-    [x + speed * 0.7, y + speed * 0.7],
-    [x + speed * 0.7, y - speed * 0.7],
-    [x - speed * 0.7, y + speed * 0.7],
-    [x - speed * 0.7, y - speed * 0.7],
-  ]
-    .map(([cx, cy]) => [roundCoord(cx), roundCoord(cy)])
-    .filter(([cx, cy]) => {
-      const [cols, rows] = state.map.size;
-      return (
-        cx >= 0 &&
-        cy >= 0 &&
-        cx <= cols - 1 &&
-        cy <= rows - 1 &&
-        !pointNearBuilding(cx, cy, rects, 0.36)
-      );
-    });
-  if (!candidates.length) return from;
-  candidates.sort((a, b) => {
-    const da = Math.hypot(a[0] - target[0], a[1] - target[1]);
-    const db = Math.hypot(b[0] - target[0], b[1] - target[1]);
-    return da - db;
-  });
-  return candidates[0];
-}
-
 export function moveAgentToward(agent, target, state, getBuildingRects) {
   if (!target) return;
   const [x, y] = agent.location;
@@ -67,6 +33,7 @@ export function moveAgentToward(agent, target, state, getBuildingRects) {
   if (avoidsBurnAndBuildingRects(agent)) {
     next = avoidBuildingStep(agent.location, next, target, speed, state, getBuildingRects);
   }
+  markDroneOverflight(agent, agent.location, next, state, getBuildingRects);
   agent.location = next;
 }
 
@@ -76,10 +43,36 @@ export function moveAgentToward(agent, target, state, getBuildingRects) {
  * @param {object} deps
  * @param {(agent: object, targetCell: number[], targetKey: string) => void} deps.moveAgentOnRoad
  * @param {(agent: object) => boolean} deps.agentUsesRoadRouting
+ * @param {(agent: object) => boolean} [deps.agentUsesIndustrialGrid]
+ * @param {(agent: object, targetCell: number[], targetKey: string) => void} [deps.moveAgentOnIndustrialGrid]
  * @param {(state: object) => Array} deps.getBuildingRects  buildingAvoidanceRects from 3D scenario geometry
  */
 export function executeActions(state, actions, deps) {
-  const { moveAgentOnRoad, agentUsesRoadRouting, getBuildingRects } = deps;
+  const {
+    moveAgentOnRoad,
+    agentUsesRoadRouting,
+    agentUsesIndustrialGrid = () => false,
+    moveAgentOnIndustrialGrid,
+    getBuildingRects,
+  } = deps;
+
+  function dispatchMove(agent, targetCell, targetKey) {
+    if (currentScenePreset === "wildfire") {
+      moveWildfireRoutedToward(agent, targetCell, state, getBuildingRects, targetKey);
+      return;
+    }
+    if (currentScenePreset === "industrial" && agentUsesIndustrialGrid(agent)) {
+      if (moveAgentOnIndustrialGrid) moveAgentOnIndustrialGrid(agent, targetCell, targetKey);
+      else moveAgentToward(agent, targetCell, state, getBuildingRects);
+      return;
+    }
+    if (agentUsesRoadRouting(agent)) {
+      moveAgentOnRoad(agent, targetCell, targetKey);
+      return;
+    }
+    moveAgentToward(agent, targetCell, state, getBuildingRects);
+  }
+
   for (const action of actions) {
     const agent = state.agents.find((item) => item.id === action.agent);
     if (!agent) continue;
@@ -99,11 +92,7 @@ export function executeActions(state, actions, deps) {
       const victim = state.victims.find((item) => item.id === action.target);
       if (!victim) continue;
       const rk = `${action.agent}|${action.task}|${action.target}`;
-      if (agentUsesRoadRouting(agent)) {
-        moveAgentOnRoad(agent, victim.location, rk);
-      } else {
-        moveAgentToward(agent, victim.location, state, getBuildingRects);
-      }
+      dispatchMove(agent, victim.location, rk);
       if (
         agent.type === "drone" &&
         victim.status === "unknown" &&
@@ -130,20 +119,12 @@ export function executeActions(state, actions, deps) {
         Math.round(state.map.size[1] * 0.37),
       ];
       const rk = `${action.agent}|${action.task}|${action.target}`;
-      if (agentUsesRoadRouting(agent)) {
-        moveAgentOnRoad(agent, relayPos, rk);
-      } else {
-        moveAgentToward(agent, relayPos, state, getBuildingRects);
-      }
+      dispatchMove(agent, relayPos, rk);
     } else if (action.target?.startsWith("K")) {
       const blockade = state.map.blocked_cells.find((item) => item.id === action.target);
       if (!blockade) continue;
       const rk = `${action.agent}|${action.task}|${action.target}`;
-      if (agentUsesRoadRouting(agent)) {
-        moveAgentOnRoad(agent, blockade.location, rk);
-      } else {
-        moveAgentToward(agent, blockade.location, state, getBuildingRects);
-      }
+      dispatchMove(agent, blockade.location, rk);
     }
 
     agent.battery = Math.max(0, agent.battery - (agent.type === "drone" ? 0.1 : 0.05));

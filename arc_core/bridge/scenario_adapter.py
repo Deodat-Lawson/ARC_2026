@@ -1,10 +1,10 @@
 """
 Scenario Adapter — Bidirectional format converter
 
-Converts between Yihang's arc-lite-2d-demo scenario_001.json format
+Converts between scenario_001.json (grid JSON) format
 and arc_core's internal data models.
 
-Yihang format (input):
+Grid JSON format (input):
   - 30x30 grid map with cell_size_m
   - victims: {id, location:[x,y], hp, damage_per_step, buriedness, thermal_signal, ...}
   - agents: {id, type, role, location:[x,y], battery, speed, sensors, ...}
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class ScenarioAdapter:
-    """Bidirectional converter between Yihang's JSON and arc_core models."""
+    """Bidirectional converter between grid scenario JSON and arc_core models."""
 
     def __init__(self, cell_size_m: float = 10.0):
         self.cell_size_m = cell_size_m

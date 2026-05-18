@@ -1,6 +1,6 @@
 {
   "scenario_id": "urban_quake_002",
-  "description": "6.8级地震，城市密集区，多处建筑倒塌，通信中断",
+  "description": "M6.8 earthquake, dense urban area, multiple building collapses, communications down.",
   "map": {
     "size": [
       30,

@@ -15,7 +15,6 @@ import {
   currentTargetFor,
   currentTargetIdFor,
 } from "./tactical-pov-shell.js";
-import { buildingAvoidanceRects as urbanQuakeBuildingAvoidanceRects } from "./urban-quake.js";
 import { createAgentMesh } from "./fleet-agents-mesh.js";
 import {
   loadInjuredSoldierPrototype,
@@ -115,6 +114,10 @@ let indRimLight = null;
 
 /** Wrapper groups per agent — scaled to facility grid (urban meshes assume ~1-unit cells). */
 const industrialAgentHolders = new Map();
+/** Facility-derived low-level occupancy rects in tactical grid coords. */
+let industrialFacilityAvoidanceRects = [];
+/** Ground vehicle envelope used for GLB occupancy: objects above this can be driven under. */
+const INDUSTRIAL_GROUND_VEHICLE_HEIGHT_CELLS = 0.62;
 
 /**
  * Wrapper groups per victim, same scale convention as agents. Each entry is
@@ -161,6 +164,94 @@ function industrialGridToWorldXZ(ix, iy) {
   return { x, z };
 }
 
+function isIndustrialAerial(agent) {
+  const t = String(agent?.type || "").toLowerCase();
+  return t === "drone" || t === "balloon";
+}
+
+function industrialAgentWorldY(agent, t) {
+  if (isIndustrialAerial(agent)) {
+    return industrialGroundY + industrialCellSpan * tacticalFpvAltitudeUrbanUnits(agent, t);
+  }
+  return industrialGroundY;
+}
+
+function groundInnerAgentMesh(inner) {
+  inner.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(inner);
+  if (!Number.isFinite(box.min.y)) return;
+  inner.position.y -= box.min.y;
+}
+
+function worldXToIndustrialGrid(x) {
+  const span = Math.max(1e-6, industrialXMax - industrialXMin);
+  return ((x - industrialXMin) / span) * industrialGridCols - 0.5;
+}
+
+function worldZToIndustrialGridY(z) {
+  const span = Math.max(1e-6, industrialZMax - industrialZMin);
+  return ((industrialZMax - z) / span) * industrialGridRows - 0.5;
+}
+
+function markIndustrialCellsFromWorldBox(occupied, box) {
+  const gx0 = Math.max(0, Math.floor(worldXToIndustrialGrid(box.min.x)));
+  const gx1 = Math.min(industrialGridCols - 1, Math.ceil(worldXToIndustrialGrid(box.max.x)));
+  const gy0 = Math.max(0, Math.floor(worldZToIndustrialGridY(box.max.z)));
+  const gy1 = Math.min(industrialGridRows - 1, Math.ceil(worldZToIndustrialGridY(box.min.z)));
+  for (let gy = gy0; gy <= gy1; gy += 1) {
+    for (let gx = gx0; gx <= gx1; gx += 1) occupied.add(`${gx},${gy}`);
+  }
+}
+
+function rectsFromOccupiedIndustrialCells(occupied) {
+  const rects = [];
+  for (let y = 0; y < industrialGridRows; y += 1) {
+    let x = 0;
+    while (x < industrialGridCols) {
+      if (!occupied.has(`${x},${y}`)) {
+        x += 1;
+        continue;
+      }
+      const x0 = x;
+      while (x + 1 < industrialGridCols && occupied.has(`${x + 1},${y}`)) x += 1;
+      rects.push({ x: x0 - 0.5, z: y - 0.5, w: x - x0 + 1, d: 1, heightUnits: 1 });
+      x += 1;
+    }
+  }
+  return rects;
+}
+
+function rebuildIndustrialFacilityAvoidanceRects(root) {
+  industrialFacilityAvoidanceRects = [];
+  if (!root || industrialGridCols < 2 || industrialGridRows < 2 || industrialCellSpan <= 0) return;
+
+  const occupied = new Set();
+  const facilitySpanX = Math.max(1, industrialXMax - industrialXMin);
+  const facilitySpanZ = Math.max(1, industrialZMax - industrialZMin);
+  const minFootprint = industrialCellSpan * 0.16;
+  const maxFootprintX = facilitySpanX * 0.42;
+  const maxFootprintZ = facilitySpanZ * 0.42;
+  const vehicleTopY = industrialGroundY + industrialCellSpan * INDUSTRIAL_GROUND_VEHICLE_HEIGHT_CELLS;
+  const lowSliceBottom = industrialGroundY - industrialCellSpan * 0.08;
+
+  root.updateMatrixWorld(true);
+  root.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry) return;
+    const box = new THREE.Box3().setFromObject(obj);
+    if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) return;
+    if (box.max.y < lowSliceBottom || box.min.y > vehicleTopY) return;
+
+    const sx = box.max.x - box.min.x;
+    const sz = box.max.z - box.min.z;
+    if (sx < minFootprint && sz < minFootprint) return;
+    if (sx > maxFootprintX && sz > maxFootprintZ) return;
+
+    markIndustrialCellsFromWorldBox(occupied, box);
+  });
+
+  industrialFacilityAvoidanceRects = rectsFromOccupiedIndustrialCells(occupied);
+}
+
 function buildIndustrialAgentMeshes(scenario) {
   industrialAgentHolders.clear();
   if (!indScene || !scenario?.agents?.length) return;
@@ -169,16 +260,13 @@ function buildIndustrialAgentMeshes(scenario) {
 
   for (const a of scenario.agents) {
     const inner = createAgentMesh(a.type);
+    if (!isIndustrialAerial(a)) groundInnerAgentMesh(inner);
     const holder = new THREE.Group();
     holder.name = `industrial_agent_${a.id}`;
     holder.add(inner);
     holder.scale.setScalar(scaleUniform);
     const { x, z } = industrialGridToWorldXZ(a.location[0], a.location[1]);
-    holder.position.set(
-      x,
-      industrialGroundY + industrialCellSpan * tacticalFpvAltitudeUrbanUnits(a, performance.now() / 1000),
-      z
-    );
+    holder.position.set(x, industrialAgentWorldY(a, performance.now() / 1000), z);
     indScene.add(holder);
     industrialAgentHolders.set(a.id, holder);
   }
@@ -914,6 +1002,7 @@ async function bootIndustrialMission(bootId, scenario, povCols) {
   }
 
   setIndustrialGridMappingFromFacility(root, scenario, cementY);
+  rebuildIndustrialFacilityAvoidanceRects(root);
   buildIndustrialAgentMeshes(scenario);
   buildIndustrialVictimMeshes(scenario, bootId);
 
@@ -935,9 +1024,7 @@ async function bootIndustrialMission(bootId, scenario, povCols) {
       const ix = prev[0];
       const iy = prev[1];
       const planar = industrialGridToWorldXZ(ix, iy);
-      const alt =
-        industrialGroundY +
-        industrialCellSpan * tacticalFpvAltitudeUrbanUnits(driver, tBoot);
+      const alt = industrialAgentWorldY(driver, tBoot);
       entry.smoothPos.set(planar.x, alt, planar.z);
       const isAerialBoot = driver.type === "drone" || driver.type === "balloon";
       const fwd = tacticalFpvForwardVector(
@@ -1214,8 +1301,7 @@ export function update3D(t, sim) {
       const iy = THREE.MathUtils.lerp(prev[1], a.location[1], frac);
       const { x, z } = industrialGridToWorldXZ(ix, iy);
 
-      const targetY =
-        industrialGroundY + industrialCellSpan * tacticalFpvAltitudeUrbanUnits(a, t);
+      const targetY = industrialAgentWorldY(a, t);
       holder.position.set(x, targetY, z);
 
       const dx = a.location[0] - prev[0];
@@ -1408,5 +1494,6 @@ export function teardown3D() {
 }
 
 export function buildingAvoidanceRects(scenario) {
-  return urbanQuakeBuildingAvoidanceRects(scenario);
+  if (industrialFacilityAvoidanceRects.length) return industrialFacilityAvoidanceRects;
+  return [];
 }

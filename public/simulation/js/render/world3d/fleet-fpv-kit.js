@@ -17,8 +17,10 @@ export function lerpAngleDeg(a, b, t) {
 /** Eye height in “urban grid units” (one cell tall == 1 world unit in Urban theatre). */
 export function tacticalFpvAltitudeUrbanUnits(driver, t) {
   const id = driver.id.charCodeAt(0);
+  let baseAlt;
   if (driver.type === "drone") {
-    return 1.5 + Math.sin(t * 1.0 + id) * 0.5 + Math.sin(t * 0.4 + id * 0.5) * 0.25;
+    baseAlt = 1.5 + Math.sin(t * 1.0 + id) * 0.5 + Math.sin(t * 0.4 + id * 0.5) * 0.25;
+    return Math.max(baseAlt, Number(driver._overflightAltitudeUnits) || 0);
   }
   if (driver.type === "balloon") {
     return 3.6 + Math.sin(t * 0.35 + id) * 0.18;

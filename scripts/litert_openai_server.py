@@ -2,7 +2,7 @@
 """
 OpenAI-compatible HTTP bridge for Gemma 4 on LiteRT (Google AI Edge / LiteRT-LM).
 
-Exposes POST /v1/chat/completions so Next.js /api/gemma-chat can proxy here instead of LM Studio.
+Exposes POST /v1/chat/completions so Next.js /api/gemma-chat proxies Gemma 4 E4B on LiteRT.
 Multimodal: passes FPV frames as {"type":"image","blob":"<base64>"} per LiteRT-LM docs
 (https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/cpp/conversation.md).
 
@@ -22,6 +22,7 @@ import logging
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -282,6 +283,7 @@ def chat_completions():
         logger.exception("LiteRT init error")
         return {"error": str(e), "fallback": True}, 503
 
+    t0 = time.perf_counter()
     with _inference_lock:
         try:
             with eng.create_conversation(
@@ -293,6 +295,7 @@ def chat_completions():
             logger.exception("LiteRT inference failed")
             return {"error": str(e), "fallback": True}, 502
 
+    latency_ms = round((time.perf_counter() - t0) * 1000)
     text = _extract_text_from_litert_response(response)
     if not text:
         return {"error": "Empty model output", "fallback": True}, 502
@@ -304,6 +307,8 @@ def chat_completions():
             headers={
                 "Cache-Control": "no-cache, no-transform",
                 "Connection": "keep-alive",
+                "X-Arc-Latency-Ms": str(latency_ms),
+                "X-Arc-Model": "gemma-4-E4B-it-litertlm",
             },
         )
 
@@ -312,6 +317,8 @@ def chat_completions():
         "object": "chat.completion",
         "choices": [{"message": {"role": "assistant", "content": text}}],
         "model": "gemma-4-E4B-it-litertlm",
+        "usage": {"total_tokens": None},
+        "meta": {"backend": "litert", "latency_ms": latency_ms, "model": "gemma-4-E4B-it-litertlm"},
     }
 
 
