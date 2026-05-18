@@ -93,8 +93,8 @@ export function SystemDemo() {
 
 export function LiveReplayCta() {
   return (
-    <section className="border-t border-white/5 px-6 py-24 md:px-10 md:py-32">
-      <div className="mx-auto flex max-w-7xl flex-col items-start gap-10 md:flex-row md:items-end md:justify-between">
+    <section className="flex min-h-[58vh] flex-col justify-center border-t border-white/5 px-6 py-16 md:min-h-[52vh] md:px-10 md:py-20">
+      <div className="mx-auto flex w-full max-w-7xl translate-y-4 flex-col items-start gap-10 md:translate-y-8 md:flex-row md:items-end md:justify-between lg:translate-y-10">
         <div className="max-w-2xl">
           <div className="mb-6 flex items-center gap-3 font-mono text-xs uppercase tracking-[0.28em] text-arc-accent">
             <span className="inline-block size-1.5 rounded-full bg-arc-accent shadow-[0_0_6px_2px_rgba(93,255,180,0.5)]" />
@@ -111,7 +111,7 @@ export function LiveReplayCta() {
         </div>
         <a
           href="/simulation"
-          className="group inline-flex h-12 items-center gap-3 rounded-sm bg-arc-accent px-6 text-sm font-medium tracking-wide text-arc-bg transition-[opacity,gap] hover:opacity-90 hover:gap-4"
+          className="group inline-flex h-12 shrink-0 items-center gap-3 rounded-sm bg-arc-accent px-6 text-sm font-medium tracking-wide text-arc-bg transition-[opacity,gap] hover:opacity-90 hover:gap-4"
         >
           Open the live simulation
           <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
