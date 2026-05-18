@@ -38,6 +38,7 @@ export function emitToast(type, description) {
 export function pushEventLog(type, description) {
   const log = document.getElementById("eventLog");
   if (!log) return;
+  log.querySelector(".event-log-empty")?.remove();
   const cfg = TOAST_CFG[type] || TOAST_CFG.default;
   const row = document.createElement("div");
   row.className = "event-row";
@@ -47,4 +48,34 @@ export function pushEventLog(type, description) {
   row.textContent = `${cfg.icon} [T${String(t).padStart(3, "0")}] ${description}`;
   log.prepend(row);
   while (log.children.length > MAX_EVENT_LOG) log.lastChild.remove();
+}
+
+/** Append to Event Log without showing a toast (for frequent / bootstrap messages). */
+export function logEvent(type, description) {
+  pushEventLog(type, description);
+}
+
+export function syncEventLogPlaceholder() {
+  const log = document.getElementById("eventLog");
+  if (!log) return;
+  if (log.querySelector(".event-row")) {
+    log.querySelector(".event-log-empty")?.remove();
+    return;
+  }
+  if (log.querySelector(".event-log-empty")) return;
+  const empty = document.createElement("p");
+  empty.className = "event-log-empty";
+  empty.textContent =
+    "Events appear here as the mission runs — rescues, clearance, mesh relay, and AI rounds.";
+  log.appendChild(empty);
+}
+
+export function seedEventLog(entries) {
+  const log = document.getElementById("eventLog");
+  if (!log) return;
+  log.innerHTML = "";
+  for (const entry of entries) {
+    pushEventLog(entry.type || "default", entry.description);
+  }
+  syncEventLogPlaceholder();
 }
