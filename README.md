@@ -71,7 +71,7 @@ models/            Place gemma-4-E4B-it.litertlm here (not in git)
 Writeup.md         Kaggle submission narrative
 ```
 
-**Inference path (submission):** browser → `POST /api/gemma-chat` → `LITERT_OPENAI_BASE_URL` → `scripts/litert_openai_server.py` → **Gemma 4 E4B** (multimodal FPV supported). No LM Studio / Gemma 3 fallback.
+**Inference path (submission):** browser → `POST /api/gemma-chat` → `LITERT_OPENAI_BASE_URL` → `scripts/litert_openai_server.py` → **Gemma 4 E4B** (multimodal FPV supported).
 
 ---
 
@@ -157,17 +157,13 @@ pnpm build        # production build
 pnpm litert:server # shortcut for LiteRT bridge
 ```
 
-**Do not commit** `node_modules/`, `.next/`, or large model files.
-
-### Demo player (no LiteRT required)
+### Demo player
 
 ```bash
 # Ensure timeline exists (see Python section above)
 pnpm dev
 # → http://localhost:3000/demo-player
 ```
-
-Map tiles use `/api/pmtiles-proxy` for correct PMTiles byte-range behavior.
 
 ---
 
