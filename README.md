@@ -4,6 +4,18 @@
 
 Post-disaster heterogeneous rescue fleet (**UAV + UGV + aerostat**) coordinated by **Decision Hubs** with **Gemma 4** reasoning at the edge (**LiteRT E4B**) and optional cloud planning. Built for the **Gemma 4 Good Hackathon** (Impact: Global Resilience · Technology: LiteRT).
 
+<p align="center">
+  <img src="Website_Page.png" alt="A.R.C. website homepage" width="900"/>
+  <br/>
+  <em>Marketing homepage (<code>/</code>) — project overview and entry to the live demo.</em>
+</p>
+
+<p align="center">
+  <img src="Simulation_Page.png" alt="A.R.C. Mission Command simulation" width="900"/>
+  <br/>
+  <em>Mission Command (<code>/simulation</code>) — tactical map, fleet FPV, and Gemma 4 Decision Hub.</em>
+</p>
+
 | Live demo | Precomputed playback |
 |-----------|----------------------|
 | [Mission Command](/simulation) — real Gemma 4 inference | [/demo-player](/demo-player) — timeline JSON replay |
