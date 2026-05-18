@@ -13,6 +13,7 @@ import {
 } from "./urban-quake.js";
 import * as wildfireWorld from "./wildfire.js";
 import * as industrialWorld from "./industrial.js";
+import { exitTacticalFpvFullscreenIfActive } from "../../ui/tactical-fpv-fullscreen.js";
 
 export { ui3d, bindWorld3dUi, world, povs };
 
@@ -56,5 +57,6 @@ export function update3D(t, sim) {
 }
 
 export function teardown3D() {
+  exitTacticalFpvFullscreenIfActive();
   return worldImplFor(currentScenePreset).teardown3D();
 }

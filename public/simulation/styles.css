@@ -2127,6 +2127,44 @@ pre::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99
   text-shadow: 0 0 14px rgba(93, 255, 180, 0.25);
 }
 
+.pov-fpv-head-tags {
+  align-items: center;
+}
+
+/* FPV column fullscreen control — all scene presets */
+.tactical-fpv-fs-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.map-pov-col:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  box-sizing: border-box;
+  border-radius: 0;
+  overflow: auto;
+}
+.map-pov-col:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  box-sizing: border-box;
+  border-radius: 0;
+  overflow: auto;
+}
+.map-pov-col:-moz-full-screen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  box-sizing: border-box;
+  border-radius: 0;
+  overflow: auto;
+}
+
 .pov-frame {
   position: relative;
   flex: 1;

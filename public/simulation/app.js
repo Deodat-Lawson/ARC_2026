@@ -62,6 +62,7 @@ import {
   primeCotFeedAutoThrottle,
 } from "./js/ui/panels.js";
 import { setupCommandCenter, getSpeedMultiplier } from "./js/ui/command-center.js";
+import { wireTacticalFpvFullscreen } from "./js/ui/tactical-fpv-fullscreen.js";
 
 const canvas = document.querySelector("#simCanvas");
 const ctx = canvas.getContext("2d");
@@ -638,5 +639,6 @@ initTacticalBasemap({
 });
 
 wireTacticalBasemapResize();
+wireTacticalFpvFullscreen();
 wireRailFleetHeightToCot();
 requestAnimationFrame(() => syncTacticalBasemapSize());
