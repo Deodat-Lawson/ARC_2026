@@ -8,7 +8,7 @@ export function setCurrentScenePreset(v) {
 export const PRESET_VISUAL = {
   urban_quake: {
     geoShort: "FIRENZE",
-    geoTitle: "Urban Quake & Hurricane theatre · Protomaps vector · Firenze extract (ODbL) · 300 m",
+    geoTitle: "Urban Quake / Hurricane theatre · Protomaps vector · Firenze extract (ODbL) · 300 m",
     basemap: {
       mask: "#0f1726",
       earth: "#121d2e",
@@ -150,7 +150,7 @@ export const PRESET_VISUAL = {
 
 export const PRESET_DEFAULTS = {
   urban_quake: {
-    label: "MSN-001 · URBAN QUAKE & HURRICANE",
+    label: "MSN-001 · URBAN QUAKE / HURRICANE",
     phase: "CLOSED LOOP · GEMMA-4",
     grid: 30, victims: 5, blockades: 2, fires: 1, collapses: 1,
     intensity: 70, severity: 50, scout: 1, relay: 1, rescue: 1, clear: 1,
